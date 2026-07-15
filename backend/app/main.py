@@ -1,7 +1,12 @@
 import json
+import shutil
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import List, Literal, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
@@ -183,6 +188,25 @@ ensure_schema()
 
 app = FastAPI(title="Sakan API", version="0.3.0")
 
+# --- CORS ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Static file serving (uploaded images) ---
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "static" / "uploads"
+AVATAR_DIR = UPLOAD_DIR / "avatars"
+LISTING_DIR = UPLOAD_DIR / "listings"
+AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+LISTING_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(UPLOAD_DIR.parent)), name="static")
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # --- Utility Functions ---
 def safe_json_loads(val, default):
@@ -322,6 +346,50 @@ class ComplaintOut(BaseModel):
 @app.get('/health')
 def health_check():
     return {'status': 'ok'}
+
+
+# ─── File Upload Endpoints ────────────────────────────────────────────────────
+
+@app.post('/upload/avatar')
+def upload_avatar(user_id: int, file: UploadFile = File(...)):
+    """Upload a profile photo for a user. Returns the URL to store."""
+    db = SessionLocal()
+    try:
+        if file.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(status_code=400, detail="نوع الملف غير مدعوم. يُسمح فقط بـ JPG، PNG، WEBP.")
+        contents = file.file.read()
+        if len(contents) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="حجم الملف كبير جداً. الحد الأقصى 10 ميجابايت.")
+        ext = Path(file.filename).suffix.lower() or ".jpg"
+        filename = f"{uuid.uuid4().hex}{ext}"
+        dest = AVATAR_DIR / filename
+        dest.write_bytes(contents)
+        url = f"/static/uploads/avatars/{filename}"
+        # Persist to user record
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            user.profile_photo_url = url
+            db.commit()
+        return {"url": url}
+    finally:
+        db.close()
+        file.file.close()
+
+
+@app.post('/upload/listing-photo')
+def upload_listing_photo(file: UploadFile = File(...)):
+    """Upload a photo for a listing. Returns the URL to include in photo_urls."""
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="نوع الملف غير مدعوم. يُسمح فقط بـ JPG، PNG، WEBP.")
+    contents = file.file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="حجم الملف كبير جداً. الحد الأقصى 10 ميجابايت.")
+    ext = Path(file.filename).suffix.lower() or ".jpg"
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest = LISTING_DIR / filename
+    dest.write_bytes(contents)
+    file.file.close()
+    return {"url": f"/static/uploads/listings/{filename}"}
 
 
 @app.post('/auth/register')

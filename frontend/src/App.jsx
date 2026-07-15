@@ -245,15 +245,28 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok) {
+        // Upload avatar if user selected a file during registration
+        let finalUser = { ...data };
+        if (authForm._avatarFile && data.id) {
+          try {
+            const fd = new FormData();
+            fd.append('file', authForm._avatarFile);
+            const uploadRes = await fetch(`${API_BASE}/upload/avatar?user_id=${data.id}`, { method: 'POST', body: fd });
+            if (uploadRes.ok) {
+              const uploadData = await uploadRes.json();
+              finalUser.profile_photo_url = `${API_BASE}${uploadData.url}`;
+            }
+          } catch {}
+        }
         if (authMode === 'register' && data.account_type !== 'student' && (!data.name || data.name === "مستخدم جديد")) {
-          setUser(data);
+          setUser(finalUser);
           setAuthStep('details');
         } else {
-          setUser(data);
+          setUser(finalUser);
           setIsAuthOpen(false);
           showToast(`تم تسجيل الدخول بنجاح! مرحباً بك، ${data.name}`);
           if (pendingAction) {
-            pendingAction(data);
+            pendingAction(finalUser);
             setPendingAction(null);
           }
         }
@@ -1190,12 +1203,50 @@ export default function App() {
                     />
                   </div>
                   <div className="form-group">
-                    <label>رابط الصورة الشخصية (اختياري)</label>
-                    <input 
-                      type="url" 
-                      placeholder="https://..." 
-                      value={authForm.profile_photo_url}
-                      onChange={(e) => setAuthForm({ ...authForm, profile_photo_url: e.target.value })}
+                    <label>الصورة الشخصية (اختياري)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      {/* Avatar preview */}
+                      <div style={{
+                        width: '72px', height: '72px', borderRadius: '50%',
+                        border: '2px dashed var(--border)', background: 'var(--bg-muted)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        overflow: 'hidden', flexShrink: 0, cursor: 'pointer',
+                      }} onClick={() => document.getElementById('avatar-upload-input').click()}>
+                        {authForm.profile_photo_url
+                          ? <img src={authForm.profile_photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <span style={{ fontSize: '1.75rem' }}>📸</span>}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ width: '100%', fontSize: '0.85rem' }}
+                          onClick={() => document.getElementById('avatar-upload-input').click()}
+                        >
+                          {authForm.profile_photo_url ? 'تغيير الصورة' : 'رفع صورة شخصية'}
+                        </button>
+                        <small style={{ color: 'var(--text-light)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>JPG أو PNG أو WEBP — حد أقصى 10 ميجابايت</small>
+                      </div>
+                    </div>
+                    <input
+                      id="avatar-upload-input"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const fd = new FormData();
+                        fd.append('file', file);
+                        try {
+                          // Upload without user_id first (we don't have one yet)
+                          // The URL will be sent with the register payload
+                          const objectUrl = URL.createObjectURL(file);
+                          setAuthForm(prev => ({ ...prev, _avatarFile: file, profile_photo_url: objectUrl }));
+                        } catch (err) {
+                          showToast('خطأ في رفع الصورة');
+                        }
+                      }}
                     />
                   </div>
 
@@ -1503,36 +1554,101 @@ export default function App() {
               {/* STEP 5: MEDIA */}
               {createStep === 5 && (
                 <div>
-                  <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>الوسائط المرئية (الصور والفيديوهات)</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>تتطلب المنصة رفع ٥ صور على الأقل وفيديو واحد للوحدة لضمان جدية الإعلان وتسهيل قبول الطلاب له.</p>
+                  <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>الوسائط المرئية (صور + فيديو)</h4>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>تتطلب المنصة رفع ٥ صور على الأقل وفيديو واحد للوحدة.</p>
 
+                  {/* Photo Upload */}
                   <div className="form-group">
-                    <label>روابط الصور المرفقة (٥ صور كحد أدنى و٣٠ كحد أقصى)</label>
-                    <textarea 
-                      rows="4" 
-                      placeholder="ضع رابط صورة واحد في كل سطر..."
-                      value={createForm.photo_urls.join('\n')}
-                      onChange={(e) => setCreateForm({ ...createForm, photo_urls: e.target.value.split('\n').filter(Boolean) })}
-                    />
-                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>عدد الصور الحالي المرفق: {createForm.photo_urls.length} صور</small>
+                    <label>صور الوحدة — {createForm.photo_urls.length} مرفوعة (٥ كحد أدنى، ٣٠ كحد أقصى)</label>
+
+                    {/* Thumbnail grid */}
+                    {createForm.photo_urls.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                        {createForm.photo_urls.map((url, idx) => (
+                          <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-muted)' }}>
+                            <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <button
+                              type="button"
+                              onClick={() => setCreateForm(prev => ({ ...prev, photo_urls: prev.photo_urls.filter((_, i) => i !== idx) }))}
+                              style={{
+                                position: 'absolute', top: '4px', left: '4px',
+                                width: '22px', height: '22px', borderRadius: '50%',
+                                background: 'rgba(0,0,0,0.7)', color: '#fff', border: 'none',
+                                fontSize: '13px', cursor: 'pointer', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                              }}
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Upload drop zone */}
+                    <label
+                      htmlFor="listing-photo-input"
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        justifyContent: 'center', border: '2px dashed var(--border)',
+                        borderRadius: '12px', padding: '2rem 1rem', cursor: 'pointer',
+                        background: 'var(--bg-muted)', color: 'var(--text-muted)',
+                        fontSize: '0.875rem', gap: '0.4rem', transition: 'border-color 0.2s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                    >
+                      <span style={{ fontSize: '2rem' }}>📷</span>
+                      <span style={{ fontWeight: 600 }}>اضغط لرفع صور</span>
+                      <span style={{ fontSize: '0.75rem' }}>JPG, PNG, WEBP — حد أقصى 10 ميجابايت لكل صورة</span>
+                      <input
+                        id="listing-photo-input"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        style={{ display: 'none' }}
+                        onChange={async (e) => {
+                          const files = Array.from(e.target.files || []);
+                          if (!files.length) return;
+                          const remaining = 30 - createForm.photo_urls.length;
+                          const toUpload = files.slice(0, remaining);
+                          showToast(`جاري رفع ${toUpload.length} صورة...`);
+                          const newUrls = [];
+                          for (const file of toUpload) {
+                            const fd = new FormData();
+                            fd.append('file', file);
+                            try {
+                              const res = await fetch('http://127.0.0.1:8000/upload/listing-photo', { method: 'POST', body: fd });
+                              if (res.ok) {
+                                const data = await res.json();
+                                newUrls.push(`http://127.0.0.1:8000${data.url}`);
+                              }
+                            } catch {}
+                          }
+                          setCreateForm(prev => ({ ...prev, photo_urls: [...prev.photo_urls, ...newUrls] }));
+                          if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح ✅`);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>يمكنك اختيار عدة صور في نفس الوقت.</small>
                   </div>
 
+                  {/* Video URL */}
                   <div className="form-group">
-                    <label>روابط الفيديو المرفقة (فيديو واحد كحد أدنى و٣ كحد أقصى)</label>
-                    <textarea 
-                      rows="2" 
+                    <label>رابط الفيديو (فيديو واحد كحد أدنى — YouTube أو Google Drive)</label>
+                    <textarea
+                      rows="2"
                       placeholder="ضع رابط فيديو واحد في كل سطر..."
                       value={createForm.video_urls.join('\n')}
                       onChange={(e) => setCreateForm({ ...createForm, video_urls: e.target.value.split('\n').filter(Boolean) })}
                     />
-                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>عدد الفيديوهات المرفقة: {createForm.video_urls.length} فيديوهات</small>
+                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>عدد الفيديوهات المرفقة: {createForm.video_urls.length}</small>
                   </div>
 
-                  <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%', marginTop: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '1.5rem' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(4)}>السابق</button>
-                    <button 
-                      className="btn-primary" 
-                      disabled={createForm.photo_urls.length < 5 || createForm.video_urls.length < 1} 
+                    <button
+                      className="btn-primary"
+                      disabled={createForm.photo_urls.length < 5 || createForm.video_urls.length < 1}
                       onClick={() => setCreateStep(6)}
                     >
                       التالي

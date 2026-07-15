@@ -19,22 +19,16 @@
 import sys
 from pathlib import Path
 import pytest
+import app.main as main_module
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi.testclient import TestClient
-from app.main import app, Base, engine, SessionLocal, PhoneBlocklist
+from app.main import app, PhoneBlocklist
 
 # ──────────────────────────────────────────────
 #  Test client & DB reset before every test
 # ──────────────────────────────────────────────
 client = TestClient(app)
-
-@pytest.fixture(autouse=True)
-def reset_db():
-    """Drop & re-create all tables before each test for isolation."""
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    yield
 
 
 # ──────────────────────────────────────────────
@@ -132,7 +126,7 @@ class TestRegistration:
         assert "مسجل بالفعل" in r2.json()["detail"]
 
     def test_blocklisted_phone_cannot_register(self):
-        db = SessionLocal()
+        db = main_module.SessionLocal()
         db.add(PhoneBlocklist(phone="01099999999"))
         db.commit()
         db.close()
@@ -158,7 +152,7 @@ class TestLogin:
 
     def test_login_otp_rejects_blocklisted_phone(self):
         _register_and_verify("01022222222", "مستخدم", "student")
-        db = SessionLocal()
+        db = main_module.SessionLocal()
         db.add(PhoneBlocklist(phone="01022222222"))
         db.commit()
         db.close()
