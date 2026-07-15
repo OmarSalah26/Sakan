@@ -195,10 +195,11 @@ def safe_json_loads(val, default):
 
 
 def verify_admin_user(db, x_user_id: Optional[int]):
-    if x_user_id is not None:
-        admin = db.query(User).filter(User.id == x_user_id).first()
-        if not admin or admin.account_type != "admin":
-            raise HTTPException(status_code=403, detail="غير مصرح بالدخول لغير المسؤولين")
+    if x_user_id is None:
+        raise HTTPException(status_code=403, detail="مطلوب تسجيل الدخول كمسؤول للوصول لهذه الخدمة")
+    admin = db.query(User).filter(User.id == x_user_id).first()
+    if not admin or admin.account_type != "admin":
+        raise HTTPException(status_code=403, detail="غير مصرح بالدخول لغير المسؤولين")
 
 
 # --- Pydantic Schemas ---
