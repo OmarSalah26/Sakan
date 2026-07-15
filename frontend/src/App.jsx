@@ -706,9 +706,9 @@ export default function App() {
         {/* TAB 1: BROWSE LISTINGS FEED */}
         {tab === 'browse' && (
           <div>
-            <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
-              <h1 style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.5rem' }}>ابحث عن سكنك الطلابي المثالي</h1>
-              <p style={{ color: 'var(--text-muted)' }}>أول منصة متكاملة في مصر لربط الطلاب المغتربين بأفضل الوحدات السكنية المتاحة في جميع المحافظات.</p>
+            <div className="hero-section">
+              <h1 className="hero-title">ابحث عن <span>سكنك الطلابي</span> المثالي</h1>
+              <p className="hero-subtitle">أول منصة متكاملة في مصر لربط الطلاب المغتربين بأفضل الوحدات السكنية المتاحة في جميع المحافظات الجامعية.</p>
             </div>
 
             <div className="main-layout">
@@ -825,15 +825,15 @@ export default function App() {
 
               {/* Listings feed */}
               <section style={{ flexGrow: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>العقارات المتاحة: {listings.length} إعلان</span>
+                <div className="section-header">
+                  <span className="section-count">العقارات المتاحة: {listings.length} إعلان</span>
                 </div>
 
                 {listings.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '4rem', background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '3rem' }}>🔍</span>
-                    <h3 style={{ marginTop: '1rem', fontWeight: 700 }}>لم نجد أي نتائج تطابق بحثك</h3>
-                    <p style={{ color: 'var(--text-light)', marginTop: '0.25rem' }}>جرب مسح بعض الفلاتر أو تعديل نطاق البحث الخاص بك.</p>
+                  <div className="empty-state">
+                    <div className="empty-icon">🔍</div>
+                    <h3 className="empty-title">لم نجد أي نتائج تطابق بحثك</h3>
+                    <p className="empty-desc">جرب مسح بعض الفلاتر أو تعديل نطاق البحث الخاص بك.</p>
                   </div>
                 ) : (
                   <div className="listings-grid">
