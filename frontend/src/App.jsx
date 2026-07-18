@@ -99,7 +99,10 @@ export default function App() {
     max_price: '',
     room_types: [],
     amenities: [],
-    advertiser_type: ''
+    advertiser_type: '',
+    max_commission: '',
+    services_inclusive: false,
+    has_insurance: false
   });
 
   // Create listing wizard state
@@ -116,7 +119,7 @@ export default function App() {
     maps_link: '',
     gender: 'female',
     available_beds: 1,
-    room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500 }],
+    room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
     amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
     photo_urls: [...PRESETS_PROPERTY_IMAGES],
     video_urls: [...PRESETS_PROPERTY_VIDEOS],
@@ -164,6 +167,9 @@ export default function App() {
       if (filters.room_types.length) q.append('room_types', filters.room_types.join(','));
       if (filters.amenities.length) q.append('amenities', filters.amenities.join(','));
       if (filters.advertiser_type) q.append('advertiser_type', filters.advertiser_type);
+      if (filters.max_commission) q.append('max_commission', filters.max_commission);
+      if (filters.services_inclusive) q.append('services_inclusive', 'true');
+      if (filters.has_insurance) q.append('has_insurance', 'true');
 
       const res = await fetch(`${API_BASE}/listings?${q.toString()}`);
       if (res.ok) {
@@ -357,7 +363,7 @@ export default function App() {
       maps_link: '',
       gender: 'female',
       available_beds: 1,
-      room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500 }],
+      room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
       amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
       photo_urls: [...PRESETS_PROPERTY_IMAGES],
       video_urls: [...PRESETS_PROPERTY_VIDEOS],
@@ -395,7 +401,7 @@ export default function App() {
   const addRoomConfig = () => {
     setCreateForm(prev => ({
       ...prev,
-      room_configurations: [...prev.room_configurations, { room_type: 'double', price_per_person: 800, commission: 400 }]
+      room_configurations: [...prev.room_configurations, { room_type: 'double', price_per_person: 800, commission: 400, count: 1, insurance_price: '', services_inclusive: false }]
     }));
   };
 
@@ -564,6 +570,20 @@ export default function App() {
     }
   };
 
+  const handleToggleStatus = async (listingId) => {
+    try {
+      const res = await fetch(`${API_BASE}/listings/${listingId}/toggle-status`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        showToast("تم تغيير حالة الإعلان بنجاح");
+        loadListings();
+      }
+    } catch (err) {
+      showToast("فشل في تغيير حالة الإعلان");
+    }
+  };
+
   // --- Admin Moderation panels fetches ---
   const loadAdminData = async () => {
     if (!user || user.account_type !== 'admin') return;
@@ -663,7 +683,13 @@ export default function App() {
           >
             تصفح العقارات
           </button>
-          
+          <button 
+            className={tab === 'guide' ? 'active-tab' : 'inactive-tab'} 
+            onClick={() => setTab('guide')}
+          >
+            دليل الطالب 📘
+          </button>
+
           {/* Create listing button accessible for Brokers, Admins, or guests */}
           {(!user || isBroker || isAdmin) && (
             <button 
@@ -783,8 +809,8 @@ export default function App() {
 
                 <div className="form-group">
                   <label>نوع الغرفة</label>
-                  {['single', 'double', 'triple', 'triple+'].map(type => {
-                    const labelText = type === 'single' ? 'فردية (Single)' : type === 'double' ? 'ثنائية (Double)' : type === 'triple' ? 'ثلاثية (Triple)' : 'مشتركة ٤+ (Triple+)';
+                  {['single', 'double', 'triple', 'quadruple'].map(type => {
+                    const labelText = type === 'single' ? 'فردية (Single)' : type === 'double' ? 'ثنائية (Double)' : type === 'triple' ? 'ثلاثية (Triple)' : 'رباعية (Quadruple)';
                     const isChecked = filters.room_types.includes(type);
                     return (
                       <label key={type} className="checkbox-label" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
@@ -802,6 +828,35 @@ export default function App() {
                       </label>
                     );
                   })}
+                </div>
+
+                <div className="form-group">
+                  <label>الحد الأقصى للعمولة (جنيه)</label>
+                  <input 
+                    type="number" 
+                    placeholder="مثال: 1000" 
+                    value={filters.max_commission} 
+                    onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={filters.services_inclusive}
+                      onChange={(e) => setFilters({ ...filters, services_inclusive: e.target.checked })}
+                    />
+                    شامل الخدمات (الكهرباء، المياه، إلخ)
+                  </label>
+                  <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={filters.has_insurance}
+                      onChange={(e) => setFilters({ ...filters, has_insurance: e.target.checked })}
+                    />
+                    يتطلب دفع تأمين
+                  </label>
                 </div>
 
                 <div className="form-group">
@@ -855,14 +910,25 @@ export default function App() {
                         ? item.photo_urls[0]
                         : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
 
-                      const configRoomTypes = item.room_configurations && item.room_configurations.length > 0
-                        ? item.room_configurations.map(c => {
-                            if (c.room_type === 'single') return 'فردية';
-                            if (c.room_type === 'double') return 'ثنائية';
-                            if (c.room_type === 'triple') return 'ثلاثية';
-                            return 'مشتركة ٤+';
-                          }).join(' + ')
-                        : (item.room_type === 'single' ? 'فردية' : item.room_type === 'double' ? 'ثنائية' : 'ثلاثية');
+                      let totalBeds = 0;
+                      let breakdown = [];
+                      if (item.room_configurations && item.room_configurations.length > 0) {
+                        item.room_configurations.forEach(c => {
+                          let bedsPerRoom = 1;
+                          let name = 'فردية';
+                          let icon = '🛏️';
+                          if (c.room_type === 'double') { bedsPerRoom = 2; name = 'ثنائية'; icon = '🛏️🛏️'; }
+                          else if (c.room_type === 'triple') { bedsPerRoom = 3; name = 'ثلاثية'; icon = '🛏️🛏️🛏️'; }
+                          else if (c.room_type === 'quadruple') { bedsPerRoom = 4; name = 'رباعية'; icon = '🛏️🛏️🛏️🛏️'; }
+                          else if (c.room_type === 'triple+') { bedsPerRoom = 4; name = 'مشتركة ٤+'; icon = '🛏️🛏️🛏️🛏️'; } // legacy
+                          
+                          const count = c.count || 1;
+                          totalBeds += (bedsPerRoom * count);
+                          breakdown.push(`${count} غرف ${name}`);
+                        });
+                      } else {
+                        totalBeds = item.available_beds;
+                      }
 
                       return (
                         <article 
@@ -885,17 +951,31 @@ export default function App() {
                           <div className="card-content">
                             <div className="card-location">📍 {item.governorate}، {item.city}</div>
                             <h2 className="card-title">{item.title}</h2>
-                            <div className="card-room-types">🛏️ {configRoomTypes}</div>
-                            <div className="card-beds">💤 {item.available_beds} أسرّة شاغرة</div>
+                            <div className="card-room-types" style={{ fontSize: '0.85rem' }}>{breakdown.join(' + ')}</div>
+                            <div className="card-beds" style={{ fontWeight: 600 }}>إجمالي السعة: {totalBeds} سرير</div>
                             
                             <div className="card-price-list">
                               {item.room_configurations && item.room_configurations.length > 0 ? (
-                                item.room_configurations.map((config, idx) => (
-                                  <div key={idx} className="price-item">
-                                    <span className="room-lbl">{config.room_type === 'single' ? 'فردي:' : config.room_type === 'double' ? 'ثنائي:' : 'ثلاثي:'}</span>
-                                    <span className="room-val">{config.price_per_person} ج.م / فرد</span>
-                                  </div>
-                                ))
+                                item.room_configurations.map((config, idx) => {
+                                  let icon = '🛏️';
+                                  if (config.room_type === 'double') icon = '🛏️🛏️';
+                                  else if (config.room_type === 'triple') icon = '🛏️🛏️🛏️';
+                                  else if (config.room_type === 'quadruple' || config.room_type === 'triple+') icon = '🛏️🛏️🛏️🛏️';
+                                  
+                                  return (
+                                    <div key={idx} className="price-item" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '0.5rem', background: 'var(--bg-muted)', borderRadius: 'var(--r-sm)' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                        <span className="room-lbl">{icon} ({config.count || 1})</span>
+                                        <span className="room-val">{config.price_per_person} ج.م/فرد</span>
+                                      </div>
+                                      {config.commission && (
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginTop: '0.25rem' }}>
+                                          عمولة: {config.commission} ج.م
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
                               ) : (
                                 <div className="price-item">
                                   <span className="room-lbl">سعر السرير:</span>
@@ -907,9 +987,6 @@ export default function App() {
 
                           <div className="card-footer">
                             <span className="advertiser-label">👤 {item.advertiser_id ? 'معلن مسجل' : 'معلن'}</span>
-                            {item.room_configurations && item.room_configurations.length > 0 && item.room_configurations[0].commission ? (
-                              <span className="commission-label">عمولة: {item.room_configurations[0].commission} ج.م</span>
-                            ) : null}
                           </div>
                         </article>
                       );
@@ -963,18 +1040,20 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
                         <button className="btn-secondary" onClick={() => openListingDetail(item.id)}>عرض التفاصيل</button>
-                        {item.status !== 'active' && (
-                          <button className="btn-primary" onClick={() => handleRepublish(item.id, item.available_beds)}>إعادة نشر الإعلان 🔁</button>
-                        )}
                         
                         <button 
                           className="btn-outline" 
-                          onClick={() => showToast("💡 تذكّر أن تطلب من الطالب تقييمك على منصة سكن لتحسين رتبة إعلانك!")}
+                          onClick={() => handleToggleStatus(item.id)}
+                          style={{ borderColor: item.status === 'active' ? '#f87171' : '#4ade80', color: item.status === 'active' ? '#ef4444' : '#16a34a' }}
                         >
-                          اتمام التعاقد؟🤝
+                          {item.status === 'active' ? 'إيقاف الإعلان ⏸️' : 'تفعيل الإعلان ▶️'}
                         </button>
+
+                        <div style={{ background: '#f0fdfa', border: '1px solid #ccfbf1', padding: '0.5rem', borderRadius: 'var(--radius-sm)', color: '#0f766e', fontSize: '0.75rem', fontWeight: 600, width: '100%', marginTop: '0.5rem' }}>
+                          💡 تذكير: لا تنسَ طلب التقييم من الطلاب عند إتمام التعاقد لتحسين ترتيب إعلاناتك!
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1103,6 +1182,65 @@ export default function App() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* TAB 4: STUDENT GUIDE */}
+        {tab === 'guide' && (
+          <div style={{ maxWidth: '800px', margin: '0 auto', background: 'white', borderRadius: 'var(--radius-lg)', padding: '2rem', border: '1px solid var(--border-color)' }}>
+            <h2 className="details-title" style={{ fontSize: '1.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1.5rem', color: 'var(--primary-dark)' }}>
+              دليل الطالب للسكن الجامعي 📘
+            </h2>
+            
+            <div style={{ display: 'grid', gap: '1.5rem', lineHeight: '1.8' }}>
+              <section>
+                <h3 style={{ color: 'var(--primary)' }}>1️⃣ المصروفات المتوقعة وتكاليف التعاقد</h3>
+                <p>عند التعاقد على سكن، ستواجه بعض المصروفات الأساسية التي يجب أن تكون مستعداً لها:</p>
+                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
+                  <li><strong>الإيجار الشهري:</strong> يُدفع مقدماً كل شهر.</li>
+                  <li><strong>التأمين:</strong> مبلغ يُدفع لمرة واحدة عند التعاقد لضمان جدية الحجز وسلامة الممتلكات، ويُسترد عند انتهاء العقد إذا لم يكن هناك تلفيات (تأكد من إثباته في العقد).</li>
+                  <li><strong>عمولة السمسار:</strong> تُدفع لمرة واحدة عند التعاقد إذا كان المعلن سمساراً وليس مالكاً.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)' }}>2️⃣ الخدمات المشمولة وغير المشمولة</h3>
+                <p>بعض الإعلانات تكون شاملة الخدمات (مثل الكهرباء، المياه، الغاز، الإنترنت، والغاز)، والبعض الآخر لا. دائماً قم بالتأكد من المالك قبل التوقيع عما إذا كان السعر المعلن شاملاً لهذه الخدمات أم سيتطلب دفع فواتير شهرية منفصلة لتجنب أي مفاجآت.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)' }}>3️⃣ معايير العمولات العادلة (للوسطاء)</h3>
+                <p>في منصة سكن، نلزم الوسطاء بتحديد قيمة العمولة بوضوح لتجنب الاستغلال. المعايير المتعارف عليها:</p>
+                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
+                  <li>🟢 <strong>العمولة العادلة:</strong> تعادل نصف شهر إيجار (تُدفع مرة واحدة).</li>
+                  <li>🟡 <strong>العمولة المرتفعة (غير معتادة):</strong> تعادل شهر إيجار كامل.</li>
+                  <li>🔴 <strong>الاستغلال (يُرجى الإبلاغ):</strong> طلب عمولة تعادل شهرين إيجار أو أكثر.</li>
+                </ul>
+                <div style={{ background: '#fff7ed', border: '1px solid #ffedd5', padding: '0.75rem', borderRadius: 'var(--radius-sm)', color: '#c2410c', fontSize: '0.85rem', fontWeight: 600, marginTop: '0.5rem' }}>
+                  📢 تنبيه: تلزم "سكن" السماسرة بالإفصاح عن عمولاتهم في الإعلان. أي محاولة لطلب عمولة أعلى من المذكورة بالإعلان يجب الإبلاغ عنها فوراً لحظر الحساب.
+                </div>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)' }}>4️⃣ آداب السكن الجامعي</h3>
+                <p>تذكر أنك تتشارك مكاناً مع زملاء آخرين. التزم بالقواعد التالية لتجربة سكن مريحة للجميع:</p>
+                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
+                  <li>حافظ على نظافة المساحات المشتركة (المطبخ، الحمام، والصالة).</li>
+                  <li>احترم أوقات الراحة والهدوء، خاصة في فترات الامتحانات والليل.</li>
+                  <li>حافظ على سلامة الأجهزة الكهربائية والمرافق لتجنب خصم التأمين.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)' }}>5️⃣ القواعد الذهبية قبل دفع أي مبالغ مالية ⚠️</h3>
+                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
+                  <li><strong>لا تقم بتحويل أي مبالغ مالية (مثل عربون) قبل معاينة الشقة بنفسك ومقابلة المالك/السمسار شخصياً.</strong></li>
+                  <li>تأكد من تطابق الشقة مع الصور والوصف المذكور في الإعلان (وجود تكييف، ثلاجة، غسالة تعمل، إلخ).</li>
+                  <li>استخدم نظام التقييمات وقراءة شكاوى الطلاب الآخرين لتجنب التجارب السيئة.</li>
+                  <li>اقرأ <a href="#" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>شروط الخدمة</a> لمعرفة حقوقك وواجباتك.</li>
+                </ul>
+              </section>
+            </div>
           </div>
         )}
 
@@ -1454,10 +1592,20 @@ export default function App() {
                             <option value="single">فردية (Single)</option>
                             <option value="double">ثنائية (Double)</option>
                             <option value="triple">ثلاثية (Triple)</option>
-                            <option value="triple+">مشتركة ٤+ أسرّة (Triple+)</option>
+                            <option value="quadruple">رباعية (Quadruple)</option>
                           </select>
                         </div>
                         
+                        <div style={{ flex: '1 1 100px' }}>
+                          <label style={{ fontSize: '0.75rem' }}>عدد الغرف المتاحة</label>
+                          <input 
+                            type="number" 
+                            value={config.count} 
+                            onChange={(e) => updateRoomConfig(index, 'count', Number(e.target.value))} 
+                            min="1" 
+                          />
+                        </div>
+
                         <div style={{ flex: '1 1 120px' }}>
                           <label style={{ fontSize: '0.75rem' }}>السعر الشهري للفرد (جنيه)</label>
                           <input 
@@ -1469,15 +1617,37 @@ export default function App() {
                         </div>
 
                         <div style={{ flex: '1 1 120px' }}>
+                          <label style={{ fontSize: '0.75rem' }}>مبلغ التأمين (اختياري)</label>
+                          <input 
+                            type="number" 
+                            value={config.insurance_price} 
+                            placeholder={`${config.price_per_person}`}
+                            onChange={(e) => updateRoomConfig(index, 'insurance_price', e.target.value ? Number(e.target.value) : '')} 
+                          />
+                        </div>
+
+                        <div style={{ flex: '1 1 120px' }}>
                           <label style={{ fontSize: '0.75rem' }}>قيمة العمولة (جنيه)</label>
                           <input 
                             type="number" 
                             value={config.commission} 
                             placeholder={`${config.price_per_person * 0.5}`}
-                            onChange={(e) => updateRoomConfig(index, 'commission', Number(e.target.value))} 
+                            onChange={(e) => updateRoomConfig(index, 'commission', e.target.value ? Number(e.target.value) : '')} 
                           />
                           <small style={{ color: 'var(--text-light)', fontSize: '0.65rem' }}>القيمة الافتراضية المقترحة ٥٠٪ شهرياً</small>
                         </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                        <input 
+                          type="checkbox" 
+                          id={`services-${index}`} 
+                          checked={config.services_inclusive}
+                          onChange={(e) => updateRoomConfig(index, 'services_inclusive', e.target.checked)} 
+                        />
+                        <label htmlFor={`services-${index}`} style={{ fontSize: '0.85rem', fontWeight: 500, margin: 0, cursor: 'pointer' }}>
+                          السعر شامل الخدمات (الكهرباء، المياه، الغاز)
+                        </label>
                       </div>
                     </div>
                   ))}
@@ -1763,17 +1933,38 @@ export default function App() {
                   <h3 className="details-title">تفاصيل الإقامة</h3>
                   <p>🔹 <strong>العنوان بالتفصيل:</strong> {selectedListingDetail.listing.address}</p>
                   <p>🔹 <strong>عدد الأسرّة المتوفرة:</strong> {selectedListingDetail.listing.available_beds} أسرة</p>
-                  {selectedListingDetail.listing.maps_link && (
-                    <p>🔹 <strong>خرائط جوجل:</strong> <a href={selectedListingDetail.listing.maps_link} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 700 }}>عرض موقع العقار على الخريطة 🗺️</a></p>
+                  {selectedListingDetail.listing.maps_link ? (
+                    <div style={{ marginTop: '1rem', width: '100%', height: '200px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                      {selectedListingDetail.listing.maps_link.includes('embed') ? (
+                        <iframe src={selectedListingDetail.listing.maps_link} width="100%" height="100%" style={{ border: 0 }} allowFullScreen="" loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="Map"></iframe>
+                      ) : (
+                        <iframe src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedListingDetail.listing.maps_link)}&t=&z=13&ie=UTF8&iwloc=&output=embed`} width="100%" height="100%" style={{ border: 0 }} allowFullScreen="" loading="lazy" title="Map"></iframe>
+                      )}
+                      <div style={{ padding: '0.25rem', background: '#f8fafc', fontSize: '0.75rem', textAlign: 'center' }}>
+                        <a href={selectedListingDetail.listing.maps_link} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>فتح في خرائط جوجل 🗺️</a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: '1rem', width: '100%', height: '200px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                      <iframe src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedListingDetail.listing.address + " " + selectedListingDetail.listing.city)}&t=&z=13&ie=UTF8&iwloc=&output=embed`} width="100%" height="100%" style={{ border: 0 }} allowFullScreen="" loading="lazy" title="Map"></iframe>
+                    </div>
                   )}
                   
                   <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
                     <strong>فئات الغرف والأسعار المتاحة:</strong>
-                    <div style={{ display: 'grid', gap: '0.25rem', marginTop: '0.5rem' }}>
+                    <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.5rem' }}>
                       {selectedListingDetail.listing.room_configurations?.map((c, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', background: '#f8fafc', padding: '0.5rem', borderRadius: 'var(--radius-sm)' }}>
-                          <span>{c.room_type === 'single' ? 'غرفة فردية' : c.room_type === 'double' ? 'غرفة ثنائية' : c.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة مشتركة ٤+'}</span>
-                          <strong>{c.price_per_person} ج.م / فرد</strong>
+                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', background: '#f8fafc', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                            <span style={{ fontWeight: 600 }}>{c.room_type === 'single' ? 'غرفة فردية' : c.room_type === 'double' ? 'غرفة ثنائية' : c.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية'} ({c.count || 1} متاح)</span>
+                            <strong style={{ color: 'var(--primary)' }}>{c.price_per_person} ج.م / شهر</strong>
+                          </div>
+                          
+                          <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {c.commission && <span>💰 عمولة: {c.commission} ج.م</span>}
+                            {c.insurance_price ? <span>🛡️ تأمين: {c.insurance_price} ج.م</span> : <span>🛡️ بدون تأمين</span>}
+                            {c.services_inclusive ? <span style={{ color: '#16a34a' }}>⚡ شامل الخدمات</span> : <span>🔌 الخدمات غير مشمولة</span>}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1782,8 +1973,22 @@ export default function App() {
 
                 {/* 2. Advertiser card */}
                 <div className="details-section">
-                  <h3 className="details-title">معلومات المعلن</h3>
-                  <div className="advertiser-profile-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 className="details-title" style={{ margin: 0 }}>معلومات المعلن</h3>
+                    <button 
+                      className="btn-outline" 
+                      style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
+                      onClick={() => {
+                        const url = window.location.href;
+                        const text = `شاهد هذا السكن على سكن:\n${selectedListingDetail.listing.title}\n${selectedListingDetail.listing.address}\n\nالرابط: ${url}`;
+                        navigator.clipboard.writeText(text);
+                        alert("تم نسخ رابط العقار وتفاصيله بنجاح!");
+                      }}
+                    >
+                      🔗 مشاركة السكن
+                    </button>
+                  </div>
+                  <div className="advertiser-profile-card" style={{ marginTop: '1rem' }}>
                     <div className="avatar-wrapper">
                       {selectedListingDetail.advertiser.profile_photo_url ? (
                         <img src={selectedListingDetail.advertiser.profile_photo_url} className="avatar-img" alt="" />
@@ -1793,9 +1998,11 @@ export default function App() {
                     </div>
                     <div>
                       <h4 style={{ fontWeight: 700 }}>{selectedListingDetail.advertiser.name}</h4>
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontWeight: 600 }}>
-                        👤 {selectedListingDetail.advertiser.account_type === 'broker' ? 'سمسار عقاري' : 'مالك مباشر'}
-                        {selectedListingDetail.listing.tier === 'premium' && <span style={{ color: 'var(--premium-gold)', marginRight: '0.5rem' }}>⭐ معلن مميز</span>}
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', fontWeight: 600, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <span style={{ background: 'var(--bg-muted)', padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-full)' }}>
+                          {selectedListingDetail.advertiser.account_type === 'broker' ? '👔 سمسار عقاري' : '🏠 مالك مباشر'}
+                        </span>
+                        {selectedListingDetail.listing.tier === 'premium' && <span style={{ color: 'var(--premium-gold)' }}>⭐ معلن مميز</span>}
                       </p>
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
@@ -1804,12 +2011,6 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-
-                  {selectedListingDetail.listing.room_configurations?.[0]?.commission ? (
-                    <div style={{ background: '#fff7ed', border: '1px solid #ffedd5', padding: '0.75rem', borderRadius: 'var(--radius-sm)', color: '#c2410c', fontSize: '0.85rem', fontWeight: 600, marginBottom: '1rem' }}>
-                      📢 عمولة السمسار المطلوبة للوحدة: {selectedListingDetail.listing.room_configurations[0].commission} جنيه تدفع لمرة واحدة عند التعاقد.
-                    </div>
-                  ) : null}
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                     <a 

@@ -58,6 +58,7 @@ class Listing(Base):
     amenities = Column(String, default="[]")             # JSON string of amenities list
     photo_urls = Column(String, default="[]")            # JSON string array of photo URLs
     video_urls = Column(String, default="[]")            # JSON string array of video URLs
+    description = Column(Text, nullable=True)            # Unit description
     tier = Column(String, default="regular")              # "regular", "premium"
     status = Column(String, default="active")            # "active", "inactive", "expired", "banned"
     subscription_expires_at = Column(DateTime, nullable=True)
@@ -295,6 +296,7 @@ class ListingOut(BaseModel):
     amenities: List[str] = []
     photo_urls: List[str] = []
     video_urls: List[str] = []
+    description: str = ""
     tier: str
     status: str
     advertiser_id: int
@@ -610,7 +612,10 @@ def list_listings(
     max_price: Optional[int] = None,
     room_types: Optional[str] = None,   # Comma-separated list
     amenities: Optional[str] = None,    # Comma-separated list
-    advertiser_type: Optional[str] = None
+    advertiser_type: Optional[str] = None,
+    max_commission: Optional[int] = None,
+    services_inclusive: Optional[bool] = None,
+    has_insurance: Optional[bool] = None
 ):
     db = SessionLocal()
     try:
@@ -645,7 +650,10 @@ def list_listings(
                 configs = [{
                     "room_type": item.room_type or "single",
                     "price_per_person": item.price_per_person or 0,
-                    "commission": None
+                    "commission": None,
+                    "count": 1,
+                    "insurance_price": None,
+                    "services_inclusive": False
                 }]
 
             # 1. Price range filter
@@ -678,9 +686,45 @@ def list_listings(
                 if isinstance(item_amenities, str):
                     item_amenities = [x.strip() for x in item_amenities.split(",")]
                 
-                # Check all target amenities are in item_amenities
-                all_found = all(amen in item_amenities for amen in target_amenities)
-                if not all_found:
+                # Check if all target amenities are in item amenities
+                if not all(t in item_amenities for t in target_amenities):
+                    continue
+
+            # 4. Commission filter
+            if max_commission is not None:
+                match_commission = False
+                for conf in configs:
+                    comm = conf.get("commission")
+                    if comm is not None and comm <= max_commission:
+                        match_commission = True
+                        break
+                    # If commission is None, it means no commission, which passes the max_commission check
+                    elif comm is None:
+                        match_commission = True
+                        break
+                if not match_commission:
+                    continue
+
+            # 5. Services Inclusive filter
+            if services_inclusive is not None:
+                match_services = False
+                for conf in configs:
+                    if conf.get("services_inclusive") == services_inclusive:
+                        match_services = True
+                        break
+                if not match_services:
+                    continue
+
+            # 6. Insurance filter
+            if has_insurance is not None:
+                match_insurance = False
+                for conf in configs:
+                    ins_price = conf.get("insurance_price")
+                    has_ins = ins_price is not None and ins_price > 0
+                    if has_ins == has_insurance:
+                        match_insurance = True
+                        break
+                if not match_insurance:
                     continue
 
             filtered.append(
@@ -844,6 +888,24 @@ def republish_listing(listing_id: int, payload: dict):
         listing.created_at = datetime.utcnow()  # Reset creation date on republish
         db.commit()
         return {"id": listing.id, "status": listing.status, "available_beds": listing.available_beds}
+    finally:
+        db.close()
+
+@app.post('/listings/{listing_id}/toggle-status')
+def toggle_listing_status(listing_id: int):
+    db = SessionLocal()
+    try:
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+        
+        if listing.status == 'active':
+            listing.status = 'inactive'
+        elif listing.status == 'inactive':
+            listing.status = 'active'
+            
+        db.commit()
+        return {"id": listing.id, "status": listing.status}
     finally:
         db.close()
 
