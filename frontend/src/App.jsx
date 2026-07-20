@@ -1535,11 +1535,11 @@ export default function App() {
                     <label>رابط موقع جوجل ماب (Google Maps URL - اختياري)</label>
                     <input 
                       type="url" 
-                      placeholder="https://maps.app.goo.gl/..." 
+                      placeholder="https://www.google.com/maps/place/..." 
                       value={createForm.maps_link} 
                       onChange={(e) => setCreateForm({ ...createForm, maps_link: e.target.value })} 
                     />
-                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>💡 ارجع لتطبيق جوجل ماب، اضغط على مشاركة السكن وانسخ الرابط والصقه هنا.</small>
+                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>💡 افتح جوجل ماب في <strong>المتصفح</strong> (مش التطبيق)، ابحث عن السكن، ثم انسخ الرابط من شريط العنوان والصقه هنا.</small>
                   </div>
 
                   <div className="grid-cols-2">
@@ -1933,22 +1933,60 @@ export default function App() {
                   <h3 className="details-title">تفاصيل الإقامة</h3>
                   <p>🔹 <strong>العنوان بالتفصيل:</strong> {selectedListingDetail.listing.address}</p>
                   <p>🔹 <strong>عدد الأسرّة المتوفرة:</strong> {selectedListingDetail.listing.available_beds} أسرة</p>
-                  {selectedListingDetail.listing.maps_link ? (
-                    <div style={{ marginTop: '1rem', width: '100%', height: '200px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-                      {selectedListingDetail.listing.maps_link.includes('embed') ? (
-                        <iframe src={selectedListingDetail.listing.maps_link} width="100%" height="100%" style={{ border: 0 }} allowFullScreen="" loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="Map"></iframe>
-                      ) : (
-                        <iframe src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedListingDetail.listing.maps_link)}&t=&z=13&ie=UTF8&iwloc=&output=embed`} width="100%" height="100%" style={{ border: 0 }} allowFullScreen="" loading="lazy" title="Map"></iframe>
-                      )}
-                      <div style={{ padding: '0.25rem', background: '#f8fafc', fontSize: '0.75rem', textAlign: 'center' }}>
-                        <a href={selectedListingDetail.listing.maps_link} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>فتح في خرائط جوجل 🗺️</a>
+                  {(() => {
+                    const rawLink = selectedListingDetail.listing.maps_link;
+                    const addressQuery = selectedListingDetail.listing.address + ' ' + selectedListingDetail.listing.city;
+
+                    // Helper: build the embed src from a maps_link
+                    // Priority:
+                    //   1. Already an embed URL → use directly
+                    //   2. Full Google Maps URL with @lat,lng → extract coords for reliable embed
+                    //   3. Full google.com/maps URL without coords → pass the whole URL as q= (usually works)
+                    //   4. Short link (maps.app.goo.gl) or anything else → fall back to address geocoding
+                    const getEmbedSrc = (link) => {
+                      if (!link) return null;
+                      // Case 1: already an embed URL
+                      if (link.includes('output=embed') || link.includes('/embed')) {
+                        return link;
+                      }
+                      // Case 2: full URL with coordinates (e.g. /@30.0444,31.2357,15z)
+                      const coordMatch = link.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+                      if (coordMatch) {
+                        const lat = coordMatch[1];
+                        const lng = coordMatch[2];
+                        return `https://maps.google.com/maps?q=${lat},${lng}&z=15&output=embed`;
+                      }
+                      // Case 3: full google.com/maps URL (not a short link)
+                      if (link.includes('google.com/maps')) {
+                        return `https://maps.google.com/maps?q=${encodeURIComponent(link)}&t=&z=13&ie=UTF8&iwloc=&output=embed`;
+                      }
+                      // Case 4: short link or unknown format → fall back to address
+                      return null;
+                    };
+
+                    const embedSrc = getEmbedSrc(rawLink);
+                    const fallbackSrc = `https://maps.google.com/maps?q=${encodeURIComponent(addressQuery)}&t=&z=13&ie=UTF8&iwloc=&output=embed`;
+
+                    return (
+                      <div style={{ marginTop: '1rem', width: '100%', height: '200px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                        <iframe
+                          src={embedSrc || fallbackSrc}
+                          width="100%"
+                          height={rawLink ? '85%' : '100%'}
+                          style={{ border: 0, display: 'block' }}
+                          allowFullScreen=""
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          title="Map"
+                        />
+                        {rawLink && (
+                          <div style={{ padding: '0.25rem', background: '#f8fafc', fontSize: '0.75rem', textAlign: 'center', height: '15%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <a href={rawLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>فتح في خرائط جوجل 🗺️</a>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: '1rem', width: '100%', height: '200px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-                      <iframe src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedListingDetail.listing.address + " " + selectedListingDetail.listing.city)}&t=&z=13&ie=UTF8&iwloc=&output=embed`} width="100%" height="100%" style={{ border: 0 }} allowFullScreen="" loading="lazy" title="Map"></iframe>
-                    </div>
-                  )}
+                    );
+                  })()}
                   
                   <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
                     <strong>فئات الغرف والأسعار المتاحة:</strong>
