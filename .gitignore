@@ -1,0 +1,26 @@
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Database (local dev only — do not commit)
+backend/sakan.db
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
