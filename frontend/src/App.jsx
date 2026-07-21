@@ -11,95 +11,150 @@ L.Icon.Default.mergeOptions({
 });
 
 // ---------------------------------------------------------------------------
-// MapPicker — Leaflet + OpenStreetMap pin-drop with Nominatim address search
+// formatAddress — builds a display string from structured address fields
+// Falls back to raw address string for old listings
 // ---------------------------------------------------------------------------
-function MapPicker({ latitude, longitude, onChange }) {
+function formatAddress(listing) {
+  const { street, building_number, apartment_number, floor, address } = listing;
+  if (!building_number && !street) return address || '';
+  const parts = [];
+  if (building_number) parts.push(`مبنى ${building_number}`);
+  if (apartment_number) parts.push(`شقة ${apartment_number}`);
+  if (floor) parts.push(`الدور ${floor}`);
+  if (street) parts.push(`شارع ${street}`);
+  return parts.join('، ');
+}
+
+// ---------------------------------------------------------------------------
+// MapPickerModal — full-screen modal with Leaflet, draggable marker,
+// pre-geocoded from address fields. Confirm saves lat/lng.
+// ---------------------------------------------------------------------------
+function MapPickerModal({ addressQuery, cityFallback, initialLat, initialLng, onConfirm, onClose }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
-  const [search, setSearch] = useState('');
-  const [searching, setSearching] = useState(false);
+  const [pending, setPending] = useState({ lat: initialLat, lng: initialLng });
+  const [geocoding, setGeocoding] = useState(false);
 
+  // Geocode the address query on mount to seed the map position
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    const init = async () => {
+      if (!containerRef.current) return;
 
-    const initLat = latitude || 26.8206;
-    const initLng = longitude || 30.8025;
-    const zoom = latitude ? 15 : 6;
+      // Default to Egypt center; will be updated after geocoding
+      const map = L.map(containerRef.current).setView([26.8206, 30.8025], 6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+      }).addTo(map);
+      mapRef.current = map;
 
-    const map = L.map(containerRef.current).setView([initLat, initLng], zoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
-    }).addTo(map);
+      const placeMarker = (lat, lng) => {
+        if (markerRef.current) {
+          markerRef.current.setLatLng([lat, lng]);
+        } else {
+          markerRef.current = L.marker([lat, lng], { draggable: true }).addTo(map);
+          markerRef.current.on('dragend', (e) => {
+            const { lat: la, lng: ln } = e.target.getLatLng();
+            setPending({ lat: la, lng: ln });
+          });
+        }
+        map.setView([lat, lng], 16);
+        setPending({ lat, lng });
+      };
 
-    if (latitude && longitude) {
-      markerRef.current = L.marker([latitude, longitude]).addTo(map);
-    }
-
-    map.on('click', (e) => {
-      const { lat, lng } = e.latlng;
-      if (markerRef.current) {
-        markerRef.current.setLatLng([lat, lng]);
-      } else {
-        markerRef.current = L.marker([lat, lng]).addTo(map);
+      // If we already have coords (re-opening), use them
+      if (initialLat && initialLng) {
+        placeMarker(initialLat, initialLng);
+        return;
       }
-      onChange(lat, lng);
-    });
 
-    mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
+      // Geocode the address
+      if (addressQuery.trim()) {
+        setGeocoding(true);
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressQuery)}&limit=1&countrycodes=eg`,
+            { headers: { 'Accept-Language': 'ar' } }
+          );
+          const data = await res.json();
+          if (data.length > 0) {
+            placeMarker(parseFloat(data[0].lat), parseFloat(data[0].lon));
+            setGeocoding(false);
+            return;
+          }
+        } catch {}
+        setGeocoding(false);
+      }
+
+      // Fallback: geocode the city name only
+      if (cityFallback.trim()) {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityFallback)}&limit=1&countrycodes=eg`,
+            { headers: { 'Accept-Language': 'ar' } }
+          );
+          const data = await res.json();
+          if (data.length > 0) {
+            map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 13);
+          }
+        } catch {}
+      }
+
+      // Allow manual click placement if geocoding failed
+      map.on('click', (e) => placeMarker(e.latlng.lat, e.latlng.lng));
+    };
+
+    init();
+    return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; markerRef.current = null; } };
   }, []);
 
-  const handleSearch = async () => {
-    if (!search.trim()) return;
-    setSearching(true);
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(search)}&limit=1&countrycodes=eg`,
-        { headers: { 'Accept-Language': 'ar' } }
-      );
-      const data = await res.json();
-      if (data.length > 0) {
-        const { lat, lon } = data[0];
-        const latN = parseFloat(lat);
-        const lngN = parseFloat(lon);
-        mapRef.current.setView([latN, lngN], 16);
-        if (markerRef.current) {
-          markerRef.current.setLatLng([latN, lngN]);
-        } else {
-          markerRef.current = L.marker([latN, lngN]).addTo(mapRef.current);
-        }
-        onChange(latN, lngN);
-      }
-    } catch {}
-    setSearching(false);
-  };
-
   return (
-    <div>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-        <input
-          type="text"
-          placeholder="ابحث عن عنوان لتحديد موقعك (اختياري)..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSearch()}
-          style={{ flex: 1 }}
-        />
-        <button type="button" className="btn-secondary" onClick={handleSearch} disabled={searching}>
-          {searching ? '...' : '🔍'}
-        </button>
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '1rem'
+    }}>
+      <div style={{
+        background: 'white', borderRadius: 'var(--radius-lg)',
+        width: '100%', maxWidth: '680px',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.4)'
+      }}>
+        {/* Header */}
+        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ fontWeight: 700, margin: 0 }}>📍 تحديد موقع العقار</h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
+              {geocoding ? 'جاري تحديد الموقع التقريبي من العنوان...' : 'اسحب الدبوس الأحمر لضبط الموقع بدقة على مدخل العقار.'}
+            </p>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        {/* Map */}
+        <div ref={containerRef} style={{ width: '100%', height: '420px' }} />
+
+        {/* Footer */}
+        <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+          <span style={{ fontSize: '0.8rem', color: pending.lat ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 600 }}>
+            {pending.lat
+              ? `✅ الموقع: (${pending.lat.toFixed(5)}, ${pending.lng.toFixed(5)})`
+              : 'اضغط على الخريطة لوضع الدبوس'}
+          </span>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="btn-secondary" onClick={onClose}>إلغاء</button>
+            <button
+              className="btn-primary"
+              disabled={!pending.lat}
+              onClick={() => onConfirm(pending.lat, pending.lng)}
+            >
+              تأكيد الموقع ✓
+            </button>
+          </div>
+        </div>
       </div>
-      <div
-        ref={containerRef}
-        style={{ width: '100%', height: '260px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', zIndex: 0 }}
-      />
-      {latitude && longitude ? (
-        <small style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>✅ تم تحديد الموقع ({latitude.toFixed(5)}, {longitude.toFixed(5)}). يمكنك الضغط على أي مكان في الخريطة لتغيير الدبوس.</small>
-      ) : (
-        <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>💡 ابحث عن عنوانك أعلاه أو اضغط مباشرة على الخريطة لتثبيت الدبوس.</small>
-      )}
     </div>
   );
 }
@@ -214,12 +269,17 @@ export default function App() {
   const [createStep, setCreateStep] = useState(1);
   const [termsChecked, setTermsChecked] = useState(false);
   const [customAmenity, setCustomAmenity] = useState('');
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [createForm, setCreateForm] = useState({
     title: '',
     governorate: '',
     city: '',
     neighborhood: '',
     address: '',
+    street: '',
+    building_number: '',
+    apartment_number: '',
+    floor: '',
     maps_link: '',
     latitude: null,
     longitude: null,
@@ -466,6 +526,10 @@ export default function App() {
       city: '',
       neighborhood: '',
       address: '',
+      street: '',
+      building_number: '',
+      apartment_number: '',
+      floor: '',
       maps_link: '',
       latitude: null,
       longitude: null,
@@ -478,6 +542,7 @@ export default function App() {
       description: '',
       tier: 'regular'
     });
+    setShowMapPicker(false);
     setIsCreateOpen(true);
     setCreateStep(1);
     setTermsChecked(false);
@@ -1618,35 +1683,110 @@ export default function App() {
                   </div>
 
                   <div className="form-group">
-                    <label>الحي / اسم الشارع</label>
+                    <label>الحي / المنطقة</label>
                     <input 
                       type="text" 
-                      placeholder="مثال: شارع الجلاء الرئيسي" 
+                      placeholder="اسم الحي بالتفصيل"
                       value={createForm.neighborhood} 
                       onChange={(e) => setCreateForm({ ...createForm, neighborhood: e.target.value })} 
                       required 
                     />
                   </div>
 
-                  <div className="form-group">
-                    <label>العنوان الكامل بالتفصيل</label>
-                    <input 
-                      type="text" 
-                      placeholder="رقم العمارة والطابق ورقم الشقة" 
-                      value={createForm.address} 
-                      onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })} 
-                      required 
-                    />
+                  {/* Structured address fields */}
+                  <div className="grid-cols-2">
+                    <div className="form-group">
+                      <label>الشارع <span style={{ color: 'var(--danger)' }}>*</span></label>
+                      <input
+                        type="text"
+                        placeholder="مثال: 7"
+                        value={createForm.street}
+                        onChange={(e) => setCreateForm({ ...createForm, street: e.target.value.trim() })}
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>رقم المبنى <span style={{ color: 'var(--danger)' }}>*</span></label>
+                      <input
+                        type="text"
+                        placeholder="مثال: 12"
+                        value={createForm.building_number}
+                        onChange={(e) => setCreateForm({ ...createForm, building_number: e.target.value.trim() })}
+                        required
+                      />
+                    </div>
                   </div>
 
-                  <div className="form-group">
-                    <label>الموقع على الخريطة (اختياري)</label>
-                    <MapPicker
-                      latitude={createForm.latitude}
-                      longitude={createForm.longitude}
-                      onChange={(lat, lng) => setCreateForm(prev => ({ ...prev, latitude: lat, longitude: lng }))}
-                    />
+                  <div className="grid-cols-2">
+                    <div className="form-group">
+                      <label>رقم الشقة <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(اختياري)</span></label>
+                      <input
+                        type="text"
+                        placeholder="مثال: 3"
+                        value={createForm.apartment_number}
+                        onChange={(e) => setCreateForm({ ...createForm, apartment_number: e.target.value.trim() })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>الدور <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(اختياري)</span></label>
+                      <input
+                        type="text"
+                        placeholder="مثال: 2"
+                        value={createForm.floor}
+                        onChange={(e) => setCreateForm({ ...createForm, floor: e.target.value.trim() })}
+                      />
+                    </div>
                   </div>
+
+                  {/* Map picker trigger */}
+                  <div className="form-group">
+                    <label>موقع العقار على الخريطة <span style={{ color: 'var(--danger)' }}>*</span></label>
+                    {createForm.latitude && createForm.longitude ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)' }}>
+                        <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.9rem' }}>✅ تم تحديد الموقع بنجاح</span>
+                        <button
+                          type="button"
+                          className="btn-outline"
+                          style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem', marginRight: 'auto' }}
+                          onClick={() => setShowMapPicker(true)}
+                        >
+                          تعديل الموقع
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ width: '100%', padding: '0.75rem', fontSize: '0.95rem' }}
+                          onClick={() => setShowMapPicker(true)}
+                        >
+                          📍 تحديد موقع العقار على الخريطة
+                        </button>
+                        <small style={{ color: 'var(--danger)', fontSize: '0.75rem' }}>مطلوب — لا يمكن نشر الإعلان بدون تحديد الموقع.</small>
+                      </div>
+                    )}
+                  </div>
+
+                  {showMapPicker && (
+                    <MapPickerModal
+                      addressQuery={[
+                        createForm.building_number && `مبنى ${createForm.building_number}`,
+                        createForm.street && `شارع ${createForm.street}`,
+                        createForm.neighborhood,
+                        createForm.city,
+                        createForm.governorate
+                      ].filter(Boolean).join(' ')}
+                      cityFallback={`${createForm.city} ${createForm.governorate}`}
+                      initialLat={createForm.latitude}
+                      initialLng={createForm.longitude}
+                      onConfirm={(lat, lng) => {
+                        setCreateForm(prev => ({ ...prev, latitude: lat, longitude: lng }));
+                        setShowMapPicker(false);
+                      }}
+                      onClose={() => setShowMapPicker(false)}
+                    />
+                  )}
 
                   <div className="grid-cols-2">
                     <div className="form-group">
@@ -1930,40 +2070,9 @@ export default function App() {
                       التالي
                     </button>
                   </div>
-                </div>
-              )}
 
-              {/* STEP 6: DESCRIPTION */}
-              {createStep === 6 && (
-                <div>
-                  <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>وصف السكن الإضافي</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>أدرج تفاصيل إضافية لشرح السكن والخدمات القريبة بأسلوب مشوق.</p>
 
-                  <div className="form-group">
-                    <label>الوصف الكتابي</label>
-                    <textarea 
-                      rows="6"
-                      placeholder="صف وحدتك واذكر المميزات والخدمات القريبة منها. مثال: على بُعد 5 دقائق من جامعة أسيوط. سوبر ماركت وصيدلية ومخبز وموقف مواصلات على بُعد 200 متر."
-                      value={createForm.description}
-                      onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%', marginTop: '1.5rem' }}>
-                    <button className="btn-secondary" onClick={() => setCreateStep(5)}>السابق</button>
-                    <button className="btn-primary" disabled={!createForm.description} onClick={() => setCreateStep(7)}>التالي (تحديد الباقة نشر الإعلان)</button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 7: TIER SELECTION & PAYMENT */}
-              {createStep === 7 && (
-                <div>
-                  <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>تحديد فئة وباقة نشر الإعلان</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>تعتمد منصة سكن على اشتراكات الإعلانات المدفوعة لدعم تشغيل الخدمة.</p>
-
-                  <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
-                    <label style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: createForm.tier === 'regular' ? '#f0fdf4' : 'white', borderColor: createForm.tier === 'regular' ? 'var(--primary)' : 'var(--border-color)' }}>
+                  <label style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: createForm.tier === 'regular' ? '#f0fdf4' : 'white', borderColor: createForm.tier === 'regular' ? 'var(--primary)' : 'var(--border-color)' }}>
                       <input type="radio" name="tier" checked={createForm.tier === 'regular'} onChange={() => setCreateForm({ ...createForm, tier: 'regular' })} />
                       <div>
                         <strong>إعلان عادي (Regular Listing) - ١٠٠ جنيه مصري / شهر</strong>
@@ -2037,35 +2146,36 @@ export default function App() {
                 {/* 1. Unit Info */}
                 <div className="details-section">
                   <h3 className="details-title">تفاصيل الإقامة</h3>
-                  <p>🔹 <strong>العنوان بالتفصيل:</strong> {selectedListingDetail.listing.address}</p>
+                  <p>🔹 <strong>العنوان بالتفصيل:</strong> {formatAddress(selectedListingDetail.listing)}</p>
                   <p>🔹 <strong>عدد الأسرّة المتوفرة:</strong> {selectedListingDetail.listing.available_beds} أسرة</p>
                   {(() => {
                     const { latitude, longitude, address, city } = selectedListingDetail.listing;
                     const hasCoords = latitude != null && longitude != null;
-
-                    // Always-interactive OpenStreetMap embed
-                    // With coords → precise pin; without → geocode from address text
-                    const embedSrc = hasCoords
-                      ? `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.006},${latitude - 0.004},${longitude + 0.006},${latitude + 0.004}&layer=mapnik&marker=${latitude},${longitude}`
-                      : `https://www.openstreetmap.org/export/embed.html?query=${encodeURIComponent(address + ' ' + city)}`;
-
-                    const openSrc = hasCoords
-                      ? `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}&zoom=16`
-                      : `https://www.openstreetmap.org/search?query=${encodeURIComponent(address + ' ' + city)}`;
-
+                    const gmSrc = hasCoords
+                      ? `https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`
+                      : null;
+                    const osmSrc = hasCoords
+                      ? `https://www.openstreetmap.org/export/embed.html?bbox=${longitude-0.006},${latitude-0.004},${longitude+0.006},${latitude+0.004}&layer=mapnik&marker=${latitude},${longitude}`
+                      : `https://www.openstreetmap.org/export/embed.html?query=${encodeURIComponent((address || '') + ' ' + city)}`;
+                    const googleMapsLink = hasCoords
+                      ? `https://www.google.com/maps?q=${latitude},${longitude}`
+                      : `https://www.google.com/maps/search/${encodeURIComponent((address || '') + ' ' + city)}`;
                     return (
                       <div style={{ marginTop: '1rem', width: '100%', height: '228px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
                         <iframe
-                          src={embedSrc}
+                          key={gmSrc || osmSrc}
+                          src={gmSrc || osmSrc}
                           width="100%"
                           height={200}
                           style={{ border: 0, display: 'block', flex: '0 0 200px' }}
                           allowFullScreen=""
                           loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
                           title="Map"
+                          onError={(e) => { if (gmSrc) e.target.src = osmSrc; }}
                         />
                         <div style={{ height: '28px', flex: '0 0 28px', background: '#f8fafc', fontSize: '0.75rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border-color)' }}>
-                          <a href={openSrc} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>فتح في خرائط OpenStreetMap 🗺️</a>
+                          <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>فتح في خرائط جوجل 🗺️</a>
                         </div>
                       </div>
                     );

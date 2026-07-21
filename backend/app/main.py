@@ -45,6 +45,10 @@ class Listing(Base):
     city = Column(String, nullable=False)
     neighborhood = Column(String, nullable=False)
     address = Column(String, nullable=False)
+    street = Column(String, nullable=True)
+    building_number = Column(String, nullable=True)
+    apartment_number = Column(String, nullable=True)
+    floor = Column(String, nullable=True)
     maps_link = Column(String, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
@@ -155,6 +159,14 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE listings ADD COLUMN latitude REAL"))
             if "longitude" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN longitude REAL"))
+            if "street" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN street VARCHAR"))
+            if "building_number" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN building_number VARCHAR"))
+            if "apartment_number" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN apartment_number VARCHAR"))
+            if "floor" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN floor VARCHAR"))
             if "photo_urls" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN photo_urls VARCHAR DEFAULT '[]'"))
             if "video_urls" not in listing_cols:
@@ -269,7 +281,11 @@ class ListingCreate(BaseModel):
     governorate: str
     city: str
     neighborhood: str
-    address: str
+    address: str = ""
+    street: Optional[str] = None
+    building_number: Optional[str] = None
+    apartment_number: Optional[str] = None
+    floor: Optional[str] = None
     maps_link: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -295,6 +311,10 @@ class ListingOut(BaseModel):
     city: str
     neighborhood: str
     address: str
+    street: Optional[str] = None
+    building_number: Optional[str] = None
+    apartment_number: Optional[str] = None
+    floor: Optional[str] = None
     maps_link: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -564,12 +584,30 @@ def create_listing(payload: ListingCreate):
         legacy_price = configs[0]["price_per_person"] if configs else (payload.price_per_person or 0)
         legacy_room_type = configs[0]["room_type"] if configs else (payload.room_type or "single")
 
+        # Auto-compute address from structured fields if provided
+        def build_address(street, building, apartment, floor):
+            parts = []
+            if building: parts.append(f"مبنى {building}")
+            if apartment: parts.append(f"شقة {apartment}")
+            if floor: parts.append(f"الدور {floor}")
+            if street: parts.append(f"شارع {street}")
+            return "، ".join(parts)
+
+        computed_address = build_address(
+            payload.street, payload.building_number,
+            payload.apartment_number, payload.floor
+        ) or payload.address or ""
+
         listing = Listing(
             title=payload.title or "سكن طلاب",
             governorate=payload.governorate,
             city=payload.city,
             neighborhood=payload.neighborhood,
-            address=payload.address,
+            address=computed_address,
+            street=payload.street,
+            building_number=payload.building_number,
+            apartment_number=payload.apartment_number,
+            floor=payload.floor,
             maps_link=payload.maps_link,
             latitude=payload.latitude,
             longitude=payload.longitude,
@@ -596,6 +634,10 @@ def create_listing(payload: ListingCreate):
             city=listing.city,
             neighborhood=listing.neighborhood,
             address=listing.address,
+            street=listing.street,
+            building_number=listing.building_number,
+            apartment_number=listing.apartment_number,
+            floor=listing.floor,
             maps_link=listing.maps_link,
             latitude=listing.latitude,
             longitude=listing.longitude,
@@ -749,6 +791,10 @@ def list_listings(
                     city=item.city,
                     neighborhood=item.neighborhood,
                     address=item.address,
+                    street=item.street,
+                    building_number=item.building_number,
+                    apartment_number=item.apartment_number,
+                    floor=item.floor,
                     maps_link=item.maps_link,
                     latitude=item.latitude,
                     longitude=item.longitude,
@@ -809,6 +855,10 @@ def get_listing_detail(listing_id: int):
                 city=listing.city,
                 neighborhood=listing.neighborhood,
                 address=listing.address,
+                street=listing.street,
+                building_number=listing.building_number,
+                apartment_number=listing.apartment_number,
+                floor=listing.floor,
                 maps_link=listing.maps_link,
                 latitude=listing.latitude,
                 longitude=listing.longitude,
