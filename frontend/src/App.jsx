@@ -1967,20 +1967,23 @@ export default function App() {
                     const embedSrc = getEmbedSrc(rawLink);
                     const fallbackSrc = `https://maps.google.com/maps?q=${encodeURIComponent(addressQuery)}&t=&z=13&ie=UTF8&iwloc=&output=embed`;
 
+                    const LINK_BAR_H = rawLink ? 28 : 0;
+                    const MAP_H = 200 - LINK_BAR_H;
+
                     return (
-                      <div style={{ marginTop: '1rem', width: '100%', height: '200px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                      <div style={{ marginTop: '1rem', width: '100%', height: '200px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
                         <iframe
                           src={embedSrc || fallbackSrc}
                           width="100%"
-                          height={rawLink ? '85%' : '100%'}
-                          style={{ border: 0, display: 'block' }}
+                          height={MAP_H}
+                          style={{ border: 0, display: 'block', flex: `0 0 ${MAP_H}px` }}
                           allowFullScreen=""
                           loading="lazy"
                           referrerPolicy="no-referrer-when-downgrade"
                           title="Map"
                         />
                         {rawLink && (
-                          <div style={{ padding: '0.25rem', background: '#f8fafc', fontSize: '0.75rem', textAlign: 'center', height: '15%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div style={{ height: `${LINK_BAR_H}px`, flex: `0 0 ${LINK_BAR_H}px`, background: '#f8fafc', fontSize: '0.75rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border-color)' }}>
                             <a href={rawLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>فتح في خرائط جوجل 🗺️</a>
                           </div>
                         )}
