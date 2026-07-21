@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, create_engine, inspect, text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 DATABASE_URL = "sqlite:///./sakan.db"
@@ -46,6 +46,8 @@ class Listing(Base):
     neighborhood = Column(String, nullable=False)
     address = Column(String, nullable=False)
     maps_link = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     gender = Column(String, nullable=False)  # "male", "female"
     available_beds = Column(Integer, nullable=False)
 
@@ -149,6 +151,10 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE listings ADD COLUMN title VARCHAR DEFAULT 'سكن طلاب'"))
             if "maps_link" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN maps_link VARCHAR"))
+            if "latitude" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN latitude REAL"))
+            if "longitude" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN longitude REAL"))
             if "photo_urls" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN photo_urls VARCHAR DEFAULT '[]'"))
             if "video_urls" not in listing_cols:
@@ -265,6 +271,8 @@ class ListingCreate(BaseModel):
     neighborhood: str
     address: str
     maps_link: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     gender: Literal["male", "female"]
     available_beds: int = Field(..., ge=0)
     advertiser_id: int
@@ -288,6 +296,8 @@ class ListingOut(BaseModel):
     neighborhood: str
     address: str
     maps_link: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     gender: str
     available_beds: int
     price_per_person: Optional[int] = None
@@ -561,6 +571,8 @@ def create_listing(payload: ListingCreate):
             neighborhood=payload.neighborhood,
             address=payload.address,
             maps_link=payload.maps_link,
+            latitude=payload.latitude,
+            longitude=payload.longitude,
             gender=payload.gender,
             available_beds=payload.available_beds,
             price_per_person=legacy_price,
@@ -585,6 +597,8 @@ def create_listing(payload: ListingCreate):
             neighborhood=listing.neighborhood,
             address=listing.address,
             maps_link=listing.maps_link,
+            latitude=listing.latitude,
+            longitude=listing.longitude,
             gender=listing.gender,
             available_beds=listing.available_beds,
             price_per_person=listing.price_per_person,
@@ -736,6 +750,8 @@ def list_listings(
                     neighborhood=item.neighborhood,
                     address=item.address,
                     maps_link=item.maps_link,
+                    latitude=item.latitude,
+                    longitude=item.longitude,
                     gender=item.gender,
                     available_beds=item.available_beds,
                     price_per_person=item.price_per_person,
@@ -794,6 +810,8 @@ def get_listing_detail(listing_id: int):
                 neighborhood=listing.neighborhood,
                 address=listing.address,
                 maps_link=listing.maps_link,
+                latitude=listing.latitude,
+                longitude=listing.longitude,
                 gender=listing.gender,
                 available_beds=listing.available_beds,
                 price_per_person=listing.price_per_person,

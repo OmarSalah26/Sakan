@@ -1,4 +1,108 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix Leaflet's default marker icon paths broken by Vite's asset pipeline
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconUrl: new URL('leaflet/dist/images/marker-icon.png', import.meta.url).href,
+  iconRetinaUrl: new URL('leaflet/dist/images/marker-icon-2x.png', import.meta.url).href,
+  shadowUrl: new URL('leaflet/dist/images/marker-shadow.png', import.meta.url).href,
+});
+
+// ---------------------------------------------------------------------------
+// MapPicker — Leaflet + OpenStreetMap pin-drop with Nominatim address search
+// ---------------------------------------------------------------------------
+function MapPicker({ latitude, longitude, onChange }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const [search, setSearch] = useState('');
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const initLat = latitude || 26.8206;
+    const initLng = longitude || 30.8025;
+    const zoom = latitude ? 15 : 6;
+
+    const map = L.map(containerRef.current).setView([initLat, initLng], zoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(map);
+
+    if (latitude && longitude) {
+      markerRef.current = L.marker([latitude, longitude]).addTo(map);
+    }
+
+    map.on('click', (e) => {
+      const { lat, lng } = e.latlng;
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng]);
+      } else {
+        markerRef.current = L.marker([lat, lng]).addTo(map);
+      }
+      onChange(lat, lng);
+    });
+
+    mapRef.current = map;
+    return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
+  }, []);
+
+  const handleSearch = async () => {
+    if (!search.trim()) return;
+    setSearching(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(search)}&limit=1&countrycodes=eg`,
+        { headers: { 'Accept-Language': 'ar' } }
+      );
+      const data = await res.json();
+      if (data.length > 0) {
+        const { lat, lon } = data[0];
+        const latN = parseFloat(lat);
+        const lngN = parseFloat(lon);
+        mapRef.current.setView([latN, lngN], 16);
+        if (markerRef.current) {
+          markerRef.current.setLatLng([latN, lngN]);
+        } else {
+          markerRef.current = L.marker([latN, lngN]).addTo(mapRef.current);
+        }
+        onChange(latN, lngN);
+      }
+    } catch {}
+    setSearching(false);
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        <input
+          type="text"
+          placeholder="ابحث عن عنوان لتحديد موقعك (اختياري)..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSearch()}
+          style={{ flex: 1 }}
+        />
+        <button type="button" className="btn-secondary" onClick={handleSearch} disabled={searching}>
+          {searching ? '...' : '🔍'}
+        </button>
+      </div>
+      <div
+        ref={containerRef}
+        style={{ width: '100%', height: '260px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', zIndex: 0 }}
+      />
+      {latitude && longitude ? (
+        <small style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>✅ تم تحديد الموقع ({latitude.toFixed(5)}, {longitude.toFixed(5)}). يمكنك الضغط على أي مكان في الخريطة لتغيير الدبوس.</small>
+      ) : (
+        <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>💡 ابحث عن عنوانك أعلاه أو اضغط مباشرة على الخريطة لتثبيت الدبوس.</small>
+      )}
+    </div>
+  );
+}
 
 const API_BASE = '/api';
 
@@ -117,6 +221,8 @@ export default function App() {
     neighborhood: '',
     address: '',
     maps_link: '',
+    latitude: null,
+    longitude: null,
     gender: 'female',
     available_beds: 1,
     room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
@@ -361,6 +467,8 @@ export default function App() {
       neighborhood: '',
       address: '',
       maps_link: '',
+      latitude: null,
+      longitude: null,
       gender: 'female',
       available_beds: 1,
       room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
@@ -1532,14 +1640,12 @@ export default function App() {
                   </div>
 
                   <div className="form-group">
-                    <label>رابط موقع جوجل ماب (Google Maps URL - اختياري)</label>
-                    <input 
-                      type="url" 
-                      placeholder="https://www.google.com/maps/place/..." 
-                      value={createForm.maps_link} 
-                      onChange={(e) => setCreateForm({ ...createForm, maps_link: e.target.value })} 
+                    <label>الموقع على الخريطة (اختياري)</label>
+                    <MapPicker
+                      latitude={createForm.latitude}
+                      longitude={createForm.longitude}
+                      onChange={(lat, lng) => setCreateForm(prev => ({ ...prev, latitude: lat, longitude: lng }))}
                     />
-                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>💡 افتح جوجل ماب في <strong>المتصفح</strong> (مش التطبيق)، ابحث عن السكن، ثم انسخ الرابط من شريط العنوان والصقه هنا.</small>
                   </div>
 
                   <div className="grid-cols-2">
@@ -1934,59 +2040,33 @@ export default function App() {
                   <p>🔹 <strong>العنوان بالتفصيل:</strong> {selectedListingDetail.listing.address}</p>
                   <p>🔹 <strong>عدد الأسرّة المتوفرة:</strong> {selectedListingDetail.listing.available_beds} أسرة</p>
                   {(() => {
-                    const rawLink = selectedListingDetail.listing.maps_link;
-                    const addressQuery = selectedListingDetail.listing.address + ' ' + selectedListingDetail.listing.city;
+                    const { latitude, longitude, address, city } = selectedListingDetail.listing;
+                    const hasCoords = latitude != null && longitude != null;
 
-                    // Helper: build the embed src from a maps_link
-                    // Priority:
-                    //   1. Already an embed URL → use directly
-                    //   2. Full Google Maps URL with @lat,lng → extract coords for reliable embed
-                    //   3. Full google.com/maps URL without coords → pass the whole URL as q= (usually works)
-                    //   4. Short link (maps.app.goo.gl) or anything else → fall back to address geocoding
-                    const getEmbedSrc = (link) => {
-                      if (!link) return null;
-                      // Case 1: already an embed URL
-                      if (link.includes('output=embed') || link.includes('/embed')) {
-                        return link;
-                      }
-                      // Case 2: full URL with coordinates (e.g. /@30.0444,31.2357,15z)
-                      const coordMatch = link.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-                      if (coordMatch) {
-                        const lat = coordMatch[1];
-                        const lng = coordMatch[2];
-                        return `https://maps.google.com/maps?q=${lat},${lng}&z=15&output=embed`;
-                      }
-                      // Case 3: full google.com/maps URL (not a short link)
-                      if (link.includes('google.com/maps')) {
-                        return `https://maps.google.com/maps?q=${encodeURIComponent(link)}&t=&z=13&ie=UTF8&iwloc=&output=embed`;
-                      }
-                      // Case 4: short link or unknown format → fall back to address
-                      return null;
-                    };
+                    // Always-interactive OpenStreetMap embed
+                    // With coords → precise pin; without → geocode from address text
+                    const embedSrc = hasCoords
+                      ? `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.006},${latitude - 0.004},${longitude + 0.006},${latitude + 0.004}&layer=mapnik&marker=${latitude},${longitude}`
+                      : `https://www.openstreetmap.org/export/embed.html?query=${encodeURIComponent(address + ' ' + city)}`;
 
-                    const embedSrc = getEmbedSrc(rawLink);
-                    const fallbackSrc = `https://maps.google.com/maps?q=${encodeURIComponent(addressQuery)}&t=&z=13&ie=UTF8&iwloc=&output=embed`;
-
-                    const LINK_BAR_H = rawLink ? 28 : 0;
-                    const MAP_H = 200 - LINK_BAR_H;
+                    const openSrc = hasCoords
+                      ? `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}&zoom=16`
+                      : `https://www.openstreetmap.org/search?query=${encodeURIComponent(address + ' ' + city)}`;
 
                     return (
-                      <div style={{ marginTop: '1rem', width: '100%', height: '200px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ marginTop: '1rem', width: '100%', height: '228px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
                         <iframe
-                          src={embedSrc || fallbackSrc}
+                          src={embedSrc}
                           width="100%"
-                          height={MAP_H}
-                          style={{ border: 0, display: 'block', flex: `0 0 ${MAP_H}px` }}
+                          height={200}
+                          style={{ border: 0, display: 'block', flex: '0 0 200px' }}
                           allowFullScreen=""
                           loading="lazy"
-                          referrerPolicy="no-referrer-when-downgrade"
                           title="Map"
                         />
-                        {rawLink && (
-                          <div style={{ height: `${LINK_BAR_H}px`, flex: `0 0 ${LINK_BAR_H}px`, background: '#f8fafc', fontSize: '0.75rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border-color)' }}>
-                            <a href={rawLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>فتح في خرائط جوجل 🗺️</a>
-                          </div>
-                        )}
+                        <div style={{ height: '28px', flex: '0 0 28px', background: '#f8fafc', fontSize: '0.75rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border-color)' }}>
+                          <a href={openSrc} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>فتح في خرائط OpenStreetMap 🗺️</a>
+                        </div>
                       </div>
                     );
                   })()}
