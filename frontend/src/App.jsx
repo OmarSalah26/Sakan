@@ -1811,7 +1811,7 @@ export default function App() {
 
                   <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%', marginTop: '1rem' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(1)}>السابق</button>
-                    <button className="btn-primary" disabled={!createForm.title || !createForm.city || !createForm.neighborhood || !createForm.address} onClick={() => setCreateStep(3)}>التالي</button>
+                    <button className="btn-primary" disabled={!createForm.title || !createForm.city || !createForm.neighborhood || !createForm.street || !createForm.building_number || !createForm.latitude || !createForm.longitude} onClick={() => setCreateStep(3)}>التالي</button>
                   </div>
                 </div>
               )}
@@ -2070,9 +2070,15 @@ export default function App() {
                       التالي
                     </button>
                   </div>
+                </div>
+              )}
 
-
-                  <label style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: createForm.tier === 'regular' ? '#f0fdf4' : 'white', borderColor: createForm.tier === 'regular' ? 'var(--primary)' : 'var(--border-color)' }}>
+              {/* STEP 6: CHOOSE TIER & SUBMIT */}
+              {createStep === 6 && (
+                <div>
+                  <h4 style={{ fontWeight: 700, marginBottom: '1.25rem' }}>اختر باقة الإعلان وانشر عقارك 🚀</h4>
+                  <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <label style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: createForm.tier === 'regular' ? '#f0fdf4' : 'white', borderColor: createForm.tier === 'regular' ? 'var(--primary)' : 'var(--border-color)' }}>
                       <input type="radio" name="tier" checked={createForm.tier === 'regular'} onChange={() => setCreateForm({ ...createForm, tier: 'regular' })} />
                       <div>
                         <strong>إعلان عادي (Regular Listing) - ١٠٠ جنيه مصري / شهر</strong>
@@ -2090,7 +2096,7 @@ export default function App() {
                   </div>
 
                   <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%' }}>
-                    <button className="btn-secondary" onClick={() => setCreateStep(6)}>السابق</button>
+                    <button className="btn-secondary" onClick={() => setCreateStep(5)}>السابق</button>
                     <button className="btn-primary" onClick={handleCreateSubmit}>نشر الإعلان 🚀</button>
                   </div>
                 </div>
