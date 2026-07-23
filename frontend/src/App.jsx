@@ -548,15 +548,65 @@ export default function App() {
     setTermsChecked(false);
   };
 
+  const handleStep2Next = async () => {
+    if (createForm.latitude && createForm.longitude) {
+      setCreateStep(3);
+      return;
+    }
+
+    const query = [createForm.street, createForm.neighborhood, createForm.city].filter(Boolean).join(' ');
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=eg`,
+        { headers: { 'Accept-Language': 'ar' } }
+      );
+      const data = await res.json();
+      if (data && data.length > 0) {
+        setCreateForm(prev => ({
+          ...prev,
+          latitude: parseFloat(data[0].lat),
+          longitude: parseFloat(data[0].lon)
+        }));
+      } else {
+        const fallbackRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(createForm.city)}&limit=1&countrycodes=eg`,
+          { headers: { 'Accept-Language': 'ar' } }
+        );
+        const fallbackData = await fallbackRes.json();
+        if (fallbackData && fallbackData.length > 0) {
+          setCreateForm(prev => ({
+            ...prev,
+            latitude: parseFloat(fallbackData[0].lat),
+            longitude: parseFloat(fallbackData[0].lon)
+          }));
+        }
+      }
+    } catch (err) {}
+    setCreateStep(3);
+  };
+
   const handleCreateSubmit = async () => {
     try {
+      let payload = { ...createForm, advertiser_id: user.id };
+      if (!payload.latitude || !payload.longitude) {
+        const query = [createForm.street, createForm.neighborhood, createForm.city].filter(Boolean).join(' ');
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=eg`,
+            { headers: { 'Accept-Language': 'ar' } }
+          );
+          const data = await res.json();
+          if (data && data.length > 0) {
+            payload.latitude = parseFloat(data[0].lat);
+            payload.longitude = parseFloat(data[0].lon);
+          }
+        } catch {}
+      }
+
       const res = await fetch(`${API_BASE}/listings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...createForm,
-          advertiser_id: user.id
-        })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         showToast("تم نشر العقار بنجاح!");
@@ -1674,7 +1724,7 @@ export default function App() {
                       <label>المدينة / المركز</label>
                       <input 
                         type="text" 
-                        placeholder="مثال: الدقي، حي الجامعة..." 
+                        placeholder="مثال: أسيوط الجديدة، دمياط الجديدة..." 
                         value={createForm.city} 
                         onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })} 
                         required 
@@ -1699,9 +1749,9 @@ export default function App() {
                       <label>الشارع <span style={{ color: 'var(--danger)' }}>*</span></label>
                       <input
                         type="text"
-                        placeholder="مثال: 7"
+                        placeholder="مثال: شارع التحرير"
                         value={createForm.street}
-                        onChange={(e) => setCreateForm({ ...createForm, street: e.target.value.trim() })}
+                        onChange={(e) => setCreateForm({ ...createForm, street: e.target.value })}
                         required
                       />
                     </div>
@@ -1711,7 +1761,7 @@ export default function App() {
                         type="text"
                         placeholder="مثال: 12"
                         value={createForm.building_number}
-                        onChange={(e) => setCreateForm({ ...createForm, building_number: e.target.value.trim() })}
+                        onChange={(e) => setCreateForm({ ...createForm, building_number: e.target.value })}
                         required
                       />
                     </div>
@@ -1724,7 +1774,7 @@ export default function App() {
                         type="text"
                         placeholder="مثال: 3"
                         value={createForm.apartment_number}
-                        onChange={(e) => setCreateForm({ ...createForm, apartment_number: e.target.value.trim() })}
+                        onChange={(e) => setCreateForm({ ...createForm, apartment_number: e.target.value })}
                       />
                     </div>
                     <div className="form-group">
@@ -1733,14 +1783,14 @@ export default function App() {
                         type="text"
                         placeholder="مثال: 2"
                         value={createForm.floor}
-                        onChange={(e) => setCreateForm({ ...createForm, floor: e.target.value.trim() })}
+                        onChange={(e) => setCreateForm({ ...createForm, floor: e.target.value })}
                       />
                     </div>
                   </div>
 
                   {/* Map picker trigger */}
                   <div className="form-group">
-                    <label>موقع العقار على الخريطة <span style={{ color: 'var(--danger)' }}>*</span></label>
+                    <label>موقع العقار على الخريطة <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(اختياري)</span></label>
                     {createForm.latitude && createForm.longitude ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)' }}>
                         <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.9rem' }}>✅ تم تحديد الموقع بنجاح</span>
@@ -1761,9 +1811,9 @@ export default function App() {
                           style={{ width: '100%', padding: '0.75rem', fontSize: '0.95rem' }}
                           onClick={() => setShowMapPicker(true)}
                         >
-                          📍 تحديد موقع العقار على الخريطة
+                          📍 تحديد موقع العقار على الخريطة (اختياري)
                         </button>
-                        <small style={{ color: 'var(--danger)', fontSize: '0.75rem' }}>مطلوب — لا يمكن نشر الإعلان بدون تحديد الموقع.</small>
+                        <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>في حال عدم التحديد، سيتم استنباط الموقع تلقائياً من اسم الشارع والحي والمدينة.</small>
                       </div>
                     )}
                   </div>
@@ -1771,11 +1821,9 @@ export default function App() {
                   {showMapPicker && (
                     <MapPickerModal
                       addressQuery={[
-                        createForm.building_number && `مبنى ${createForm.building_number}`,
                         createForm.street && `شارع ${createForm.street}`,
                         createForm.neighborhood,
-                        createForm.city,
-                        createForm.governorate
+                        createForm.city
                       ].filter(Boolean).join(' ')}
                       cityFallback={`${createForm.city} ${createForm.governorate}`}
                       initialLat={createForm.latitude}
@@ -1811,7 +1859,7 @@ export default function App() {
 
                   <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%', marginTop: '1rem' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(1)}>السابق</button>
-                    <button className="btn-primary" disabled={!createForm.title || !createForm.city || !createForm.neighborhood || !createForm.street || !createForm.building_number || !createForm.latitude || !createForm.longitude} onClick={() => setCreateStep(3)}>التالي</button>
+                    <button className="btn-primary" disabled={!createForm.title || !createForm.city || !createForm.neighborhood || !createForm.street || !createForm.building_number} onClick={handleStep2Next}>التالي</button>
                   </div>
                 </div>
               )}
