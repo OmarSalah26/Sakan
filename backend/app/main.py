@@ -11,6 +11,19 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
+import json
+import shutil
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import List, Literal, Optional
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+
 DATABASE_URL = "sqlite:///./sakan.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -30,7 +43,9 @@ class User(Base):
     governorates = Column(String, nullable=True)  # JSON string representation of list of governorates (for brokers)
     offense_count = Column(Integer, default=0)
     is_banned = Column(Boolean, default=False)
+    verified_by_sakan = Column(Boolean, default=False)
     terms_accepted_at = Column(DateTime, nullable=True)
+    verified_channel = Column(String, nullable=True)  # "whatsapp", "telegram", "sms", "email"
     created_at = Column(DateTime, default=datetime.utcnow)
 
     listings = relationship("Listing", back_populates="advertiser")
@@ -67,6 +82,11 @@ class Listing(Base):
     description = Column(Text, nullable=True)            # Unit description
     tier = Column(String, default="regular")              # "regular", "premium"
     status = Column(String, default="active")            # "active", "inactive", "expired", "banned"
+    view_count = Column(Integer, default=0)
+    min_lease_months = Column(Integer, nullable=True)
+    contact_phone = Column(String, nullable=True)
+    whatsapp_phone = Column(String, nullable=True)
+    min_lease_months = Column(Integer, nullable=True)
     subscription_expires_at = Column(DateTime, nullable=True)
     advertiser_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -86,6 +106,7 @@ class Rating(Base):
     target_type = Column(String, default="advertiser")  # "advertiser", "property"
     star_count = Column(Integer, nullable=False)
     review_text = Column(Text, default="")
+    is_verified = Column(Boolean, default=False)
     photo_urls = Column(String, nullable=True)          # JSON string array of photo URLs (property ratings only)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -124,6 +145,34 @@ class OTPVerification(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class Bookmark(Base):
+    __tablename__ = "bookmarks"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Governorate(Base):
+    __tablename__ = "governorates"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    status = Column(String, nullable=False, default="waitlist_open")  # "live", "waitlist_open"
+
+
+class WaitlistEntry(Base):
+    __tablename__ = "waitlist_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    phone = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    governorate_id = Column(Integer, ForeignKey("governorates.id"), nullable=False)
+    city = Column(String, nullable=False)
+    work_volume_range = Column(String, nullable=False)  # "1-4", "5-9", "10-19", "20+"
+    verified_channel = Column(String, nullable=False)   # "whatsapp", "telegram", "sms", "email"
+    signup_at = Column(DateTime, default=datetime.utcnow)
+    tier = Column(Integer, default=3)                    # 1, 2, or 3
+
+
 Base.metadata.create_all(bind=engine)
 
 
@@ -147,6 +196,10 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE users ADD COLUMN offense_count INTEGER DEFAULT 0"))
             if "is_banned" not in user_cols:
                 connection.execute(text("ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0"))
+            if "verified_by_sakan" not in user_cols:
+                connection.execute(text("ALTER TABLE users ADD COLUMN verified_by_sakan BOOLEAN DEFAULT 0"))
+            if "verified_channel" not in user_cols:
+                connection.execute(text("ALTER TABLE users ADD COLUMN verified_channel VARCHAR"))
 
         # Check listings table
         if "listings" in inspector.get_table_names():
@@ -181,6 +234,14 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE listings ADD COLUMN price_per_person INTEGER"))
             if "room_type" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN room_type VARCHAR"))
+            if "view_count" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN view_count INTEGER DEFAULT 0"))
+            if "min_lease_months" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN min_lease_months INTEGER"))
+            if "contact_phone" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN contact_phone VARCHAR"))
+            if "whatsapp_phone" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN whatsapp_phone VARCHAR"))
 
         # Check ratings table
         if "ratings" in inspector.get_table_names():
@@ -189,6 +250,12 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE ratings ADD COLUMN target_type VARCHAR DEFAULT 'advertiser'"))
             if "photo_urls" not in rating_cols:
                 connection.execute(text("ALTER TABLE ratings ADD COLUMN photo_urls VARCHAR"))
+            if "is_verified" not in rating_cols:
+                connection.execute(text("ALTER TABLE ratings ADD COLUMN is_verified BOOLEAN DEFAULT 0"))
+
+        # Check bookmarks table
+        if "bookmarks" not in inspector.get_table_names():
+            Bookmark.__table__.create(engine)
 
         # Check complaints table
         if "complaints" in inspector.get_table_names():
@@ -201,6 +268,33 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE complaints ADD COLUMN actioned_at DATETIME"))
             if "status" not in complaint_cols:
                 connection.execute(text("ALTER TABLE complaints ADD COLUMN status VARCHAR DEFAULT 'submitted'"))
+
+        # Check governorates table
+        if "governorates" not in inspector.get_table_names():
+            Governorate.__table__.create(engine)
+
+        # Check waitlist_entries table
+        if "waitlist_entries" not in inspector.get_table_names():
+            WaitlistEntry.__table__.create(engine)
+
+    # Seed Governorates if empty
+    db = SessionLocal()
+    try:
+        if db.query(Governorate).count() == 0:
+            live_govs = {"أسيوط", "دمياط"}
+            all_gov_names = [
+                "القاهرة", "الجيزة", "الإسكندرية", "الدقهلية", "البحر الأحمر", "المنوفية", 
+                "الفيوم", "قنا", "الأقصر", "أسوان", "أسيوط", "المنيا", "بني سويف", 
+                "الشرقية", "القليوبية", "الغربية", "البحيرة", "دمياط", "كفر الشيخ", 
+                "بورسعيد", "الإسماعيلية", "السويس", "شمال سيناء", "جنوب سيناء", 
+                "الوادي الجديد", "مطروح"
+            ]
+            for gname in all_gov_names:
+                gstatus = "live" if gname in live_govs else "waitlist_open"
+                db.add(Governorate(name=gname, status=gstatus))
+            db.commit()
+    finally:
+        db.close()
 
 
 ensure_schema()
@@ -246,6 +340,27 @@ def verify_admin_user(db, x_user_id: Optional[int]):
 
 
 # --- Pydantic Schemas ---
+TIER_RATIOS = (0.20, 0.30, 0.50)  # Top 20% -> Tier 1, Next 30% -> Tier 2, Remaining 50% -> Tier 3
+
+
+def recalculate_governorate_tiers(db, governorate_id: int):
+    entries = db.query(WaitlistEntry).filter(WaitlistEntry.governorate_id == governorate_id).order_by(WaitlistEntry.signup_at.asc()).all()
+    total = len(entries)
+    if total == 0:
+        return
+    t1_count = int(total * TIER_RATIOS[0])
+    t2_count = int(total * TIER_RATIOS[1])
+    
+    for idx, entry in enumerate(entries):
+        if idx < t1_count:
+            entry.tier = 1
+        elif idx < t1_count + t2_count:
+            entry.tier = 2
+        else:
+            entry.tier = 3
+    db.commit()
+
+
 class UserOut(BaseModel):
     id: int
     phone: str
@@ -257,6 +372,9 @@ class UserOut(BaseModel):
     profile_photo_url: Optional[str] = None
     governorates: List[str] = []
     terms_accepted_at: Optional[datetime] = None
+    verified_by_sakan: bool = False
+    verified_channel: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class RegisterRequest(BaseModel):
@@ -298,6 +416,9 @@ class ListingCreate(BaseModel):
     video_urls: List[str] = []
     tier: str = "regular"
     description: str = ""
+    min_lease_months: Optional[int] = None
+    contact_phone: Optional[str] = None
+    whatsapp_phone: Optional[str] = None
 
     # Legacy fields for test compatibility
     price_per_person: Optional[int] = None
@@ -331,6 +452,13 @@ class ListingOut(BaseModel):
     status: str
     advertiser_id: int
     created_at: datetime
+    view_count: int = 0
+    min_lease_months: Optional[int] = None
+    contact_phone: Optional[str] = None
+    whatsapp_phone: Optional[str] = None
+    advertiser_name: Optional[str] = None
+    advertiser_type: Optional[str] = None
+    advertiser_verified: bool = False
 
 
 class RatingCreate(BaseModel):
@@ -351,6 +479,7 @@ class RatingOut(BaseModel):
     review_text: str
     photo_urls: List[str] = []
     created_at: datetime
+    is_verified: bool = False
 
 
 class ComplaintCreate(BaseModel):
@@ -371,6 +500,35 @@ class ComplaintOut(BaseModel):
     evidence_urls: List[str] = []
     status: str
     created_at: datetime
+
+
+class GovernorateOut(BaseModel):
+    id: int
+    name: str
+    status: str
+    waitlist_count: Optional[int] = 0
+
+
+class WaitlistCreate(BaseModel):
+    phone: str
+    name: str
+    governorate_id: int
+    city: str
+    work_volume_range: str  # "1-4", "5-9", "10-19", "20+"
+    verified_channel: Optional[str] = "whatsapp"   # Auto-detected by Akedly, defaults to whatsapp
+
+
+class WaitlistOut(BaseModel):
+    id: int
+    phone: str
+    name: str
+    governorate_id: int
+    governorate_name: str
+    city: str
+    work_volume_range: str
+    verified_channel: str
+    signup_at: datetime
+    tier: int
 
 
 # --- Endpoints ---
@@ -495,13 +653,15 @@ def verify_user(payload: VerifyRequest):
             user = User(
                 phone=payload.phone,
                 name=otp_entry.name,
-                account_type=otp_entry.account_type,
+                account_type=otp_entry.account_type or "broker",
                 is_verified=True,
                 terms_accepted_at=datetime.utcnow() if otp_entry.account_type in ["owner", "broker"] else None
             )
             db.add(user)
         else:
             user.is_verified = True
+            if otp_entry.account_type and otp_entry.account_type in ["owner", "broker", "admin"]:
+                user.account_type = otp_entry.account_type
 
         db.delete(otp_entry)
         db.commit()
@@ -519,7 +679,10 @@ def verify_user(payload: VerifyRequest):
             offense_count=user.offense_count,
             profile_photo_url=user.profile_photo_url,
             governorates=govs,
-            terms_accepted_at=user.terms_accepted_at
+            terms_accepted_at=user.terms_accepted_at,
+            verified_by_sakan=user.verified_by_sakan,
+            verified_channel=user.verified_channel,
+            created_at=user.created_at
         )
     finally:
         db.close()
@@ -537,6 +700,18 @@ def login_user(payload: RegisterRequest):
         if not user:
             raise HTTPException(status_code=404, detail="المستخدم غير موجود")
 
+        if payload.name and payload.name != "مستخدم جديد":
+            user.name = payload.name
+        if payload.account_type and payload.account_type in ["owner", "broker", "admin"]:
+            user.account_type = payload.account_type
+        if payload.governorates is not None:
+            user.governorates = json.dumps(payload.governorates, ensure_ascii=False)
+        if payload.profile_photo_url:
+            user.profile_photo_url = payload.profile_photo_url
+
+        db.commit()
+        db.refresh(user)
+
         govs = safe_json_loads(user.governorates, [])
         return UserOut(
             id=user.id,
@@ -548,7 +723,10 @@ def login_user(payload: RegisterRequest):
             offense_count=user.offense_count,
             profile_photo_url=user.profile_photo_url,
             governorates=govs,
-            terms_accepted_at=user.terms_accepted_at
+            terms_accepted_at=user.terms_accepted_at,
+            verified_by_sakan=user.verified_by_sakan,
+            verified_channel=user.verified_channel,
+            created_at=user.created_at
         )
     finally:
         db.close()
@@ -621,7 +799,10 @@ def create_listing(payload: ListingCreate):
             video_urls=json.dumps(payload.video_urls),
             tier=payload.tier,
             status="active",
-            advertiser_id=payload.advertiser_id
+            advertiser_id=payload.advertiser_id,
+            min_lease_months=payload.min_lease_months,
+            contact_phone=payload.contact_phone,
+            whatsapp_phone=payload.whatsapp_phone
         )
         db.add(listing)
         db.commit()
@@ -652,12 +833,106 @@ def create_listing(payload: ListingCreate):
             tier=listing.tier,
             status=listing.status,
             advertiser_id=listing.advertiser_id,
-            created_at=listing.created_at
+            created_at=listing.created_at,
+            view_count=0,
+            min_lease_months=listing.min_lease_months,
+            contact_phone=listing.contact_phone,
+            whatsapp_phone=listing.whatsapp_phone
         )
     finally:
         db.close()
 
 
+    # Seed Governorates & Initial Sample Listings if empty
+    db = SessionLocal()
+    try:
+        if db.query(Governorate).count() == 0:
+            live_govs = {"أسيوط", "دمياط"}
+            all_gov_names = [
+                "القاهرة", "الجيزة", "الإسكندرية", "الدقهلية", "البحر الأحمر", "المنوفية", 
+                "الفيوم", "قنا", "الأقصر", "أسوان", "أسيوط", "المنيا", "بني سويف", 
+                "الشرقية", "القليوبية", "الغربية", "البحيرة", "دمياط", "كفر الشيخ", 
+                "بورسعيد", "الإسماعيلية", "السويس", "شمال سيناء", "جنوب سيناء", 
+                "الوادي الجديد", "مطروح"
+            ]
+            for gname in all_gov_names:
+                gstatus = "live" if gname in live_govs else "waitlist_open"
+                db.add(Governorate(name=gname, status=gstatus))
+            db.commit()
+
+        if db.query(Listing).count() == 0:
+            demo_user = User(
+                phone="01000000000",
+                name="الحاج أحمد السيوطي",
+                account_type="owner",
+                is_verified=True,
+                verified_by_sakan=True,
+                governorates=json.dumps(["أسيوط", "دمياط"], ensure_ascii=False)
+            )
+            db.add(demo_user)
+            db.commit()
+            db.refresh(demo_user)
+
+            l1 = Listing(
+                title="شقة طلابية فاخرة بجوار جامعة أسيوط - شارع الجامعة",
+                governorate="أسيوط",
+                city="أسيوط",
+                neighborhood="حي الجامعة",
+                address="مبنى 12، شارع الجامعة، حي الجامعة، أسيوط",
+                street="شارع الجامعة",
+                building_number="12",
+                gender="female",
+                available_beds=4,
+                price_per_person=1200,
+                room_type="double",
+                room_configurations=json.dumps([
+                    {"room_type": "double", "price_per_person": 1200, "commission": 600, "count": 2, "insurance_price": 1000, "services_inclusive": True}
+                ]),
+                amenities=json.dumps(["واي فاي مجاني", "تكييف", "ثلاجة", "غسالة", "قريب من الجامعة"]),
+                photo_urls=json.dumps(["https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"]),
+                video_urls=json.dumps([]),
+                tier="premium",
+                status="active",
+                advertiser_id=demo_user.id,
+                contact_phone="01000000000"
+            )
+
+            l2 = Listing(
+                title="سكن شباب متميز أمام كلية الهندسة - دمياط الجديدة",
+                governorate="دمياط",
+                city="دمياط الجديدة",
+                neighborhood="الحي المركزي",
+                address="مبنى 45، شارع الكليات، الحي المركزي، دمياط الجديدة",
+                street="شارع الكليات",
+                building_number="45",
+                gender="male",
+                available_beds=3,
+                price_per_person=1000,
+                room_type="single",
+                room_configurations=json.dumps([
+                    {"room_type": "single", "price_per_person": 1000, "commission": 500, "count": 3, "insurance_price": 500, "services_inclusive": False}
+                ]),
+                amenities=json.dumps(["واي فاي مجاني", "مكتب للمذاكرة", "سوبر ماركت", "قريب من المواصلات العامة"]),
+                photo_urls=json.dumps(["https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80"]),
+                video_urls=json.dumps([]),
+                tier="regular",
+                status="active",
+                advertiser_id=demo_user.id,
+                contact_phone="01000000000"
+            )
+
+            db.add_all([l1, l2])
+            db.commit()
+    finally:
+        db.close()
+
+
+ensure_schema()
+
+
+# ---------------------------------------------------------------------------
+# LISTING ENDPOINTS
+# ---------------------------------------------------------------------------
 @app.get('/listings', response_model=List[ListingOut])
 def list_listings(
     governorate: Optional[str] = None,
@@ -671,7 +946,11 @@ def list_listings(
     advertiser_type: Optional[str] = None,
     max_commission: Optional[int] = None,
     services_inclusive: Optional[bool] = None,
-    has_insurance: Optional[bool] = None
+    has_insurance: Optional[bool] = None,
+    min_lease_months: Optional[int] = None,
+    fully_vacant: Optional[bool] = None,
+    min_total_beds: Optional[int] = None,
+    max_total_beds: Optional[int] = None
 ):
     db = SessionLocal()
     try:
@@ -693,6 +972,10 @@ def list_listings(
             query = query.filter(User.account_type == advertiser_type)
 
         listings = query.order_by(Listing.created_at.desc()).all()
+
+        # Build dictionary for advertisers
+        advertiser_ids = {item.advertiser_id for item in listings}
+        advertisers = {u.id: u for u in db.query(User).filter(User.id.in_(advertiser_ids)).all()}
 
         # Apply advanced filters in Python
         filtered = []
@@ -783,6 +1066,29 @@ def list_listings(
                 if not match_insurance:
                     continue
 
+            # 7. Min lease months filter
+            if min_lease_months is not None:
+                if item.min_lease_months is None or item.min_lease_months > min_lease_months:
+                    continue
+
+            # 8. Fully vacant filter
+            total_beds = sum(
+                c.get('count', 1) * (2 if c.get('room_type') == 'double' else 3 if c.get('room_type') == 'triple' else 4 if c.get('room_type') in ['quadruple', 'triple+'] else 1)
+                for c in configs
+            ) if configs else item.available_beds
+
+            if fully_vacant:
+                if item.available_beds < total_beds or total_beds == 0:
+                    continue
+
+            # 9. Total beds range filter
+            if min_total_beds is not None and total_beds < min_total_beds:
+                continue
+            if max_total_beds is not None and total_beds > max_total_beds:
+                continue
+
+            adv = advertisers.get(item.advertiser_id)
+
             filtered.append(
                 ListingOut(
                     id=item.id,
@@ -809,7 +1115,14 @@ def list_listings(
                     tier=item.tier,
                     status=item.status,
                     advertiser_id=item.advertiser_id,
-                    created_at=item.created_at
+                    created_at=item.created_at,
+                    view_count=item.view_count or 0,
+                    min_lease_months=item.min_lease_months,
+                    contact_phone=item.contact_phone,
+                    whatsapp_phone=item.whatsapp_phone,
+                    advertiser_name=adv.name if adv else None,
+                    advertiser_type=adv.account_type if adv else None,
+                    advertiser_verified=adv.verified_by_sakan if adv else False
                 )
             )
 
@@ -873,7 +1186,11 @@ def get_listing_detail(listing_id: int):
                 tier=listing.tier,
                 status=listing.status,
                 advertiser_id=listing.advertiser_id,
-                created_at=listing.created_at
+                created_at=listing.created_at,
+                view_count=listing.view_count or 0,
+                min_lease_months=listing.min_lease_months,
+                contact_phone=listing.contact_phone,
+                whatsapp_phone=listing.whatsapp_phone
             ),
             "advertiser": {
                 "id": advertiser.id,
@@ -883,7 +1200,8 @@ def get_listing_detail(listing_id: int):
                 "profile_photo_url": advertiser.profile_photo_url,
                 "avg_rating": avg_rating,
                 "offense_count": advertiser.offense_count,
-                "is_banned": advertiser.is_banned
+                "is_banned": advertiser.is_banned,
+                "verified_by_sakan": advertiser.verified_by_sakan
             },
             "property_ratings": [
                 {
@@ -920,6 +1238,11 @@ def update_available_beds(listing_id: int, payload: dict):
         beds = payload.get("available_beds")
         if beds is None or beds < 0:
             raise HTTPException(status_code=400, detail="عدد الأسرة غير صحيح")
+
+        configs = safe_json_loads(listing.room_configurations, [])
+        total_beds = sum(c.get('count', 1) * (2 if c.get('room_type') == 'double' else 3 if c.get('room_type') == 'triple' else 1) for c in configs) if configs else beds
+        if beds > total_beds:
+            beds = total_beds
 
         listing.available_beds = beds
         if beds == 0:
@@ -959,21 +1282,48 @@ def republish_listing(listing_id: int, payload: dict):
     finally:
         db.close()
 
-@app.post('/listings/{listing_id}/toggle-status')
-def toggle_listing_status(listing_id: int):
+@app.post('/listings/{listing_id}/reactivate')
+def reactivate_listing(listing_id: int, payload: Optional[dict] = None):
     db = SessionLocal()
     try:
         listing = db.query(Listing).filter(Listing.id == listing_id).first()
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
         
-        if listing.status == 'active':
-            listing.status = 'inactive'
-        elif listing.status == 'inactive':
-            listing.status = 'active'
-            
+        now = datetime.utcnow()
+        is_expired = listing.subscription_expires_at and listing.subscription_expires_at < now
+        
+        if is_expired:
+            return {
+                "id": listing.id,
+                "status": listing.status,
+                "requires_renewal": True,
+                "detail": "انتهت فترة الاشتراك الإعلاني. يرجى تجديد الاشتراك لإعادة التفعيل."
+            }
+
+        listing.status = "active"
+        if listing.available_beds == 0:
+            listing.available_beds = 1
         db.commit()
-        return {"id": listing.id, "status": listing.status}
+        return {"id": listing.id, "status": listing.status, "available_beds": listing.available_beds, "requires_renewal": False}
+    finally:
+        db.close()
+
+
+@app.post('/admin/listings/{listing_id}/reactivate')
+def admin_reactivate_listing(listing_id: int, x_user_id: Optional[int] = None):
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id)
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+        
+        listing.status = "active"
+        if listing.available_beds == 0:
+            listing.available_beds = 1
+        db.commit()
+        return {"id": listing.id, "status": listing.status, "available_beds": listing.available_beds}
     finally:
         db.close()
 
@@ -1007,7 +1357,8 @@ def create_advertiser_rating(payload: RatingCreate):
             star_count=rating.star_count,
             review_text=rating.review_text,
             photo_urls=[],
-            created_at=rating.created_at
+            created_at=rating.created_at,
+            is_verified=rating.is_verified
         )
     finally:
         db.close()
@@ -1041,7 +1392,8 @@ def create_property_rating(payload: RatingCreate):
             star_count=rating.star_count,
             review_text=rating.review_text,
             photo_urls=safe_json_loads(rating.photo_urls, []),
-            created_at=rating.created_at
+            created_at=rating.created_at,
+            is_verified=rating.is_verified
         )
     finally:
         db.close()
@@ -1205,7 +1557,10 @@ def admin_list_users(x_user_id: Optional[int] = None):
                 offense_count=u.offense_count,
                 profile_photo_url=u.profile_photo_url,
                 governorates=safe_json_loads(u.governorates, []),
-                terms_accepted_at=u.terms_accepted_at
+                terms_accepted_at=u.terms_accepted_at,
+                verified_by_sakan=u.verified_by_sakan,
+                verified_channel=u.verified_channel,
+                created_at=u.created_at
             ) for u in users
         ]
     finally:
@@ -1280,7 +1635,9 @@ def admin_list_listings(x_user_id: Optional[int] = None):
                 tier=item.tier,
                 status=item.status,
                 advertiser_id=item.advertiser_id,
-                created_at=item.created_at
+                created_at=item.created_at,
+                view_count=item.view_count or 0,
+                min_lease_months=item.min_lease_months
             ) for item in listings
         ]
     finally:
@@ -1315,5 +1672,363 @@ def admin_remove_listing(listing_id: int, x_user_id: Optional[int] = None):
         listing.status = "inactive"  # Soft delete
         db.commit()
         return {"id": listing.id, "status": listing.status}
+    finally:
+        db.close()
+
+
+@app.post('/listings/{listing_id}/view')
+def increment_view_count(listing_id: int):
+    db = SessionLocal()
+    try:
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+        listing.view_count = (listing.view_count or 0) + 1
+        db.commit()
+        return {"id": listing.id, "view_count": listing.view_count}
+    finally:
+        db.close()
+
+
+@app.post('/bookmarks')
+def add_bookmark(payload: dict):
+    db = SessionLocal()
+    try:
+        user_id = payload.get("user_id")
+        listing_id = payload.get("listing_id")
+        if not user_id or not listing_id:
+            raise HTTPException(status_code=400, detail="user_id و listing_id مطلوبان")
+        existing = db.query(Bookmark).filter(Bookmark.user_id == user_id, Bookmark.listing_id == listing_id).first()
+        if existing:
+            return {"id": existing.id, "status": "already_bookmarked"}
+        bookmark = Bookmark(user_id=user_id, listing_id=listing_id)
+        db.add(bookmark)
+        db.commit()
+        db.refresh(bookmark)
+        return {"id": bookmark.id, "status": "bookmarked"}
+    finally:
+        db.close()
+
+
+@app.delete('/bookmarks/{user_id}/{listing_id}')
+def remove_bookmark(user_id: int, listing_id: int):
+    db = SessionLocal()
+    try:
+        bookmark = db.query(Bookmark).filter(Bookmark.user_id == user_id, Bookmark.listing_id == listing_id).first()
+        if not bookmark:
+            raise HTTPException(status_code=404, detail="المفضلة غير موجودة")
+        db.delete(bookmark)
+        db.commit()
+        return {"status": "removed"}
+    finally:
+        db.close()
+
+
+@app.get('/bookmarks/{user_id}')
+def get_bookmarks(user_id: int):
+    db = SessionLocal()
+    try:
+        bookmarks = db.query(Bookmark).filter(Bookmark.user_id == user_id).all()
+        listing_ids = [b.listing_id for b in bookmarks]
+        return {"listing_ids": listing_ids}
+    finally:
+        db.close()
+
+
+@app.patch('/admin/ratings/{rating_id}/verify')
+def admin_verify_rating(rating_id: int, x_user_id: Optional[int] = None):
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id)
+        rating = db.query(Rating).filter(Rating.id == rating_id).first()
+        if not rating:
+            raise HTTPException(status_code=404, detail="التقييم غير موجود")
+        rating.is_verified = not rating.is_verified
+        db.commit()
+        return {"id": rating.id, "is_verified": rating.is_verified}
+    finally:
+        db.close()
+
+
+@app.patch('/admin/users/{user_id}/verify-sakan')
+def admin_verify_sakan(user_id: int, x_user_id: Optional[int] = None):
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id)
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+        user.verified_by_sakan = not user.verified_by_sakan
+        db.commit()
+        return {"id": user.id, "verified_by_sakan": user.verified_by_sakan}
+    finally:
+        db.close()
+
+
+@app.get('/admin/ratings')
+def admin_list_ratings(x_user_id: Optional[int] = None):
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id)
+        ratings = db.query(Rating).order_by(Rating.created_at.desc()).all()
+        result = []
+        for r in ratings:
+            student = db.query(User).filter(User.id == r.student_id).first()
+            listing = db.query(Listing).filter(Listing.id == r.listing_id).first()
+            advertiser = db.query(User).filter(User.id == listing.advertiser_id).first() if listing else None
+            result.append({
+                "id": r.id,
+                "listing_id": r.listing_id,
+                "student_id": r.student_id,
+                "student_name": student.name if student else "غير معروف",
+                "student_phone": student.phone if student else "",
+                "advertiser_name": advertiser.name if advertiser else "غير معروف",
+                "advertiser_id": advertiser.id if advertiser else None,
+                "target_type": r.target_type,
+                "star_count": r.star_count,
+                "review_text": r.review_text,
+                "is_verified": r.is_verified,
+                "created_at": r.created_at
+            })
+        return result
+    finally:
+        db.close()
+
+
+@app.get('/users/{user_id}/profile')
+def get_user_profile(user_id: int):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+        
+        # Get user's listings
+        listings = db.query(Listing).filter(Listing.advertiser_id == user_id).all()
+        
+        # Get ratings received (as advertiser)
+        ratings_received = db.query(Rating).join(Listing, Rating.listing_id == Listing.id).filter(
+            Listing.advertiser_id == user_id,
+            Rating.target_type == "advertiser"
+        ).all()
+        avg_rating = sum(r.star_count for r in ratings_received) / len(ratings_received) if ratings_received else 0.0
+        
+        # Get ratings made (as student)
+        ratings_made = db.query(Rating).filter(Rating.student_id == user_id).all()
+        
+        return {
+            "user": {
+                "id": user.id,
+                "name": user.name,
+                "phone": user.phone,
+                "account_type": user.account_type,
+                "profile_photo_url": user.profile_photo_url,
+                "verified_by_sakan": user.verified_by_sakan,
+                "is_banned": user.is_banned,
+                "created_at": user.created_at
+            },
+            "listings_count": len(listings),
+            "listings": [
+                {
+                    "id": l.id,
+                    "title": l.title,
+                    "city": l.city,
+                    "neighborhood": l.neighborhood,
+                    "status": l.status,
+                    "view_count": l.view_count or 0,
+                    "available_beds": l.available_beds,
+                    "photo_urls": safe_json_loads(l.photo_urls, []),
+                    "created_at": l.created_at
+                } for l in listings
+            ],
+            "avg_rating": round(avg_rating, 1),
+            "ratings_received_count": len(ratings_received),
+            "ratings_received": [
+                {
+                    "id": r.id,
+                    "star_count": r.star_count,
+                    "review_text": r.review_text,
+                    "is_verified": r.is_verified,
+                    "created_at": r.created_at
+                } for r in ratings_received
+            ],
+            "ratings_made_count": len(ratings_made)
+        }
+    finally:
+        db.close()
+
+
+# --- GEO-SCALING WAITLIST ENDPOINTS ---
+
+@app.get('/governorates', response_model=List[GovernorateOut])
+def get_governorates():
+    db = SessionLocal()
+    try:
+        govs = db.query(Governorate).order_by(Governorate.id.asc()).all()
+        res = []
+        for g in govs:
+            count = db.query(WaitlistEntry).filter(WaitlistEntry.governorate_id == g.id).count()
+            res.append(GovernorateOut(
+                id=g.id,
+                name=g.name,
+                status=g.status,
+                waitlist_count=count
+            ))
+        return res
+    finally:
+        db.close()
+
+
+@app.post('/waitlist', response_model=WaitlistOut)
+def create_waitlist_entry(payload: WaitlistCreate):
+    db = SessionLocal()
+    try:
+        # Check if governorate exists
+        gov = db.query(Governorate).filter(Governorate.id == payload.governorate_id).first()
+        if not gov:
+            raise HTTPException(status_code=404, detail="المحافظة غير موجودة")
+
+        # Check existing entry by phone
+        existing = db.query(WaitlistEntry).filter(WaitlistEntry.phone == payload.phone).first()
+        if existing:
+            existing.name = payload.name
+            existing.governorate_id = payload.governorate_id
+            existing.city = payload.city
+            existing.work_volume_range = payload.work_volume_range
+            existing.verified_channel = payload.verified_channel
+            db.commit()
+            db.refresh(existing)
+            entry = existing
+        else:
+            entry = WaitlistEntry(
+                phone=payload.phone,
+                name=payload.name,
+                governorate_id=payload.governorate_id,
+                city=payload.city,
+                work_volume_range=payload.work_volume_range,
+                verified_channel=payload.verified_channel
+            )
+            db.add(entry)
+            db.commit()
+            db.refresh(entry)
+
+        # Recalculate tiers for this governorate
+        recalculate_governorate_tiers(db, payload.governorate_id)
+        db.refresh(entry)
+
+        # Update user record if user exists
+        user = db.query(User).filter(User.phone == payload.phone).first()
+        if user:
+            user.verified_channel = payload.verified_channel
+            db.commit()
+
+        return WaitlistOut(
+            id=entry.id,
+            phone=entry.phone,
+            name=entry.name,
+            governorate_id=entry.governorate_id,
+            governorate_name=gov.name,
+            city=entry.city,
+            work_volume_range=entry.work_volume_range,
+            verified_channel=entry.verified_channel,
+            signup_at=entry.signup_at,
+            tier=entry.tier
+        )
+    finally:
+        db.close()
+
+
+@app.get('/admin/governorates', response_model=List[GovernorateOut])
+def admin_get_governorates(x_user_id: Optional[int] = None):
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id)
+        govs = db.query(Governorate).order_by(Governorate.id.asc()).all()
+        res = []
+        for g in govs:
+            count = db.query(WaitlistEntry).filter(WaitlistEntry.governorate_id == g.id).count()
+            res.append(GovernorateOut(
+                id=g.id,
+                name=g.name,
+                status=g.status,
+                waitlist_count=count
+            ))
+        return res
+    finally:
+        db.close()
+
+
+@app.patch('/admin/governorates/{governorate_id}')
+def admin_toggle_governorate_status(governorate_id: int, payload: dict, x_user_id: Optional[int] = None):
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id)
+        gov = db.query(Governorate).filter(Governorate.id == governorate_id).first()
+        if not gov:
+            raise HTTPException(status_code=404, detail="المحافظة غير موجودة")
+        
+        new_status = payload.get("status")
+        if new_status not in ["live", "waitlist_open"]:
+            raise HTTPException(status_code=400, detail="الحالة يجب أن تكون live أو waitlist_open")
+        
+        old_status = gov.status
+        gov.status = new_status
+        db.commit()
+        db.refresh(gov)
+
+        outreach_summary = []
+        # If status flipped from waitlist_open to live, perform activation outreach simulation
+        if old_status == "waitlist_open" and new_status == "live":
+            # Make sure tiers are calculated up to date
+            recalculate_governorate_tiers(db, governorate_id)
+            entries = db.query(WaitlistEntry).filter(WaitlistEntry.governorate_id == governorate_id).order_by(WaitlistEntry.tier.asc(), WaitlistEntry.signup_at.asc()).all()
+            for e in entries:
+                msg = f"أهلاً {e.name}! تم انطلاق منصة سكن رسمياً في محافظة {gov.name}. بصفتك مشتركاً مسجلاً في الفئة (Tier {e.tier})، يمكنك الآن إضافة وحداتك السكنية والحصول على مزايا الفئة المبكرة!"
+                outreach_summary.append({
+                    "entry_id": e.id,
+                    "phone": e.phone,
+                    "name": e.name,
+                    "tier": e.tier,
+                    "channel": e.verified_channel,
+                    "outreach_message": msg
+                })
+
+        return {
+            "governorate": GovernorateOut(id=gov.id, name=gov.name, status=gov.status),
+            "status_changed": old_status != new_status,
+            "outreach_dispatched_count": len(outreach_summary),
+            "outreach_summary": outreach_summary
+        }
+    finally:
+        db.close()
+
+
+@app.get('/admin/waitlist')
+def admin_list_waitlist(governorate_id: Optional[int] = None, x_user_id: Optional[int] = None):
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id)
+        query = db.query(WaitlistEntry)
+        if governorate_id:
+            query = query.filter(WaitlistEntry.governorate_id == governorate_id)
+        entries = query.order_by(WaitlistEntry.tier.asc(), WaitlistEntry.signup_at.asc()).all()
+        
+        res = []
+        for e in entries:
+            gov = db.query(Governorate).filter(Governorate.id == e.governorate_id).first()
+            res.append({
+                "id": e.id,
+                "phone": e.phone,
+                "name": e.name,
+                "governorate_id": e.governorate_id,
+                "governorate_name": gov.name if gov else "",
+                "governorate_status": gov.status if gov else "",
+                "city": e.city,
+                "work_volume_range": e.work_volume_range,
+                "verified_channel": e.verified_channel,
+                "signup_at": e.signup_at,
+                "tier": e.tier
+            })
+        return res
     finally:
         db.close()

@@ -2,6 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+import { 
+  Bell, BookOpen, Plus, Search, MapPin, CheckCircle, ShieldCheck, 
+  AlertTriangle, Ban, Trash2, StopCircle, Star, Info, Megaphone, 
+  User, Home, Briefcase, MessageSquare, Phone, Camera, Send, 
+  Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
+  Bed, Check, Clock, Award, Sparkles
+} from 'lucide-react';
+
+
 // Fix Leaflet's default marker icon paths broken by Vite's asset pipeline
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -28,131 +37,202 @@ function formatAddress(listing) {
 // ---------------------------------------------------------------------------
 // MapPickerModal — full-screen modal with Leaflet, draggable marker,
 // pre-geocoded from address fields. Confirm saves lat/lng.
+// Hierarchical geocoding helper: governorate -> city -> neighborhood -> street
+async function geocodeHierarchicalAddress({ street, neighborhood, city, governorate }) {
+  const govKey = Object.keys(GOVERNORATE_COORDS).find(g => governorate?.includes(g)) || "القاهرة";
+  const govCoords = GOVERNORATE_COORDS[govKey] || [30.0444, 31.2357];
+
+  // Tight distance check: <= 0.35 deg (~35km) radius from governorate center to prevent city jumping
+  const isValidNearGov = (lat, lng) => {
+    const dist = Math.hypot(lat - govCoords[0], lng - govCoords[1]);
+    return dist <= 0.35;
+  };
+
+  const queries = [
+    // 1. Precise: street + neighborhood + city + governorate
+    [street && `شارع ${street}`, neighborhood, city, governorate, "مصر"].filter(Boolean).join(' ، '),
+    // 2. Neighborhood + city + governorate
+    [neighborhood, city, governorate, "مصر"].filter(Boolean).join(' ، '),
+    // 3. City + governorate
+    [city, governorate, "مصر"].filter(Boolean).join(' ، '),
+    // 4. Governorate only
+    [governorate, "مصر"].filter(Boolean).join(' ، ')
+  ];
+
+  for (const q of queries) {
+    if (!q || !q.trim()) continue;
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1&countrycodes=eg`,
+        { headers: { 'Accept-Language': 'ar' } }
+      );
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lng = parseFloat(data[0].lon);
+        if (isValidNearGov(lat, lng)) {
+          return { lat, lng };
+        }
+      }
+    } catch {}
+  }
+
+  // Guaranteed fallback: exact governorate coordinates
+  return { lat: govCoords[0], lng: govCoords[1] };
+}
+
 // ---------------------------------------------------------------------------
-function MapPickerModal({ addressQuery, cityFallback, initialLat, initialLng, onConfirm, onClose }) {
+// MapPickerModal — full-screen modal with Leaflet, draggable marker,
+// pre-geocoded from address fields. Confirm saves lat/lng.
+// ---------------------------------------------------------------------------
+function MapPickerModal({ street, neighborhood, city, governorate, initialLat, initialLng, onConfirm, onClose }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
+  const tileLayerRef = useRef(null);
   const [pending, setPending] = useState({ lat: initialLat, lng: initialLng });
   const [geocoding, setGeocoding] = useState(false);
+  const [mapType, setMapType] = useState('hybrid'); // default to Hybrid Satellite with Labels
 
-  // Geocode the address query on mount to seed the map position
+  const MAP_PROVIDERS = {
+    hybrid: {
+      name: '🛰️ أقمار صناعية مع الأسماء والشوارع (Bing / Hybrid)',
+      urls: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png'
+      ],
+      attribution: '&copy; Esri / Bing Satellite &copy; OpenStreetMap'
+    },
+    osm: {
+      name: '🗺️ خريطة قياسية (OpenStreetMap)',
+      urls: [
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+      ],
+      attribution: '&copy; OpenStreetMap'
+    }
+  };
+
+  const applyMapLayers = (type, mapInstance) => {
+    const targetMap = mapInstance || mapRef.current;
+    if (!targetMap) return;
+    if (tileLayerRef.current) {
+      targetMap.removeLayer(tileLayerRef.current);
+    }
+    const provider = MAP_PROVIDERS[type] || MAP_PROVIDERS.hybrid;
+    const layers = provider.urls.map((u, i) => L.tileLayer(u, {
+      attribution: provider.attribution,
+      maxZoom: 19,
+      zIndex: i + 1
+    }));
+    tileLayerRef.current = L.layerGroup(layers).addTo(targetMap);
+  };
+
+  const handleMapTypeChange = (newType) => {
+    setMapType(newType);
+    applyMapLayers(newType);
+  };
+
   useEffect(() => {
     const init = async () => {
       if (!containerRef.current) return;
 
-      // Default to Egypt center; will be updated after geocoding
-      const map = L.map(containerRef.current).setView([26.8206, 30.8025], 6);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      }).addTo(map);
-      mapRef.current = map;
+      const govKey = Object.keys(GOVERNORATE_COORDS).find(g => governorate?.includes(g)) || "القاهرة";
+      const defaultCenter = GOVERNORATE_COORDS[govKey] || [30.0444, 31.2357];
 
-      const placeMarker = (lat, lng) => {
+      const map = L.map(containerRef.current).setView(defaultCenter, 13);
+      mapRef.current = map;
+      applyMapLayers(mapType, map);
+
+      const placeMarker = (lat, lng, zoomLevel = 15) => {
         if (markerRef.current) {
           markerRef.current.setLatLng([lat, lng]);
         } else {
           markerRef.current = L.marker([lat, lng], { draggable: true }).addTo(map);
+          markerRef.current.bindTooltip('📍 مدخل العقار (اسحب الدبوس لضبط المكان)', {
+            permanent: true,
+            direction: 'top',
+            offset: [0, -32],
+            className: 'custom-map-tooltip'
+          });
           markerRef.current.on('dragend', (e) => {
             const { lat: la, lng: ln } = e.target.getLatLng();
             setPending({ lat: la, lng: ln });
           });
         }
-        map.setView([lat, lng], 16);
+        map.setView([lat, lng], zoomLevel);
         setPending({ lat, lng });
       };
 
-      // If we already have coords (re-opening), use them
       if (initialLat && initialLng) {
-        placeMarker(initialLat, initialLng);
+        placeMarker(initialLat, initialLng, 16);
         return;
       }
 
-      // Geocode the address
-      if (addressQuery.trim()) {
-        setGeocoding(true);
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressQuery)}&limit=1&countrycodes=eg`,
-            { headers: { 'Accept-Language': 'ar' } }
-          );
-          const data = await res.json();
-          if (data.length > 0) {
-            placeMarker(parseFloat(data[0].lat), parseFloat(data[0].lon));
-            setGeocoding(false);
-            return;
-          }
-        } catch {}
-        setGeocoding(false);
-      }
+      // Automatically center map over the city/neighborhood entered by user
+      setGeocoding(true);
+      const coords = await geocodeHierarchicalAddress({ street, neighborhood, city, governorate });
+      placeMarker(coords.lat, coords.lng, 15);
+      setGeocoding(false);
 
-      // Fallback: geocode the city name only
-      if (cityFallback.trim()) {
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityFallback)}&limit=1&countrycodes=eg`,
-            { headers: { 'Accept-Language': 'ar' } }
-          );
-          const data = await res.json();
-          if (data.length > 0) {
-            map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 13);
-          }
-        } catch {}
-      }
-
-      // Allow manual click placement if geocoding failed
-      map.on('click', (e) => placeMarker(e.latlng.lat, e.latlng.lng));
+      map.on('click', (e) => placeMarker(e.latlng.lat, e.latlng.lng, map.getZoom()));
     };
 
     init();
-    return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; markerRef.current = null; } };
+    return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; markerRef.current = null; tileLayerRef.current = null; } };
   }, []);
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'rgba(0,0,0,0.7)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '1rem'
+      position: 'fixed', inset: 0, zIndex: 99999,
+      background: '#ffffff',
+      display: 'flex', flexDirection: 'column',
+      width: '100vw', height: '100vh'
     }}>
-      <div style={{
-        background: 'white', borderRadius: 'var(--radius-lg)',
-        width: '100%', maxWidth: '680px',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.4)'
-      }}>
-        {/* Header */}
-        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h3 style={{ fontWeight: 700, margin: 0 }}>📍 تحديد موقع العقار</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
-              {geocoding ? 'جاري تحديد الموقع التقريبي من العنوان...' : 'اسحب الدبوس الأحمر لضبط الموقع بدقة على مدخل العقار.'}
-            </p>
-          </div>
-          <button className="modal-close" onClick={onClose}>×</button>
+      {/* Header */}
+      <div style={{ padding: '0.85rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ffffff', zIndex: 10, flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div>
+          <h3 style={{ fontWeight: 700, margin: 0, fontSize: '1.1rem' }}>
+            <MapPin style={{ width: 18, height: 18, display: 'inline', verticalAlign: 'middle', color: 'var(--primary)', marginLeft: '0.25rem' }} /> 
+            تحديد موقع العقار على الخريطة {city ? `(${city})` : ''}
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>
+            {geocoding ? `جاري التكبير والتركيز على مدينة ${city || governorate}...` : 'اسحب الدبوس الأحمر أو اضغط على الخريطة لضبط الموقع بدقة.'}
+          </p>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <select 
+            value={mapType}
+            onChange={(e) => handleMapTypeChange(e.target.value)}
+            style={{ fontSize: '0.85rem', padding: '0.4rem 0.75rem', borderRadius: 'var(--r-md)', border: '1px solid var(--border)', background: 'var(--primary-light)', fontWeight: 700, color: 'var(--primary)', cursor: 'pointer' }}
+          >
+            {Object.entries(MAP_PROVIDERS).map(([key, provider]) => (
+              <option key={key} value={key}>{provider.name}</option>
+            ))}
+          </select>
+          <button className="modal-close" style={{ fontSize: '1.5rem', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem 0.5rem' }} onClick={onClose}>×</button>
+        </div>
+      </div>
 
-        {/* Map */}
-        <div ref={containerRef} style={{ width: '100%', height: '420px' }} />
+      {/* Map (Full Height) */}
+      <div ref={containerRef} style={{ width: '100%', flex: 1, minHeight: 0 }} />
 
-        {/* Footer */}
-        <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
-          <span style={{ fontSize: '0.8rem', color: pending.lat ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 600 }}>
-            {pending.lat
-              ? `✅ الموقع: (${pending.lat.toFixed(5)}, ${pending.lng.toFixed(5)})`
-              : 'اضغط على الخريطة لوضع الدبوس'}
-          </span>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn-secondary" onClick={onClose}>إلغاء</button>
-            <button
-              className="btn-primary"
-              disabled={!pending.lat}
-              onClick={() => onConfirm(pending.lat, pending.lng)}
-            >
-              تأكيد الموقع ✓
-            </button>
-          </div>
+      {/* Footer */}
+      <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', zIndex: 10 }}>
+        <span style={{ fontSize: '0.85rem', color: pending.lat ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 600 }}>
+          {pending.lat
+            ? `إحداثيات الموقع المحدد: (${pending.lat.toFixed(5)}, ${pending.lng.toFixed(5)})`
+            : 'اضغط في أي مكان على الخريطة لوضع الدبوس'}
+        </span>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button className="btn-secondary" style={{ padding: '0.5rem 1.25rem' }} onClick={onClose}>إلغاء</button>
+          <button
+            className="btn-primary"
+            style={{ padding: '0.5rem 1.5rem' }}
+            disabled={!pending.lat}
+            onClick={() => onConfirm(pending.lat, pending.lng)}
+          >
+            تأكيد الموقع والعودة للإعلان <Check style={{ width: 16, height: 16, display: 'inline', marginRight: '0.25rem' }} />
+          </button>
         </div>
       </div>
     </div>
@@ -168,6 +248,42 @@ const GOVERNORATES = [
   "بورسعيد", "الإسماعيلية", "السويس", "شمال سيناء", "جنوب سيناء", 
   "الوادي الجديد", "مطروح"
 ];
+
+const GOVERNORATE_COORDS = {
+  "القاهرة": [30.0444, 31.2357],
+  "الجيزة": [30.0131, 31.2089],
+  "الإسكندرية": [31.2001, 29.9187],
+  "الدقهلية": [31.0409, 31.3785],
+  "البحر الأحمر": [27.2579, 33.8116],
+  "المنوفية": [30.5972, 30.9876],
+  "الفيوم": [29.3084, 30.8428],
+  "قنا": [26.1551, 32.7160],
+  "الأقصر": [25.6872, 32.6396],
+  "أسوان": [24.0889, 32.8998],
+  "أسيوط": [27.1783, 31.1859],
+  "المنيا": [28.0871, 30.7618],
+  "بني سويف": [29.0661, 31.0994],
+  "الشرقية": [30.5877, 31.5020],
+  "القليوبية": [30.4660, 31.1850],
+  "الغربية": [30.7865, 31.0004],
+  "البحيرة": [31.0404, 30.4700],
+  "دمياط": [31.4175, 31.8144],
+  "كفر الشيخ": [31.1107, 30.9388],
+  "بورسعيد": [31.2653, 32.3019],
+  "الإسماعيلية": [30.5965, 32.2715],
+  "السويس": [29.9668, 32.5498],
+  "شمال سيناء": [31.1316, 33.7984],
+  "جنوب سيناء": [27.9158, 34.3299],
+  "الوادي الجديد": [25.4514, 30.5463],
+  "مطروح": [31.3543, 27.2373]
+};
+
+const DEFAULT_GOVERNORATES_LIST = GOVERNORATES.map((gname, idx) => ({
+  id: idx + 1,
+  name: gname,
+  status: (gname === 'أسيوط' || gname === 'دمياط') ? 'live' : 'waitlist_open',
+  waitlist_count: 0
+}));
 
 const PRESETS_PROPERTY_IMAGES = [
   "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80",
@@ -229,7 +345,9 @@ const OUTDOOR_AMENITIES = [
 ];
 
 export default function App() {
-  const [tab, setTab] = useState('browse'); // 'browse' | 'dashboard' | 'admin'
+  const [tab, setTab] = useState('browse'); // 'browse' | 'dashboard' | 'admin' | 'saved' | 'guide' | 'about' | 'terms' | 'profile'
+  const [profileUserId, setProfileUserId] = useState(null);
+  const [profileData, setProfileData] = useState(null);
   const [listings, setListings] = useState([]);
   const [toast, setToast] = useState('');
   
@@ -261,7 +379,10 @@ export default function App() {
     advertiser_type: '',
     max_commission: '',
     services_inclusive: false,
-    has_insurance: false
+    has_insurance: false,
+    fully_vacant: false,
+    min_total_beds: '',
+    max_total_beds: ''
   });
 
   // Create listing wizard state
@@ -270,6 +391,7 @@ export default function App() {
   const [termsChecked, setTermsChecked] = useState(false);
   const [customAmenity, setCustomAmenity] = useState('');
   const [showMapPicker, setShowMapPicker] = useState(false);
+  const [showAmenitiesModal, setShowAmenitiesModal] = useState(false);
   const [createForm, setCreateForm] = useState({
     title: '',
     governorate: '',
@@ -290,7 +412,8 @@ export default function App() {
     photo_urls: [...PRESETS_PROPERTY_IMAGES],
     video_urls: [...PRESETS_PROPERTY_VIDEOS],
     description: '',
-    tier: 'regular'
+    tier: 'regular',
+    min_lease_months: null
   });
 
   // Listing Detail Modal state
@@ -318,7 +441,70 @@ export default function App() {
   const [adminComplaints, setAdminComplaints] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminListings, setAdminListings] = useState([]);
-  const [adminTab, setAdminTab] = useState('complaints'); // 'complaints' | 'users' | 'listings'
+  const [bookmarkedIds, setBookmarkedIds] = useState([]);
+  const [adminTab, setAdminTab] = useState('complaints'); // 'complaints' | 'users' | 'listings' | 'ratings' | 'leaderboard' | 'governorates'
+  const [adminSearch, setAdminSearch] = useState('');
+  const [adminRatings, setAdminRatings] = useState([]);
+
+  // Geo-scaling Waitlist State
+  const [dbGovernorates, setDbGovernorates] = useState(DEFAULT_GOVERNORATES_LIST);
+  const [isAreaGateOpen, setIsAreaGateOpen] = useState(false);
+  const [areaGateForm, setAreaGateForm] = useState({ governorate_id: DEFAULT_GOVERNORATES_LIST[0].id });
+  const [isWaitlistOpen, setIsWaitlistOpen] = useState(false);
+  const [waitlistStep, setWaitlistStep] = useState('form'); // 'form' | 'otp' | 'success'
+  const [waitlistForm, setWaitlistForm] = useState({
+    governorate_id: null,
+    governorate_name: '',
+    city: '',
+    name: '',
+    phone: '',
+    work_volume_range: '1-4',
+    verified_channel: 'whatsapp',
+    otp: ''
+  });
+  const [waitlistResult, setWaitlistResult] = useState(null);
+  const [adminGovernorates, setAdminGovernorates] = useState([]);
+  const [adminWaitlistEntries, setAdminWaitlistEntries] = useState([]);
+  const [adminWaitlistFilterGov, setAdminWaitlistFilterGov] = useState('');
+  const [outreachSummaryModal, setOutreachSummaryModal] = useState(null);
+
+  // Load bookmarked listing IDs
+  const loadBookmarks = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_BASE}/bookmarks/${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setBookmarkedIds(data.listing_ids || []);
+      }
+    } catch {}
+  };
+
+  const toggleBookmark = async (listingId, e) => {
+    if (e) { e.stopPropagation(); }
+    if (!user) {
+      showToast('سجل دخولك أولاً لحفظ الإعلانات');
+      return;
+    }
+    const isBookmarked = bookmarkedIds.includes(listingId);
+    try {
+      if (isBookmarked) {
+        await fetch(`${API_BASE}/bookmarks/${user.id}/${listingId}`, { method: 'DELETE' });
+        setBookmarkedIds(prev => prev.filter(id => id !== listingId));
+        showToast('تم إزالة الإعلان من المحفوظات');
+      } else {
+        await fetch(`${API_BASE}/bookmarks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.id, listing_id: listingId })
+        });
+        setBookmarkedIds(prev => [...prev, listingId]);
+        showToast('تم حفظ الإعلان');
+      }
+    } catch {
+      showToast('خطأ في حفظ الإعلان');
+    }
+  };
 
   // Fetch listings helper
   const loadListings = async () => {
@@ -336,6 +522,9 @@ export default function App() {
       if (filters.max_commission) q.append('max_commission', filters.max_commission);
       if (filters.services_inclusive) q.append('services_inclusive', 'true');
       if (filters.has_insurance) q.append('has_insurance', 'true');
+      if (filters.fully_vacant) q.append('fully_vacant', 'true');
+      if (filters.min_total_beds) q.append('min_total_beds', filters.min_total_beds);
+      if (filters.max_total_beds) q.append('max_total_beds', filters.max_total_beds);
 
       const res = await fetch(`${API_BASE}/listings?${q.toString()}`);
       if (res.ok) {
@@ -349,26 +538,79 @@ export default function App() {
 
   useEffect(() => {
     loadListings();
+    loadGovernorates();
   }, [filters]);
+
+  useEffect(() => {
+    if (user) loadBookmarks();
+    else setBookmarkedIds([]);
+  }, [user]);
+
+  // Hash Routing
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash.startsWith('#/profile/')) {
+        const uid = hash.replace('#/profile/', '');
+        setProfileUserId(uid);
+        setTab('profile');
+      } else if (hash === '#/about') {
+        setTab('about');
+      } else if (hash === '#/terms') {
+        setTab('terms');
+      } else if (hash === '#/guide') {
+        setTab('guide');
+      } else if (hash === '#/saved') {
+        setTab('saved');
+      } else if (hash === '#/dashboard') {
+        setTab('dashboard');
+      } else if (hash === '#/admin') {
+        setTab('admin');
+      } else if (hash === '' || hash === '#/' || hash === '#/browse') {
+        setTab('browse');
+      }
+    };
+    handleHashChange();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'profile' && profileUserId) {
+      fetch(`${API_BASE}/users/${profileUserId}/profile`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data) setProfileData(data); })
+        .catch(() => {});
+    }
+  }, [tab, profileUserId]);
+
+  const navigateTo = (newHash) => {
+    window.location.hash = newHash;
+  };
 
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(''), 3500);
   };
 
+  const pendingActionRef = useRef(null); // persistent callback after auth success
+
   // --- Auth logic ---
   const handleStartAuth = (mode, overrideType = null, callback = null) => {
     setAuthMode(mode);
+    const defaultGovs = (createForm.governorate && GOVERNORATES.includes(createForm.governorate)) 
+      ? [createForm.governorate] 
+      : [];
     setAuthForm({
       phone: '',
       otp: '',
       name: '',
-      account_type: overrideType || 'student',
-      governorates: [],
+      account_type: overrideType || 'broker',
+      governorates: defaultGovs,
       profile_photo_url: ''
     });
     setAuthStep('phone');
-    setPendingAction(() => callback);
+    pendingActionRef.current = callback;
     setIsAuthOpen(true);
   };
 
@@ -437,9 +679,10 @@ export default function App() {
           setUser(finalUser);
           setIsAuthOpen(false);
           showToast(`تم تسجيل الدخول بنجاح! مرحباً بك، ${data.name}`);
-          if (pendingAction) {
-            pendingAction(finalUser);
-            setPendingAction(null);
+          if (pendingActionRef.current) {
+            const cb = pendingActionRef.current;
+            pendingActionRef.current = null;
+            cb(finalUser);
           }
         }
       } else {
@@ -459,7 +702,7 @@ export default function App() {
         body: JSON.stringify({
           phone: user.phone,
           name: authForm.name,
-          account_type: user.account_type,
+          account_type: user.account_type || 'broker',
           governorates: authForm.governorates,
           profile_photo_url: authForm.profile_photo_url
         })
@@ -469,15 +712,17 @@ export default function App() {
         const updatedUser = {
           ...user,
           name: authForm.name,
+          account_type: user?.account_type || 'broker',
           governorates: authForm.governorates,
           profile_photo_url: authForm.profile_photo_url
         };
         setUser(updatedUser);
         setIsAuthOpen(false);
         showToast(`تم اكتمال إعداد حسابك بنجاح!`);
-        if (pendingAction) {
-          pendingAction(updatedUser);
-          setPendingAction(null);
+        if (pendingActionRef.current) {
+          const cb = pendingActionRef.current;
+          pendingActionRef.current = null;
+          cb(updatedUser);
         }
       }
     } catch (err) {
@@ -492,6 +737,8 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setSelectedListingDetail(data);
+        // Fire-and-forget view count increment
+        fetch(`${API_BASE}/listings/${listingId}/view`, { method: 'POST' }).catch(() => {});
         setCarouselIndex(0);
         setShowRatingForm(false);
         setShowComplaintForm(false);
@@ -506,101 +753,117 @@ export default function App() {
 
   // --- Create Listing wizard flow ---
   const handleOpenCreateFlow = () => {
-    if (!user) {
-      handleStartAuth('register', 'broker', () => {
+    if (user && user.governorates && user.governorates.length > 0) {
+      const liveGov = dbGovernorates.find(g => user.governorates.includes(g.name) && g.status === 'live');
+      if (liveGov) {
+        setCreateForm(prev => ({
+          ...prev,
+          title: '',
+          governorate: liveGov.name,
+          city: '',
+          neighborhood: '',
+          address: '',
+          street: '',
+          building_number: '',
+          apartment_number: '',
+          floor: '',
+          maps_link: '',
+          latitude: null,
+          longitude: null,
+          gender: 'female',
+          available_beds: 1,
+          room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
+          amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
+          photo_urls: [...PRESETS_PROPERTY_IMAGES],
+          video_urls: [...PRESETS_PROPERTY_VIDEOS],
+          description: '',
+          tier: 'regular',
+          min_lease_months: null
+        }));
+        setShowMapPicker(false);
         setIsCreateOpen(true);
         setCreateStep(1);
         setTermsChecked(false);
-      });
-      return;
+        return;
+      }
     }
-    if (user.account_type === 'student') {
-      showToast("عذراً! حسابات المستخدمين العاديين لا يمكنها نشر عقارات. يرجى تسجيل الدخول كـ سمسار.");
-      return;
-    }
-    const initialGov = user.governorates?.length ? user.governorates[0] : "القاهرة";
-      
-    setCreateForm({
-      title: '',
-      governorate: initialGov,
-      city: '',
-      neighborhood: '',
-      address: '',
-      street: '',
-      building_number: '',
-      apartment_number: '',
-      floor: '',
-      maps_link: '',
-      latitude: null,
-      longitude: null,
-      gender: 'female',
-      available_beds: 1,
-      room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
-      amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
-      photo_urls: [...PRESETS_PROPERTY_IMAGES],
-      video_urls: [...PRESETS_PROPERTY_VIDEOS],
-      description: '',
-      tier: 'regular'
-    });
-    setShowMapPicker(false);
-    setIsCreateOpen(true);
-    setCreateStep(1);
-    setTermsChecked(false);
+    setIsAreaGateOpen(true);
+    setAreaGateForm({ governorate_id: dbGovernorates[0]?.id || 1 });
   };
 
   const handleStep2Next = async () => {
-    if (createForm.latitude && createForm.longitude) {
-      setCreateStep(3);
-      return;
+    if (!createForm.latitude || !createForm.longitude) {
+      showToast("جاري التحديد التلقائي لموقع العقار على الخريطة...");
+      const coords = await geocodeHierarchicalAddress({
+        street: createForm.street,
+        neighborhood: createForm.neighborhood,
+        city: createForm.city,
+        governorate: createForm.governorate
+      });
+      setCreateForm(prev => ({
+        ...prev,
+        latitude: coords.lat,
+        longitude: coords.lng
+      }));
     }
-
-    const query = [createForm.street, createForm.neighborhood, createForm.city].filter(Boolean).join(' ');
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=eg`,
-        { headers: { 'Accept-Language': 'ar' } }
-      );
-      const data = await res.json();
-      if (data && data.length > 0) {
-        setCreateForm(prev => ({
-          ...prev,
-          latitude: parseFloat(data[0].lat),
-          longitude: parseFloat(data[0].lon)
-        }));
-      } else {
-        const fallbackRes = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(createForm.city)}&limit=1&countrycodes=eg`,
-          { headers: { 'Accept-Language': 'ar' } }
-        );
-        const fallbackData = await fallbackRes.json();
-        if (fallbackData && fallbackData.length > 0) {
-          setCreateForm(prev => ({
-            ...prev,
-            latitude: parseFloat(fallbackData[0].lat),
-            longitude: parseFloat(fallbackData[0].lon)
-          }));
-        }
-      }
-    } catch (err) {}
     setCreateStep(3);
   };
 
   const handleCreateSubmit = async () => {
+    if (!user) {
+      setIsCreateOpen(false);
+      showToast("لتأكيد ونشر إعلانك، يرجى إنشاء حسابك أو تسجيل الدخول أولاً");
+      handleStartAuth('register', 'broker', (authUser) => {
+        const activeUser = authUser || user;
+        if (activeUser) {
+          submitListingWithUser(activeUser);
+        }
+      });
+      return;
+    }
+    submitListingWithUser(user);
+  };
+
+  const submitListingWithUser = async (currentUser) => {
+    if (!currentUser || !currentUser.id) return;
+    const targetContact = createForm.contact_phone || currentUser.phone || '';
+    if (targetContact !== (currentUser.phone || '') && !createForm.contact_verified) {
+      const inputOtp = prompt(`تم إرسال كود التفعيل إلى الرقم ${targetContact}. أدخل الكود (123456):`);
+      if (inputOtp !== '123456') {
+        showToast('كود تفعيل رقم الهاتف للتواصل غير صحيح (الكود التجريبي: 123456)');
+        return;
+      }
+      setCreateForm(prev => ({ ...prev, contact_verified: true }));
+    }
+
     try {
-      let payload = { ...createForm, advertiser_id: user.id };
+      showToast("جاري نشر العقار...");
+
+      const cleanedConfigs = (createForm.room_configurations || []).map(c => ({
+        ...c,
+        price_per_person: Number(c.price_per_person) || 0,
+        commission: c.commission !== '' && c.commission !== null ? Number(c.commission) : Math.round((Number(c.price_per_person) || 0) * 0.5),
+        insurance_price: c.insurance_price !== '' && c.insurance_price !== null ? Number(c.insurance_price) : 0,
+        count: Number(c.count) || 1
+      }));
+
+      let payload = {
+        ...createForm,
+        room_configurations: cleanedConfigs,
+        contact_phone: targetContact,
+        whatsapp_phone: createForm.no_whatsapp ? (createForm.whatsapp_phone || targetContact) : targetContact,
+        advertiser_id: currentUser.id
+      };
+
       if (!payload.latitude || !payload.longitude) {
-        const query = [createForm.street, createForm.neighborhood, createForm.city].filter(Boolean).join(' ');
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=eg`,
-            { headers: { 'Accept-Language': 'ar' } }
-          );
-          const data = await res.json();
-          if (data && data.length > 0) {
-            payload.latitude = parseFloat(data[0].lat);
-            payload.longitude = parseFloat(data[0].lon);
-          }
-        } catch {}
+        const coords = await geocodeHierarchicalAddress({
+          street: payload.street,
+          neighborhood: payload.neighborhood,
+          city: payload.city,
+          governorate: payload.governorate
+        });
+        payload.latitude = coords.lat;
+        payload.longitude = coords.lng;
       }
 
       const res = await fetch(`${API_BASE}/listings`, {
@@ -609,15 +872,16 @@ export default function App() {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        showToast("تم نشر العقار بنجاح!");
+        showToast("تم نشر العقار بنجاح وتفعيله على المنصة!");
         setIsCreateOpen(false);
+        setTab('browse');
         loadListings();
       } else {
         const err = await res.json();
         showToast(err.detail || "فشل نشر العقار");
       }
     } catch (err) {
-      showToast("خطأ في الاتصال بالخادم");
+      showToast("خطأ في الاتصال بالخادم أثناء نشر الإعلان");
     }
   };
 
@@ -639,6 +903,10 @@ export default function App() {
     setCreateForm(prev => {
       const updated = [...prev.room_configurations];
       updated[index] = { ...updated[index], [field]: val };
+      // Auto-fill commission as 50% of price when price changes
+      if (field === 'price_per_person') {
+        updated[index].commission = Math.round(val * 0.5);
+      }
       return { ...prev, room_configurations: updated };
     });
   };
@@ -762,6 +1030,15 @@ export default function App() {
   // --- Advertiser Dashboard Actions ---
   const handleUpdateBeds = async (listingId, newCount) => {
     if (newCount < 0) return;
+    // Cap at total beds from room configurations
+    const listing = listings.find(l => l.id === listingId);
+    if (listing && listing.room_configurations && listing.room_configurations.length > 0) {
+      const totalBeds = listing.room_configurations.reduce((sum, c) => {
+        const multiplier = c.room_type === 'double' ? 2 : c.room_type === 'triple' ? 3 : c.room_type === 'quadruple' || c.room_type === 'triple+' ? 4 : 1;
+        return sum + (c.count || 1) * multiplier;
+      }, 0);
+      if (newCount > totalBeds) return;
+    }
     try {
       const res = await fetch(`${API_BASE}/listings/${listingId}/beds`, {
         method: 'POST',
@@ -824,6 +1101,35 @@ export default function App() {
     }
   };
 
+  const loadGovernorates = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/governorates`);
+      if (res.ok) {
+        const data = await res.json();
+        setDbGovernorates(data);
+      }
+    } catch {}
+  };
+
+  const loadAdminGovernorates = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_BASE}/admin/governorates?x_user_id=${user.id}`);
+      if (res.ok) setAdminGovernorates(await res.json());
+    } catch {}
+  };
+
+  const loadAdminWaitlist = async () => {
+    if (!user) return;
+    try {
+      const url = adminWaitlistFilterGov 
+        ? `${API_BASE}/admin/waitlist?governorate_id=${adminWaitlistFilterGov}&x_user_id=${user.id}`
+        : `${API_BASE}/admin/waitlist?x_user_id=${user.id}`;
+      const res = await fetch(url);
+      if (res.ok) setAdminWaitlistEntries(await res.json());
+    } catch {}
+  };
+
   useEffect(() => {
     if (tab === 'admin') {
       loadAdminData();
@@ -873,6 +1179,22 @@ export default function App() {
     }
   };
 
+  const handleAdminListingReactivate = async (listingId) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/listings/${listingId}/reactivate?x_user_id=${user.id}`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        showToast("تم إعادة تفعيل العقار بنجاح (تجاوز باقة الاشتراكات)");
+        loadAdminData();
+      } else {
+        showToast("فشل تفعيل العقار");
+      }
+    } catch (err) {
+      showToast("فشل تفعيل العقار");
+    }
+  };
+
   const getPresetOptions = (stars) => {
     if (stars === 5) return ["نظيف جداً", "الأسعار مناسبة", "الجيران محترمون", "موقع ممتاز", "المرافق كما هو معلن"];
     if (stars >= 3) return ["نظافة مقبولة", "الموقع كويس", "بعض المرافق ناقصة", "السعر مناسب نسبياً"];
@@ -889,28 +1211,51 @@ export default function App() {
       {/* Toast Alert Banner */}
       {toast && (
         <div className="alert-toast">
-          <span>🔔</span>
+          <span><Bell style={{ width: 18, height: 18 }} /></span>
           <span>{toast}</span>
         </div>
       )}
 
       {/* Navigation Header */}
       <header className="navbar">
-        <a href="#" className="logo" onClick={() => setTab('browse')}>
+        <a href="#/browse" className="logo" onClick={(e) => { e.preventDefault(); navigateTo('#/browse'); }}>
           سكن <span>Sakan</span>
         </a>
         <div className="nav-links">
           <button 
             className={tab === 'browse' ? 'active-tab' : 'inactive-tab'} 
-            onClick={() => setTab('browse')}
+            onClick={() => navigateTo('#/browse')}
           >
             تصفح العقارات
           </button>
+          {user && (
+            <button 
+              className={tab === 'saved' ? 'active-tab' : 'inactive-tab'} 
+              onClick={() => navigateTo('#/saved')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginLeft: '0.25rem' }}>
+                <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 11.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 0 1-1.085.67L12 18.089l-7.165 3.583A.75.75 0 0 1 3.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93Z" clipRule="evenodd" />
+              </svg>
+              المحفوظات
+            </button>
+          )}
           <button 
             className={tab === 'guide' ? 'active-tab' : 'inactive-tab'} 
-            onClick={() => setTab('guide')}
+            onClick={() => navigateTo('#/guide')}
           >
-            دليل الطالب 📘
+            <span>دليل الطالب</span> <BookOpen style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: '0.25rem' }} />
+          </button>
+          <button 
+            className={tab === 'about' ? 'active-tab' : 'inactive-tab'} 
+            onClick={() => navigateTo('#/about')}
+          >
+            من نحن
+          </button>
+          <button 
+            className={tab === 'terms' ? 'active-tab' : 'inactive-tab'} 
+            onClick={() => navigateTo('#/terms')}
+          >
+            الشروط والأحكام
           </button>
 
           {/* Create listing button accessible for Brokers, Admins, or guests */}
@@ -920,7 +1265,7 @@ export default function App() {
               onClick={handleOpenCreateFlow}
               style={{ fontWeight: 700 }}
             >
-              أضف إعلانك ➕
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>أضف إعلانك <Plus style={{ width: 18, height: 18 }} /></span>
             </button>
           )}
 
@@ -928,7 +1273,7 @@ export default function App() {
           {(isBroker || isAdmin) && (
             <button 
               className={tab === 'dashboard' ? 'active-tab' : 'inactive-tab'} 
-              onClick={() => setTab('dashboard')}
+              onClick={() => navigateTo('#/dashboard')}
             >
               لوحة التحكم
             </button>
@@ -938,7 +1283,7 @@ export default function App() {
           {isAdmin && (
             <button 
               className={tab === 'admin' ? 'active-tab' : 'inactive-tab'} 
-              onClick={() => setTab('admin')}
+              onClick={() => navigateTo('#/admin')}
             >
               لوحة الإشراف
             </button>
@@ -952,7 +1297,7 @@ export default function App() {
                   {isAdmin ? 'مشرف المنصة' : isBroker ? 'سمسار عقاري' : 'مستخدم عادي'}
                 </div>
               </div>
-              <button className="btn-secondary" onClick={() => { setUser(null); showToast("تم تسجيل الخروج"); setTab('browse'); }}>خروج</button>
+              <button style={{ background: '#ef4444', color: 'white', border: 'none', padding: '0.4rem 1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }} onClick={() => { setUser(null); showToast("تم تسجيل الخروج"); setTab('browse'); }}>تسجيل الخروج</button>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -979,7 +1324,7 @@ export default function App() {
                 <h3>
                   <span>تصفية النتائج</span>
                   <button className="btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setFilters({
-                    governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: ''
+                    governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', max_commission: '', services_inclusive: false, has_insurance: false, fully_vacant: false, min_total_beds: '', max_total_beds: ''
                   })}>مسح الكل</button>
                 </h3>
                 
@@ -1026,6 +1371,26 @@ export default function App() {
                       placeholder="الأقصى" 
                       value={filters.max_price} 
                       onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>عدد الأسرة الكلي (بالشقة)</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input 
+                      type="number" 
+                      placeholder="الأدنى (مثال: 1)" 
+                      min="1"
+                      value={filters.min_total_beds} 
+                      onChange={(e) => setFilters({ ...filters, min_total_beds: e.target.value })} 
+                    />
+                    <input 
+                      type="number" 
+                      placeholder="الأقصى (مثال: 10)" 
+                      min="1"
+                      value={filters.max_total_beds} 
+                      onChange={(e) => setFilters({ ...filters, max_total_beds: e.target.value })} 
                     />
                   </div>
                 </div>
@@ -1080,6 +1445,14 @@ export default function App() {
                     />
                     يتطلب دفع تأمين
                   </label>
+                  <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', color: '#166534', background: '#dcfce7', padding: '0.3rem 0.6rem', borderRadius: 'var(--r-sm)', border: '1px solid #bbf7d0', marginTop: '0.5rem', display: 'inline-flex' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={filters.fully_vacant}
+                      onChange={(e) => setFilters({ ...filters, fully_vacant: e.target.checked })}
+                    />
+                    شاغر بالكامل فقط 🏠
+                  </label>
                 </div>
 
                 <div className="form-group">
@@ -1091,26 +1464,27 @@ export default function App() {
                   </select>
                 </div>
 
-                <div className="form-group" style={{ maxHeight: '200px', overflowY: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
-                  <label>الخدمات والمرافق المتوفرة</label>
-                  {INDOOR_AMENITIES.slice(0, 8).map(amenity => {
-                    const isChecked = filters.amenities.includes(amenity.name);
-                    return (
-                      <label key={amenity.name} className="checkbox-label" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
-                        <input 
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {
-                            const updated = isChecked 
-                              ? filters.amenities.filter(a => a !== amenity.name)
-                              : [...filters.amenities, amenity.name];
-                            setFilters({ ...filters, amenities: updated });
-                          }}
-                        />
-                        {amenity.name}
-                      </label>
-                    );
-                  })}
+                <div className="form-group" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label>الخدمات والمرافق المتوفرة</label>
+                    <button 
+                      className="btn-outline" 
+                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
+                      onClick={() => setShowAmenitiesModal(true)}
+                    >
+                      اختر المرافق
+                    </button>
+                  </div>
+                  {filters.amenities.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.5rem' }}>
+                      {filters.amenities.map(a => (
+                        <span key={a} style={{ fontSize: '0.7rem', background: 'var(--primary-light)', color: 'var(--primary-dark)', padding: '0.15rem 0.4rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          {a}
+                          <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => setFilters(prev => ({ ...prev, amenities: prev.amenities.filter(x => x !== a) }))}>×</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </aside>
 
@@ -1122,7 +1496,7 @@ export default function App() {
 
                 {listings.length === 0 ? (
                   <div className="empty-state">
-                    <div className="empty-icon">🔍</div>
+                    <div className="empty-icon"><Search style={{ width: 48, height: 48, color: 'var(--text-muted)' }} /></div>
                     <h3 className="empty-title">لم نجد أي نتائج تطابق بحثك</h3>
                     <p className="empty-desc">جرب مسح بعض الفلاتر أو تعديل نطاق البحث الخاص بك.</p>
                   </div>
@@ -1139,11 +1513,11 @@ export default function App() {
                         item.room_configurations.forEach(c => {
                           let bedsPerRoom = 1;
                           let name = 'فردية';
-                          let icon = '🛏️';
-                          if (c.room_type === 'double') { bedsPerRoom = 2; name = 'ثنائية'; icon = '🛏️🛏️'; }
-                          else if (c.room_type === 'triple') { bedsPerRoom = 3; name = 'ثلاثية'; icon = '🛏️🛏️🛏️'; }
-                          else if (c.room_type === 'quadruple') { bedsPerRoom = 4; name = 'رباعية'; icon = '🛏️🛏️🛏️🛏️'; }
-                          else if (c.room_type === 'triple+') { bedsPerRoom = 4; name = 'مشتركة ٤+'; icon = '🛏️🛏️🛏️🛏️'; } // legacy
+                          let icon = <Bed style={{ width: 16, height: 16 }} />;
+                          if (c.room_type === 'double') { bedsPerRoom = 2; name = 'ثنائية'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; }
+                          else if (c.room_type === 'triple') { bedsPerRoom = 3; name = 'ثلاثية'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; }
+                          else if (c.room_type === 'quadruple') { bedsPerRoom = 4; name = 'رباعية'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; }
+                          else if (c.room_type === 'triple+') { bedsPerRoom = 4; name = 'مشتركة ٤+'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; } // legacy
                           
                           const count = c.count || 1;
                           totalBeds += (bedsPerRoom * count);
@@ -1162,17 +1536,46 @@ export default function App() {
                           <div className="card-img-wrapper">
                             <img className="card-img" src={coverImage} alt={item.title} />
                             
-                            <span className={`badge-gender ${item.gender === 'male' ? 'gender-male' : 'gender-female'}`}>
-                              {item.gender === 'male' ? '♂ طلاب' : '♀ طالبات'}
-                            </span>
-                            
-                            {item.tier === 'premium' && (
-                              <span className="badge-premium">⭐ إعلان مميز</span>
-                            )}
+                            <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 2, display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
+                              <span className={`badge-gender ${item.gender === 'male' ? 'gender-male' : 'gender-female'}`}>
+                                {item.gender === 'male' ? 'طلاب' : 'طالبات'}
+                              </span>
+                              
+                              {item.tier === 'premium' && (
+                                <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#eff6ff', color: '#0d63ea', border: '1px solid #bfdbfe', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                  <Star style={{ width: 12, height: 12, color: '#f59e0b' }} /> مميز
+                                </span>
+                              )}
+
+                              {(item.available_beds === totalBeds && totalBeds > 0) && (
+                                <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                  <CheckCircle style={{ width: 12, height: 12 }} /> شاغر بالكامل
+                                </span>
+                              )}
+                            </div>
+
+                            <button
+                              className="bookmark-btn"
+                              style={{
+                                position: 'absolute', bottom: '8px', left: '8px', zIndex: 2,
+                                background: 'rgba(255,255,255,0.95)', border: 'none', borderRadius: '50%',
+                                width: '32px', height: '32px', cursor: 'pointer', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.15)'
+                              }}
+                              onClick={(e) => toggleBookmark(item.id, e)}
+                              title={bookmarkedIds.includes(item.id) ? 'إزالة من المحفوظات' : 'حفظ الإعلان'}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={bookmarkedIds.includes(item.id) ? '#f59e0b' : 'none'} stroke={bookmarkedIds.includes(item.id) ? '#f59e0b' : '#64748b'} strokeWidth="2" style={{ width: '18px', height: '18px' }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                              </svg>
+                            </button>
                           </div>
 
                           <div className="card-content">
-                            <div className="card-location">📍 {item.governorate}، {item.city}</div>
+                            <div className="card-location" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '14px', height: '14px', color: 'var(--primary)' }}><path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 3.69 2.944l.036.024.01.006.004.002ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" /></svg>
+                              {item.governorate}، {item.city}
+                            </div>
                             <h2 className="card-title">{item.title}</h2>
                             <div className="card-room-types" style={{ fontSize: '0.85rem' }}>{breakdown.join(' + ')}</div>
                             <div className="card-beds" style={{ fontWeight: 600 }}>إجمالي السعة: {totalBeds} سرير</div>
@@ -1180,15 +1583,15 @@ export default function App() {
                             <div className="card-price-list">
                               {item.room_configurations && item.room_configurations.length > 0 ? (
                                 item.room_configurations.map((config, idx) => {
-                                  let icon = '🛏️';
-                                  if (config.room_type === 'double') icon = '🛏️🛏️';
-                                  else if (config.room_type === 'triple') icon = '🛏️🛏️🛏️';
-                                  else if (config.room_type === 'quadruple' || config.room_type === 'triple+') icon = '🛏️🛏️🛏️🛏️';
+                                  let icon = <Bed style={{ width: 16, height: 16 }} />;
+                                  if (config.room_type === 'double') icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>;
+                                  else if (config.room_type === 'triple') icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>;
+                                  else if (config.room_type === 'quadruple' || config.room_type === 'triple+') icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>;
                                   
                                   return (
                                     <div key={idx} className="price-item" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '0.5rem', background: 'var(--bg-muted)', borderRadius: 'var(--r-sm)' }}>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                        <span className="room-lbl">{icon} ({config.count || 1})</span>
+                                        <span className="room-lbl" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>{icon} ({config.count || 1})</span>
                                         <span className="room-val">{config.price_per_person} ج.م/فرد</span>
                                       </div>
                                       {config.commission && (
@@ -1208,8 +1611,34 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="card-footer">
-                            <span className="advertiser-label">👤 {item.advertiser_id ? 'معلن مسجل' : 'معلن'}</span>
+                          <div className="card-footer" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px', color: 'var(--text-light)' }}><path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" /></svg>
+                              <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.advertiser_name || 'معلن مسجل'}</span>
+                              <span style={{ fontSize: '0.7rem', background: item.advertiser_type === 'owner' ? '#dcfce7' : '#e0e7ff', color: item.advertiser_type === 'owner' ? '#166534' : '#3730a3', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: 600 }}>
+                                {item.advertiser_type === 'owner' ? 'مالك مباشر' : item.advertiser_type === 'broker' ? 'سمسار' : 'معلن'}
+                              </span>
+                              {item.advertiser_verified && (
+                                <span style={{ fontSize: '0.7rem', background: '#dbeafe', color: '#1e40af', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '12px', height: '12px' }}><path fillRule="evenodd" d="M8.603 3.799A4.49 4.49 0 0 1 12 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 0 1 3.498 1.307 4.491 4.491 0 0 1 1.307 3.497A4.49 4.49 0 0 1 21.75 12a4.49 4.49 0 0 1-1.549 3.397 4.491 4.491 0 0 1-1.307 3.497 4.491 4.491 0 0 1-3.497 1.307A4.49 4.49 0 0 1 12 21.75a4.49 4.49 0 0 1-3.397-1.549 4.49 4.49 0 0 1-3.498-1.306 4.491 4.491 0 0 1-1.307-3.498A4.49 4.49 0 0 1 2.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 0 1 1.307-3.497 4.49 4.49 0 0 1 3.497-1.307Zm7.007 6.387a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clipRule="evenodd" /></svg>
+                                  موثق من سكن
+                                </span>
+                              )}
+                            </div>
+                            {item.advertiser_type === 'owner' && (
+                              <span style={{ fontSize: '0.75rem', background: '#fef3c7', color: '#92400e', padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-sm)', fontWeight: 700, display: 'inline-block', width: 'fit-content' }}>بدون عمولة</span>
+                            )}
+                            {(() => {
+                              const configs = item.room_configurations || [];
+                              const hasInsurance = configs.some(c => c.insurance_price && c.insurance_price > 0);
+                              const servicesInc = configs.some(c => c.services_inclusive);
+                              return (hasInsurance || servicesInc) ? (
+                                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                                  {servicesInc && <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 500 }}>شامل الخدمات</span>}
+                                  {hasInsurance && <span style={{ fontSize: '0.7rem', color: '#b45309', fontWeight: 500 }}>يوجد تأمين</span>}
+                                </div>
+                              ) : null;
+                            })()}
                           </div>
                         </article>
                       );
@@ -1244,12 +1673,13 @@ export default function App() {
                     />
                     <div style={{ flexGrow: 1 }}>
                       <h3 style={{ fontWeight: 700 }}>{item.title}</h3>
-                      <p style={{ color: 'var(--text-light)', fontSize: '0.85rem' }}>📍 {item.governorate}، {item.city}، {item.neighborhood}</p>
+                      <p style={{ color: 'var(--text-light)', fontSize: '0.85rem' }}><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {item.governorate}، {item.city}، {item.neighborhood}</p>
                       <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.9rem' }}>
                         <span>الحالة: <strong style={{ color: item.status === 'active' ? 'var(--primary)' : 'red' }}>
                           {item.status === 'active' ? 'نشط' : item.status === 'inactive' ? 'غير نشط' : 'محظور'}
                         </strong></span>
                         <span>الأسرة المتاحة: <strong>{item.available_beds}</strong></span>
+                        <span>المشاهدات: <strong>{item.view_count || 0}</strong></span>
                       </div>
                     </div>
 
@@ -1271,11 +1701,15 @@ export default function App() {
                           onClick={() => handleToggleStatus(item.id)}
                           style={{ borderColor: item.status === 'active' ? '#f87171' : '#4ade80', color: item.status === 'active' ? '#ef4444' : '#16a34a' }}
                         >
-                          {item.status === 'active' ? 'إيقاف الإعلان ⏸️' : 'تفعيل الإعلان ▶️'}
+                          {item.status === 'active' ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إيقاف الإعلان <StopCircle style={{ width: 14, height: 14 }} /></span>
+                          ) : (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تفعيل الإعلان <Check style={{ width: 14, height: 14 }} /></span>
+                          )}
                         </button>
 
                         <div style={{ background: '#f0fdfa', border: '1px solid #ccfbf1', padding: '0.5rem', borderRadius: 'var(--radius-sm)', color: '#0f766e', fontSize: '0.75rem', fontWeight: 600, width: '100%', marginTop: '0.5rem' }}>
-                          💡 تذكير: لا تنسَ طلب التقييم من الطلاب عند إتمام التعاقد لتحسين ترتيب إعلاناتك!
+                          <Info style={{ width: 14, height: 14, display: 'inline', color: '#0f766e' }} /> تذكير: لا تنسَ طلب التقييم من الطلاب عند إتمام التعاقد لتحسين ترتيب إعلاناتك!
                         </div>
                       </div>
                     </div>
@@ -1293,10 +1727,13 @@ export default function App() {
               لوحة الإشراف والمراقبة للمسؤولين
             </h2>
 
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flexWrap: 'wrap' }}>
               <button className={adminTab === 'complaints' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('complaints')}>طابور الشكاوى ({adminComplaints.length})</button>
               <button className={adminTab === 'users' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('users')}>إدارة المعلنين ({adminUsers.length})</button>
               <button className={adminTab === 'listings' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('listings')}>إدارة الوحدات ({adminListings.length})</button>
+              <button className={adminTab === 'ratings' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('ratings'); loadAdminRatings(); }}>التقييمات</button>
+              <button className={adminTab === 'leaderboard' ? 'active-tab' : 'inactive-tab'} onClick={() => setAdminTab('leaderboard')}>الأعلى تقييماً</button>
+              <button className={adminTab === 'governorates' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('governorates'); loadAdminGovernorates(); loadAdminWaitlist(); }}>إدارة المحافظات والانتظار</button>
             </div>
 
             {/* 1. Complaints queue subtab */}
@@ -1327,9 +1764,9 @@ export default function App() {
                         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                           {c.status === 'submitted' && (
                             <>
-                              <button className="btn-warning" style={{ fontSize: '0.85rem' }} onClick={() => handleAdminAction(c.id, 'warn')}>توجيه تحذير ⚠️</button>
-                              <button className="btn-danger" style={{ fontSize: '0.85rem' }} onClick={() => handleAdminAction(c.id, 'ban')}>حظر معلن 🚫</button>
-                              <button className="btn-secondary" style={{ fontSize: '0.85rem' }} onClick={() => handleAdminAction(c.id, 'dismiss')}>حفظ الشكوى 🗑️</button>
+                              <button className="btn-warning" style={{ fontSize: '0.85rem' }} onClick={() => handleAdminAction(c.id, 'warn')}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>توجيه تحذير <AlertTriangle style={{ width: 14, height: 14 }} /></span></button>
+                              <button className="btn-danger" style={{ fontSize: '0.85rem' }} onClick={() => handleAdminAction(c.id, 'ban')}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>حظر معلن <Ban style={{ width: 14, height: 14 }} /></span></button>
+                              <button className="btn-secondary" style={{ fontSize: '0.85rem' }} onClick={() => handleAdminAction(c.id, 'dismiss')}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>حفظ الشكوى <Trash2 style={{ width: 14, height: 14 }} /></span></button>
                             </>
                           )}
                         </div>
@@ -1344,6 +1781,15 @@ export default function App() {
             {adminTab === 'users' && (
               <div>
                 <h3>حسابات المعلنين على المنصة</h3>
+                <div style={{ marginTop: '0.5rem', marginBottom: '1rem' }}>
+                  <input 
+                    type="text" 
+                    placeholder="بحث بالاسم أو رقم الهاتف..." 
+                    value={adminSearch}
+                    onChange={(e) => setAdminSearch(e.target.value)}
+                    style={{ width: '100%', maxWidth: '400px' }}
+                  />
+                </div>
                 <div style={{ overflowX: 'auto', marginTop: '1rem' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', border: '1px solid var(--border-color)' }}>
                     <thead>
@@ -1353,17 +1799,45 @@ export default function App() {
                         <th style={{ padding: '0.75rem' }}>النوع</th>
                         <th style={{ padding: '0.75rem' }}>عدد المخالفات</th>
                         <th style={{ padding: '0.75rem' }}>حالة الحظر</th>
+                        <th style={{ padding: '0.75rem' }}>موثق</th>
                         <th style={{ padding: '0.75rem' }}>إجراءات</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {adminUsers.map(u => (
+                      {adminUsers.filter(u => {
+                        if (!adminSearch.trim()) return true;
+                        const q = adminSearch.trim().toLowerCase();
+                        return u.name.toLowerCase().includes(q) || u.phone.includes(q);
+                      }).map(u => (
                         <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                           <td style={{ padding: '0.75rem' }}>{u.name}</td>
                           <td style={{ padding: '0.75rem' }}>{u.phone}</td>
                           <td style={{ padding: '0.75rem' }}>{u.account_type === 'broker' ? 'سمسار' : u.account_type === 'owner' ? 'مالك' : u.account_type === 'admin' ? 'مسؤول' : 'طالب'}</td>
                           <td style={{ padding: '0.75rem', fontWeight: 'bold', color: u.offense_count > 0 ? 'red' : 'inherit' }}>{u.offense_count}</td>
                           <td style={{ padding: '0.75rem', color: u.is_banned ? 'red' : 'green', fontWeight: 'bold' }}>{u.is_banned ? 'محظور' : 'نشط'}</td>
+                          <td style={{ padding: '0.75rem' }}>
+                            <button 
+                              className={u.verified_by_sakan ? 'btn-primary' : 'btn-outline'} 
+                              style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`${API_BASE}/admin/users/${u.id}/verify-sakan?x_user_id=${user.id}`, { method: 'PATCH' });
+                                  if (res.ok) {
+                                    showToast(u.verified_by_sakan ? 'تم إلغاء التوثيق' : 'تم توثيق المعلن');
+                                  // Refresh admin users
+                                  const r2 = await fetch(`${API_BASE}/admin/users?x_user_id=${user.id}`);
+                                  if (r2.ok) setAdminUsers(await r2.json());
+                                  }
+                                } catch { showToast('خطأ'); }
+                              }}
+                            >
+                              {u.verified_by_sakan ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>موثق <Check style={{ width: 14, height: 14 }} /></span>
+                              ) : (
+                                'توثيق'
+                              )}
+                            </button>
+                          </td>
                           <td style={{ padding: '0.75rem' }}>
                             {u.account_type !== 'admin' && (
                               <button 
@@ -1392,17 +1866,319 @@ export default function App() {
                     <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'white', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                       <div>
                         <strong>{l.title}</strong>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>📍 {l.governorate}، {l.city} | حالة الإعلان: {l.status}</p>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {l.governorate}، {l.city} | حالة الإعلان: {l.status}</p>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="btn-secondary" style={{ fontSize: '0.8.rem' }} onClick={() => openListingDetail(l.id)}>عرض</button>
-                        {l.status === 'active' && (
-                          <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => handleListingDeactivate(l.id)}>إلغاء تفعيل 🛑</button>
+                        <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => openListingDetail(l.id)}>عرض</button>
+                        {l.status === 'active' ? (
+                          <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => handleListingDeactivate(l.id)}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إلغاء تفعيل <StopCircle style={{ width: 14, height: 14 }} /></span>
+                          </button>
+                        ) : (
+                          <button className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => handleAdminListingReactivate(l.id)}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إعادة تفعيل <Check style={{ width: 14, height: 14 }} /></span>
+                          </button>
                         )}
                       </div>
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* 6. Governorates & Waitlist Management subtab */}
+            {adminTab === 'governorates' && (
+              <div>
+                <h3>حالة المحافظات وقائمة الانتظار للمعلنين</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                  تحكم في تفعيل المحافظات (Live vs Waitlist) ومتابعة رغبات المعلنين المسجلين حسب الفئات (Tiers).
+                </p>
+
+                {/* Section A: Governorates status table */}
+                <h4 style={{ fontWeight: 700, marginBottom: '0.75rem', color: 'var(--primary)' }}>أولاً: نطاقات الخدمة التشغيلية (26 محافظة)</h4>
+                <div style={{ overflowX: 'auto', marginBottom: '2rem' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', border: '1px solid var(--border-color)' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid var(--border-color)', textAlign: 'right' }}>
+                        <th style={{ padding: '0.75rem' }}>المحافظة</th>
+                        <th style={{ padding: '0.75rem' }}>الحالة التشغيلية</th>
+                        <th style={{ padding: '0.75rem' }}>عدد المسجلين بقائمة الانتظار</th>
+                        <th style={{ padding: '0.75rem' }}>تغيير الحالة والتفعيل</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminGovernorates.map(g => (
+                        <tr key={g.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: '0.75rem', fontWeight: 600 }}>{g.name}</td>
+                          <td style={{ padding: '0.75rem' }}>
+                            <span style={{
+                              padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700,
+                              background: g.status === 'live' ? '#dcfce7' : '#fef3c7',
+                              color: g.status === 'live' ? '#15803d' : '#b45309'
+                            }}>
+                              {g.status === 'live' ? '🟢 مفعلة (Live)' : '🟡 قائمة انتظار (Waitlist Open)'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem', fontWeight: 700 }}>{g.waitlist_count || 0} معلن</td>
+                          <td style={{ padding: '0.75rem' }}>
+                            <button
+                              className={g.status === 'live' ? 'btn-outline' : 'btn-primary'}
+                              style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
+                              onClick={async () => {
+                                const nextStatus = g.status === 'live' ? 'waitlist_open' : 'live';
+                                try {
+                                  const res = await fetch(`${API_BASE}/admin/governorates/${g.id}?x_user_id=${user.id}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ status: nextStatus })
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    showToast(`تم تغيير حالة ${g.name} إلى ${nextStatus === 'live' ? 'مفعلة' : 'قائمة انتظار'}`);
+                                    loadAdminGovernorates();
+                                    loadGovernorates();
+
+                                    // If flipped to live, show outreach dispatch summary modal
+                                    if (data.outreach_dispatched_count > 0) {
+                                      setOutreachSummaryModal({
+                                        gov_name: g.name,
+                                        count: data.outreach_dispatched_count,
+                                        summary: data.outreach_summary
+                                      });
+                                    }
+                                  }
+                                } catch { showToast('خطأ في التحديث'); }
+                              }}
+                            >
+                              {g.status === 'live' ? 'تحويل لقائمة انتظار' : 'تفعيل إطلاق المحافظة (Flip to Live)'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Section B: Waitlist entries table */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <h4 style={{ fontWeight: 700, margin: 0, color: 'var(--primary)' }}>ثانياً: مسجلو قائمة الانتظار (حسب الترتيب والفئات Tiers)</h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <label style={{ fontSize: '0.85rem' }}>تصفية حسب المحافظة:</label>
+                    <select
+                      value={adminWaitlistFilterGov}
+                      onChange={(e) => {
+                        setAdminWaitlistFilterGov(e.target.value);
+                        loadAdminWaitlist();
+                      }}
+                      style={{ padding: '0.3rem', fontSize: '0.85rem' }}
+                    >
+                      <option value="">جميع المحافظات</option>
+                      {adminGovernorates.map(g => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', border: '1px solid var(--border-color)' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid var(--border-color)', textAlign: 'right' }}>
+                        <th style={{ padding: '0.75rem' }}>الفئة (Tier)</th>
+                        <th style={{ padding: '0.75rem' }}>الاسم</th>
+                        <th style={{ padding: '0.75rem' }}>الهاتف الموثق</th>
+                        <th style={{ padding: '0.75rem' }}>المحافظة والمدينة</th>
+                        <th style={{ padding: '0.75rem' }}>حجم الأعمال</th>
+                        <th style={{ padding: '0.75rem' }}>قناة التوثيق</th>
+                        <th style={{ padding: '0.75rem' }}>تاريخ التسجيل</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminWaitlistEntries.length === 0 ? (
+                        <tr>
+                          <td colSpan="7" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            لا توجد طلبات انتظار مسجلة في هذا النطاق.
+                          </td>
+                        </tr>
+                      ) : (
+                        adminWaitlistEntries.map(e => (
+                          <tr key={e.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '0.75rem' }}>
+                              <span style={{
+                                padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700,
+                                background: e.tier === 1 ? '#fef3c7' : e.tier === 2 ? '#e0e7ff' : '#f1f5f9',
+                                color: e.tier === 1 ? '#b45309' : e.tier === 2 ? '#3730a3' : '#475569'
+                              }}>
+                                {e.tier === 1 ? 'Tier 1 (الأولى)' : e.tier === 2 ? 'Tier 2 (الثانية)' : 'Tier 3 (الثالثة)'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.75rem', fontWeight: 600 }}>{e.name}</td>
+                            <td style={{ padding: '0.75rem' }}>{e.phone}</td>
+                            <td style={{ padding: '0.75rem' }}>{e.governorate_name} - {e.city}</td>
+                            <td style={{ padding: '0.75rem' }}>{e.work_volume_range} وحدة</td>
+                            <td style={{ padding: '0.75rem', textTransform: 'uppercase', fontSize: '0.8rem', fontWeight: 600 }}>{e.verified_channel}</td>
+                            <td style={{ padding: '0.75rem', fontSize: '0.8rem', color: 'var(--text-light)' }}>
+                              {new Date(e.signup_at).toLocaleDateString('ar-EG')}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {adminTab === 'leaderboard' && (
+              <div>
+                <h3>المعلنون الأعلى تقييماً وترتيب الأداء</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>متابعة أداء المعلنين وتطور تقييماتهم على المنصة عبر الوقت.</p>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', border: '1px solid var(--border-color)' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid var(--border-color)', textAlign: 'right' }}>
+                        <th style={{ padding: '0.75rem' }}>المعلن</th>
+                        <th style={{ padding: '0.75rem' }}>النوع</th>
+                        <th style={{ padding: '0.75rem' }}>متوسط التقييم</th>
+                        <th style={{ padding: '0.75rem' }}>عدد التقييمات</th>
+                        <th style={{ padding: '0.75rem' }}>حالة التوثيق</th>
+                        <th style={{ padding: '0.75rem' }}>الملف الشخصي</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminUsers
+                        .filter(u => u.account_type === 'owner' || u.account_type === 'broker')
+                        .map(u => (
+                          <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '0.75rem', fontWeight: 600 }}>{u.name}</td>
+                            <td style={{ padding: '0.75rem' }}>{u.account_type === 'owner' ? 'مالك مباشر' : 'سمسار'}</td>
+                            <td style={{ padding: '0.75rem' }}>
+                              <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>★ {u.avg_rating ? u.avg_rating.toFixed(1) : 'جديد'}</span>
+                            </td>
+                            <td style={{ padding: '0.75rem' }}>{u.ratings_count || 0}</td>
+                            <td style={{ padding: '0.75rem' }}>
+                              <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, background: u.verified_by_sakan ? '#dbeafe' : '#f1f5f9', color: u.verified_by_sakan ? '#1e40af' : 'inherit' }}>
+                                {u.verified_by_sakan ? 'موثق من سكن' : 'غير موثق'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.75rem' }}>
+                              <button className="btn-outline" style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }} onClick={() => navigateTo(`#/profile/${u.id}`)}>
+                                عرض البروفايل
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {adminTab === 'ratings' && (
+              <div>
+                <h3>تقييمات الطلاب</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>جميع تقييمات الطلاب على المنصة. يمكنك طلب إثبات عبر واتساب وتوثيق التقييم.</p>
+                {adminRatings.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>لا توجد تقييمات مسجلة.</p>
+                ) : (
+                  <div style={{ display: 'grid', gap: '1rem' }}>
+                    {adminRatings.map(r => (
+                      <div key={r.id} style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'white' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                              {r.student_name} <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>(طالب)</span>
+                              <span style={{ margin: '0 0.5rem' }}>→</span>
+                              {r.advertiser_name} <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>(معلن)</span>
+                            </div>
+                            <div style={{ marginTop: '0.25rem' }}>
+                              <span className="rating-stars">{"\u2605".repeat(r.star_count) + "\u2606".repeat(5 - r.star_count)}</span>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginRight: '0.5rem' }}>{new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
+                            </div>
+                            {r.review_text && <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'var(--text-dark)' }}>{r.review_text}</p>}
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600, background: r.is_verified ? '#dcfce7' : '#fef3c7', color: r.is_verified ? '#166534' : '#92400e' }}>
+                              {r.is_verified ? 'موثق \u2713' : 'غير موثق'}
+                            </span>
+                            <button
+                              className={r.is_verified ? 'btn-secondary' : 'btn-primary'}
+                              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`${API_BASE}/admin/ratings/${r.id}/verify?x_user_id=${user.id}`, { method: 'PATCH' });
+                                  if (res.ok) { showToast(r.is_verified ? 'تم إلغاء التوثيق' : 'تم توثيق التقييم'); loadAdminRatings(); }
+                                } catch { showToast('خطأ'); }
+                              }}
+                            >
+                              {r.is_verified ? 'إلغاء التوثيق' : 'توثيق'}
+                            </button>
+                            {r.student_phone && (
+                              <a
+                                href={`https://wa.me/${r.student_phone}?text=${encodeURIComponent(`\u0645\u0631\u062d\u0628\u0627\u064b ${r.student_name}\u060c \u0646\u0648\u062f \u0627\u0644\u062a\u0623\u0643\u062f \u0645\u0646 \u062a\u0642\u064a\u064a\u0645\u0643 \u0639\u0644\u0649 \u0645\u0646\u0635\u0629 \u0633\u0643\u0646. \u0647\u0644 \u064a\u0645\u0643\u0646\u0643 \u0625\u0631\u0633\u0627\u0644 \u0625\u062b\u0628\u0627\u062a \u0625\u0642\u0627\u0645\u062a\u0643 \u0641\u064a \u0627\u0644\u0633\u0643\u0646\u061f`)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn-outline"
+                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', textDecoration: 'none' }}
+                              >
+                                طلب إثبات (WhatsApp)
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: SAVED BOOKMARKS */}
+        {tab === 'saved' && user && (
+          <div>
+            <h2 className="details-title" style={{ fontSize: '1.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
+              إعلاناتي المحفوظة
+            </h2>
+            {bookmarkedIds.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem', background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" style={{ width: '48px', height: '48px', margin: '0 auto 1rem' }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                </svg>
+                <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>لم تقم بحفظ أي إعلانات بعد. تصفح العقارات واضغط على أيقونة الحفظ لإضافتها هنا.</p>
+              </div>
+            ) : (
+              <div className="listings-grid">
+                {listings.filter(l => bookmarkedIds.includes(l.id)).map(item => {
+                  const coverImage = item.photo_urls && item.photo_urls.length > 0
+                    ? item.photo_urls[0]
+                    : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
+                  return (
+                    <article key={item.id} className="listing-card" onClick={() => openListingDetail(item.id)}>
+                      <div className="card-img-wrapper">
+                        <img className="card-img" src={coverImage} alt={item.title} />
+                        <button
+                          className="bookmark-btn"
+                          style={{
+                            position: 'absolute', top: '8px', left: '8px', zIndex: 2,
+                            background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%',
+                            width: '32px', height: '32px', cursor: 'pointer', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.15)'
+                          }}
+                          onClick={(e) => toggleBookmark(item.id, e)}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="2" style={{ width: '18px', height: '18px' }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="card-content">
+                        <div className="card-location">{item.governorate}، {item.city}</div>
+                        <h2 className="card-title">{item.title}</h2>
+                        <div className="card-beds" style={{ fontWeight: 600 }}>الأسرة المتاحة: {item.available_beds}</div>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1412,12 +2188,12 @@ export default function App() {
         {tab === 'guide' && (
           <div style={{ maxWidth: '800px', margin: '0 auto', background: 'white', borderRadius: 'var(--radius-lg)', padding: '2rem', border: '1px solid var(--border-color)' }}>
             <h2 className="details-title" style={{ fontSize: '1.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1.5rem', color: 'var(--primary-dark)' }}>
-              دليل الطالب للسكن الجامعي 📘
+              <span>دليل الطالب للسكن الجامعي</span>
             </h2>
             
             <div style={{ display: 'grid', gap: '1.5rem', lineHeight: '1.8' }}>
               <section>
-                <h3 style={{ color: 'var(--primary)' }}>1️⃣ المصروفات المتوقعة وتكاليف التعاقد</h3>
+                <h3 style={{ color: 'var(--primary)' }}>1. المصروفات المتوقعة وتكاليف التعاقد</h3>
                 <p>عند التعاقد على سكن، ستواجه بعض المصروفات الأساسية التي يجب أن تكون مستعداً لها:</p>
                 <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
                   <li><strong>الإيجار الشهري:</strong> يُدفع مقدماً كل شهر.</li>
@@ -1427,25 +2203,25 @@ export default function App() {
               </section>
 
               <section>
-                <h3 style={{ color: 'var(--primary)' }}>2️⃣ الخدمات المشمولة وغير المشمولة</h3>
+                <h3 style={{ color: 'var(--primary)' }}>2. الخدمات المشمولة وغير المشمولة</h3>
                 <p>بعض الإعلانات تكون شاملة الخدمات (مثل الكهرباء، المياه، الغاز، الإنترنت، والغاز)، والبعض الآخر لا. دائماً قم بالتأكد من المالك قبل التوقيع عما إذا كان السعر المعلن شاملاً لهذه الخدمات أم سيتطلب دفع فواتير شهرية منفصلة لتجنب أي مفاجآت.</p>
               </section>
 
               <section>
-                <h3 style={{ color: 'var(--primary)' }}>3️⃣ معايير العمولات العادلة (للوسطاء)</h3>
+                <h3 style={{ color: 'var(--primary)' }}>3. معايير العمولات العادلة (للوسطاء)</h3>
                 <p>في منصة سكن، نلزم الوسطاء بتحديد قيمة العمولة بوضوح لتجنب الاستغلال. المعايير المتعارف عليها:</p>
                 <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
-                  <li>🟢 <strong>العمولة العادلة:</strong> تعادل نصف شهر إيجار (تُدفع مرة واحدة).</li>
-                  <li>🟡 <strong>العمولة المرتفعة (غير معتادة):</strong> تعادل شهر إيجار كامل.</li>
-                  <li>🔴 <strong>الاستغلال (يُرجى الإبلاغ):</strong> طلب عمولة تعادل شهرين إيجار أو أكثر.</li>
+                  <li><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#22c55e', marginLeft: '0.4rem' }}></span> <strong>العمولة العادلة:</strong> تعادل نصف شهر إيجار (تُدفع مرة واحدة).</li>
+                  <li><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#eab308', marginLeft: '0.4rem' }}></span> <strong>العمولة المرتفعة (غير معتادة):</strong> تعادل شهر إيجار كامل.</li>
+                  <li><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#ef4444', marginLeft: '0.4rem' }}></span> <strong>الاستغلال (يُرجى الإبلاغ):</strong> طلب عمولة تعادل شهرين إيجار أو أكثر.</li>
                 </ul>
                 <div style={{ background: '#fff7ed', border: '1px solid #ffedd5', padding: '0.75rem', borderRadius: 'var(--radius-sm)', color: '#c2410c', fontSize: '0.85rem', fontWeight: 600, marginTop: '0.5rem' }}>
-                  📢 تنبيه: تلزم "سكن" السماسرة بالإفصاح عن عمولاتهم في الإعلان. أي محاولة لطلب عمولة أعلى من المذكورة بالإعلان يجب الإبلاغ عنها فوراً لحظر الحساب.
+                  <Megaphone style={{ width: 16, height: 16, display: 'inline', marginLeft: '0.4rem' }} /> تنبيه: تلزم "سكن" السماسرة بالإفصاح عن عمولاتهم في الإعلان. أي محاولة لطلب عمولة أعلى من المذكورة بالإعلان يجب الإبلاغ عنها فوراً لحظر الحساب.
                 </div>
               </section>
 
               <section>
-                <h3 style={{ color: 'var(--primary)' }}>4️⃣ آداب السكن الجامعي</h3>
+                <h3 style={{ color: 'var(--primary)' }}>4. آداب السكن الجامعي</h3>
                 <p>تذكر أنك تتشارك مكاناً مع زملاء آخرين. التزم بالقواعد التالية لتجربة سكن مريحة للجميع:</p>
                 <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
                   <li>حافظ على نظافة المساحات المشتركة (المطبخ، الحمام، والصالة).</li>
@@ -1455,19 +2231,217 @@ export default function App() {
               </section>
 
               <section>
-                <h3 style={{ color: 'var(--primary)' }}>5️⃣ القواعد الذهبية قبل دفع أي مبالغ مالية ⚠️</h3>
+                <h3 style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  5. القواعد الذهبية قبل دفع أي مبالغ مالية <AlertTriangle style={{ width: 18, height: 18, color: '#f59e0b' }} />
+                </h3>
                 <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
                   <li><strong>لا تقم بتحويل أي مبالغ مالية (مثل عربون) قبل معاينة الشقة بنفسك ومقابلة المالك/السمسار شخصياً.</strong></li>
                   <li>تأكد من تطابق الشقة مع الصور والوصف المذكور في الإعلان (وجود تكييف، ثلاجة، غسالة تعمل، إلخ).</li>
                   <li>استخدم نظام التقييمات وقراءة شكاوى الطلاب الآخرين لتجنب التجارب السيئة.</li>
-                  <li>اقرأ <a href="#" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>شروط الخدمة</a> لمعرفة حقوقك وواجباتك.</li>
+                  <li>اقرأ <a href="#/terms" onClick={(e) => { e.preventDefault(); navigateTo('#/terms'); }} style={{ color: 'var(--primary)', textDecoration: 'underline' }}>شروط الخدمة</a> لمعرفة حقوقك وواجباتك.</li>
                 </ul>
               </section>
             </div>
           </div>
         )}
 
+        {/* TAB 5: ABOUT US ("من نحن") */}
+        {tab === 'about' && (
+          <div style={{ maxWidth: '800px', margin: '0 auto', background: 'white', borderRadius: 'var(--radius-lg)', padding: '2rem', border: '1px solid var(--border-color)' }}>
+            <h2 className="details-title" style={{ fontSize: '1.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1.5rem', color: 'var(--primary-dark)' }}>
+              من نحن — قصة منصة سكن
+            </h2>
+            <div style={{ lineHeight: '1.8', display: 'grid', gap: '1.5rem' }}>
+              <section>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>القصة</h3>
+                <p>كل سبتمبر بيتكرر نفس المشهد: عشرات الآلاف من الطلاب بيدوروا على سكن في مدينة مش مدينتهم، وسط جروبات فيسبوك وتيليجرام مليانة spam، إعلانات ناقصة، وهويات مجهولة. مش إن الأدوات دي فاشلة، لكنها فوضى، وكل طرف فيها، الطالب والمالك والسمسار، بيدفع التمن وقت ومجهود.</p>
+                <p style={{ marginTop: '0.5rem' }}>بدأنا من هنا. مش من فكرة جاهزة، لكن من قرار إننا نستغل الإجازة ونحل مشكلة حقيقية بدل ما نضيف فكرة جديدة لقائمة المحاولات. قدامنا كان اختياران، وسكن كسبت لأنها الأقرب للتنفيذ بالإمكانيات اللي عندنا.</p>
+                <p style={{ marginTop: '0.5rem' }}>قبل ما نكتب سطر كود، قعدنا نسمع. كلمنا طلاب مغتربين، سماسرة، وملاك، عشان نفهم الأبعاد الحقيقية للمشكلة والحل المطلوب.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>مهمتنا</h3>
+                <p>توفير بيئة آمنة وشفافة للطلاب المغتربين للبحث عن السكن الجامعي المناسب بدون استغلال أو معلومات مضللة، مع تمكين الملاك والوسطاء الملتزمين من التواصل المباشر والسريع.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>قيمنا الأساسية</h3>
+                <ul style={{ paddingRight: '1.5rem' }}>
+                  <li><strong>الشفافية الكاملة:</strong> إفصاح شامل عن الأسعار والعمولات والخدمات المشمولة.</li>
+                  <li><strong>الأمان والتوثيق:</strong> نظام توثيق هويات المعلنين "موثق من سكن" والتحقق من التقييمات.</li>
+                  <li><strong>سهولة التجربة:</strong> معاينة سريعة، خرائط تفاعلية، وتصفح سلس بدون تعقيد.</li>
+                </ul>
+              </section>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 6: TERMS OF SERVICE ("الشروط والأحكام") */}
+        {tab === 'terms' && (
+          <div style={{ maxWidth: '800px', margin: '0 auto', background: 'white', borderRadius: 'var(--radius-lg)', padding: '2rem', border: '1px solid var(--border-color)' }}>
+            <h2 className="details-title" style={{ fontSize: '1.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--primary-dark)' }}>
+              الشروط والأحكام — منصة سكن للإسكان الطلابي
+            </h2>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginBottom: '1.5rem' }}>مسودة عمل داخلية تجميع البنود الأساسية للمشروع.</p>
+
+            <div style={{ lineHeight: '1.8', display: 'grid', gap: '1.5rem' }}>
+              <section>
+                <h3 style={{ color: 'var(--primary)' }}>مقدمة</h3>
+                <p>سكن منصة إلكترونية تعمل كوسيط يربط بين الطلاب الباحثين عن سكن وملاك العقارات والسماسرة، بهدف تسهيل الوصول إلى وحدات سكنية مناسبة داخل النطاق الجغرافي الذي تغطيه المنصة. يشكل استخدام المنصة بأي صفة موافقة كاملة على الشروط والأحكام الواردة في هذا المستند.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)' }}>1. التزامات معلني السكن (الملاك والوسطاء)</h3>
+                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
+                  <li>التأكد من صحة ودقة جميع البيانات والصور والمعلومات المدرجة في الإعلان.</li>
+                  <li>الإفصاح الشفاف عن قيمة الإيجار الشهري، مبالغ التأمين، وقيمة العمولة دون أي رسوم خفية.</li>
+                  <li>التعهد بعدم طلب أي مبالغ مالية قبل المعاينة الفعلية للشقة.</li>
+                  <li>يحظر حظراً تاماً نشر إعلانات وهمية أو مضللة، ويحق للمنصة حظر أي حساب يخالف ذلك فوراً.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)' }}>2. حقوق والتزامات الطلاب</h3>
+                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
+                  <li>معاينة السكن شخصياً وقراءة العقد جيداً قبل توقيعه أو تحويل مبالغ مالية.</li>
+                  <li>الالتزام بشروط التعاقد وآداب السكن المحددة من قبل المالك.</li>
+                  <li>تقديم تقييمات وملاحظات صادقة وموضوعية تعكس التجربة الفعلية.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)' }}>3. سياسة التوثيق والتحقق</h3>
+                <p>شارة "موثق من سكن" تُمنح للمعلنين الذين تم التحقق من هويتهم وسجلهم، وتسمح إدارة المنصة بمراجعة وتقييم الشكاوى بانتظام لاتخاذ الإجراءات المناسبة ضد المخالفين.</p>
+              </section>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 7: PROFILE VIEW PAGE (`#/profile/:id`) */}
+        {tab === 'profile' && (
+          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+            {!profileData ? (
+              <div style={{ textAlign: 'center', padding: '3rem', background: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                <p style={{ color: 'var(--text-muted)' }}>جاري تحميل الملف الشخصي...</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: '1.5rem' }}>
+                <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '2rem', border: '1px solid var(--border-color)', display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'var(--bg-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem', overflow: 'hidden', border: '2px solid var(--border-color)' }}>
+                    {profileData.user.profile_photo_url ? (
+                      <img src={profileData.user.profile_photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : <User style={{ width: 32, height: 32, color: 'var(--text-muted)' }} />}
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <h2 style={{ margin: 0, fontWeight: 700 }}>{profileData.user.name}</h2>
+                      {profileData.user.verified_by_sakan && (
+                        <span style={{ fontSize: '0.75rem', background: '#dbeafe', color: '#1e40af', padding: '0.2rem 0.6rem', borderRadius: '999px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <Check style={{ width: 14, height: 14 }} /> موثق من سكن
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: '0.9rem', color: 'var(--text-light)', marginTop: '0.25rem' }}>
+                      {profileData.user.account_type === 'owner' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Home style={{ width: 14, height: 14 }} /> مالك عقار مباشر (بدون عمولة)</span>
+                      ) : profileData.user.account_type === 'broker' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Briefcase style={{ width: 14, height: 14 }} /> سمسار عقاري</span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><User style={{ width: 14, height: 14 }} /> طالب / مستخدم</span>
+                      )}
+                    </p>
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      <span>عدد الإعلانات: <strong>{profileData.listings_count}</strong></span>
+                      <span>متوسط التقييم: <strong style={{ color: '#f59e0b' }}>★ {profileData.avg_rating}</strong> ({profileData.ratings_received_count} تقييم)</span>
+                    </div>
+                    {profileData.user.phone && (
+                      <a
+                        href={`https://wa.me/${profileData.user.phone}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-primary"
+                        style={{ display: 'inline-block', marginTop: '1rem', textDecoration: 'none', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <MessageSquare style={{ width: 16, height: 16 }} /> تواصل عبر الواتساب
+                        </span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Advertiser Active Listings */}
+                <div>
+                  <h3 style={{ fontWeight: 700, marginBottom: '1rem' }}>الإعلانات المعروضة ({profileData.listings.length})</h3>
+                  {profileData.listings.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)' }}>لا توجد إعلانات نشطة حالياً لهذا المعلن.</p>
+                  ) : (
+                    <div className="listings-grid">
+                      {profileData.listings.map(item => (
+                        <article key={item.id} className="listing-card" onClick={() => openListingDetail(item.id)}>
+                          <div className="card-img-wrapper">
+                            <img className="card-img" src={item.photo_urls?.[0] || "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"} alt={item.title} />
+                          </div>
+                          <div className="card-content">
+                            <div className="card-location"><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {item.city}، {item.neighborhood}</div>
+                            <h2 className="card-title">{item.title}</h2>
+                            <div className="card-beds">الأسرة المتاحة: {item.available_beds}</div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Ratings Received */}
+                {profileData.ratings_received.length > 0 && (
+                  <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '1.5rem', border: '1px solid var(--border-color)' }}>
+                    <h3 style={{ fontWeight: 700, marginBottom: '1rem' }}>تقييمات المستخدمين ({profileData.ratings_received.length})</h3>
+                    <div style={{ display: 'grid', gap: '1rem' }}>
+                      {profileData.ratings_received.map(r => (
+                        <div key={r.id} style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span className="rating-stars">{"★".repeat(r.star_count) + "☆".repeat(5 - r.star_count)}</span>
+                            {r.is_verified && <span style={{ fontSize: '0.7rem', color: '#166534', background: '#dcfce7', padding: '0.1rem 0.4rem', borderRadius: '999px' }}>تقييم موثق <Check style={{ width: 14, height: 14, display: 'inline' }} /></span>}
+                          </div>
+                          {r.review_text && <p style={{ fontSize: '0.85rem', marginTop: '0.4rem' }}>{r.review_text}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
       </main>
+
+      {/* --- FOOTER COMPONENT --- */}
+      <footer style={{ background: '#1e293b', color: '#f8fafc', padding: '2.5rem 1rem 1.5rem', marginTop: '3rem', borderTop: '1px solid #334155' }}>
+        <div className="container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
+          <div>
+            <h3 style={{ color: 'var(--primary)', margin: 0, marginBottom: '0.5rem', fontSize: '1.4rem' }}>سكن Sakan</h3>
+            <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>أول منصة متكاملة في مصر لربط الطلاب المغتربين بأفضل الوحدات السكنية المتاحة بكل شفافية وأمان.</p>
+          </div>
+          <div>
+            <h4 style={{ color: '#fff', marginBottom: '0.75rem', fontSize: '1rem' }}>روابط سريعة</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem' }}>
+              <a href="#/browse" onClick={(e) => { e.preventDefault(); navigateTo('#/browse'); }} style={{ color: '#cbd5e1', textDecoration: 'none' }}>تصفح العقارات</a>
+              <a href="#/guide" onClick={(e) => { e.preventDefault(); navigateTo('#/guide'); }} style={{ color: '#cbd5e1', textDecoration: 'none' }}>دليل الطالب للسكن</a>
+              <a href="#/about" onClick={(e) => { e.preventDefault(); navigateTo('#/about'); }} style={{ color: '#cbd5e1', textDecoration: 'none' }}>من نحن (قصتنا)</a>
+              <a href="#/terms" onClick={(e) => { e.preventDefault(); navigateTo('#/terms'); }} style={{ color: '#cbd5e1', textDecoration: 'none' }}>الشروط والأحكام</a>
+            </div>
+          </div>
+          <div>
+            <h4 style={{ color: '#fff', marginBottom: '0.75rem', fontSize: '1rem' }}>الدعم والتواصل</h4>
+            <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>إذا واجهت أي استفسار أو مشكلة، يسعدنا تواصلك معنا مباشرة عبر المنصة أو البريد الإلكتروني.</p>
+          </div>
+        </div>
+        <div style={{ borderTop: '1px solid #334155', paddingTop: '1rem', textAlign: 'center', fontSize: '0.8rem', color: '#64748b' }}>
+          © {new Date().getFullYear()} منصة سكن للإسكان الطلابي في مصر. جميع الحقوق محفوظة.
+        </div>
+      </footer>
 
       {/* --- AUTHENTICATION MODAL (Arabic / Distinct Login vs Register) --- */}
       {isAuthOpen && (
@@ -1492,7 +2466,8 @@ export default function App() {
                       <label>نوع حسابك</label>
                       <select value={authForm.account_type} onChange={(e) => setAuthForm({ ...authForm, account_type: e.target.value })}>
                         <option value="student">طالب / مستخدم عادي</option>
-                        <option value="broker">سمسار عقارات طلابية</option>
+                        <option value="owner">مالك عقار (بدون عمولة)</option>
+                        <option value="broker">سمسار عقاري</option>
                         <option value="admin">مسؤول المنصة (Admin)</option>
                       </select>
                     </div>
@@ -1509,7 +2484,11 @@ export default function App() {
                     />
                   </div>
                   <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
-                    {authMode === 'register' ? 'إرسال كود تسجيل الحساب 💬' : 'إرسال كود تسجيل الدخول 🔑'}
+                    {authMode === 'register' ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الحساب <MessageSquare style={{ width: 16, height: 16 }} /></span>
+                    ) : (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الدخول</span>
+                    )}
                   </button>
 
                   <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
@@ -1544,7 +2523,7 @@ export default function App() {
                     />
                   </div>
                   <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
-                    {authMode === 'register' ? 'تأكيد الكود وتفعيل الحساب 🔑' : 'تحقق ودخول الحساب 🚀'}
+                    {authMode === 'register' ? 'تأكيد الكود وتفعيل الحساب' : 'تحقق ودخول الحساب'}
                   </button>
                   <button type="button" className="btn-secondary" style={{ width: '100%', marginTop: '0.5rem' }} onClick={() => setAuthStep('phone')}>تغيير الهاتف</button>
                 </form>
@@ -1575,7 +2554,7 @@ export default function App() {
                       }} onClick={() => document.getElementById('avatar-upload-input').click()}>
                         {authForm.profile_photo_url
                           ? <img src={authForm.profile_photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : <span style={{ fontSize: '1.75rem' }}>📸</span>}
+                          : <span style={{ fontSize: '1.75rem' }}><User style={{ width: 32, height: 32, color: 'var(--text-muted)' }} /></span>}
                       </div>
                       <div style={{ flex: 1 }}>
                         <button
@@ -1637,7 +2616,7 @@ export default function App() {
                     </div>
                   )}
 
-                  <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={user?.account_type === 'broker' && authForm.governorates.length === 0}>حفظ واكتمال التسجيل 💾</button>
+                  <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={user?.account_type === 'broker' && authForm.governorates.length === 0}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>حفظ واكتمال التسجيل <Save style={{ width: 16, height: 16 }} /></span></button>
                 </form>
               )}
 
@@ -1647,7 +2626,7 @@ export default function App() {
       )}
 
       {/* --- CREATE LISTING WIZARD MODAL (Arabic / 7 Steps) --- */}
-      {isCreateOpen && (isBroker || isAdmin) && (
+      {isCreateOpen && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '600px' }}>
             <div className="modal-header">
@@ -1673,16 +2652,16 @@ export default function App() {
                 <div>
                   <h4 style={{ fontWeight: 700, marginBottom: '1rem' }}>اتفاقية وشروط نشر الإعلان على منصة سكن</h4>
                   <div style={{ background: '#f8fafc', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                    <p>1️⃣ الإقرار بصحة وتحديث جميع الصور والمواصفات المدرجة للوحدة السكنية وأنها تمثل الواقع بدقة.</p>
-                    <p>2️⃣ عدم تغيير الأسعار أو العمولات المدونة في هذا الإعلان عند تعاقد الطلاب على أرض الواقع.</p>
-                    <p>3️⃣ المخالفة الأولى المثبتة تعرض حسابك لتحذير رسمي، والمخالفة الثانية حظر دائم لرقم الهاتف من المنصة.</p>
+                    <p><strong>1.</strong> الإقرار بصحة وتحديث جميع الصور والمواصفات المدرجة للوحدة السكنية وأنها تمثل الواقع بدقة.</p>
+                    <p><strong>2.</strong> عدم تغيير الأسعار أو العمولات المدونة في هذا الإعلان عند تعاقد الطلاب على أرض الواقع.</p>
+                    <p><strong>3.</strong> المخالفة الأولى المثبتة تعرض حسابك لتحذير رسمي، والمخالفة الثانية حظر دائم لرقم الهاتف من المنصة.</p>
                   </div>
                   <label className="checkbox-label" style={{ fontWeight: 700 }}>
                     <input type="checkbox" checked={termsChecked} onChange={(e) => setTermsChecked(e.target.checked)} />
                     أوافق وأتعهد بالالتزام بشروط نشر العقار المذكورة أعلاه.
                   </label>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-                    <button className="btn-primary" disabled={!termsChecked} onClick={() => setCreateStep(2)}>المتابعة للخطوة التالية ◀️</button>
+                    <button className="btn-primary" disabled={!termsChecked} onClick={() => setCreateStep(2)}>المتابعة للخطوة التالية</button>
                   </div>
                 </div>
               )}
@@ -1708,7 +2687,7 @@ export default function App() {
                         value={createForm.governorate} 
                         onChange={(e) => setCreateForm({ ...createForm, governorate: e.target.value })}
                       >
-                        {user.governorates?.length > 0 ? (
+                        {user?.governorates?.length > 0 ? (
                           user.governorates.map(gov => (
                             <option key={gov} value={gov}>{gov}</option>
                           ))
@@ -1793,7 +2772,7 @@ export default function App() {
                     <label>موقع العقار على الخريطة <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(اختياري)</span></label>
                     {createForm.latitude && createForm.longitude ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)' }}>
-                        <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.9rem' }}>✅ تم تحديد الموقع بنجاح</span>
+                        <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.9rem' }}><CheckCircle style={{ width: 16, height: 16, display: 'inline', color: '#16a34a' }} /> تم تحديد الموقع بنجاح</span>
                         <button
                           type="button"
                           className="btn-outline"
@@ -1811,7 +2790,7 @@ export default function App() {
                           style={{ width: '100%', padding: '0.75rem', fontSize: '0.95rem' }}
                           onClick={() => setShowMapPicker(true)}
                         >
-                          📍 تحديد موقع العقار على الخريطة (اختياري)
+                          <MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> تحديد موقع العقار على الخريطة (اختياري)
                         </button>
                         <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>في حال عدم التحديد، سيتم استنباط الموقع تلقائياً من اسم الشارع والحي والمدينة.</small>
                       </div>
@@ -1835,6 +2814,55 @@ export default function App() {
                       onClose={() => setShowMapPicker(false)}
                     />
                   )}
+
+                  <div className="form-group" style={{ background: '#f8fafc', padding: '1rem', borderRadius: 'var(--r-md)', border: '1px solid var(--border)', marginBottom: '1rem' }}>
+                    <label style={{ fontWeight: 700 }}>رقم الهاتف للتواصل <span style={{ color: 'var(--danger)' }}>*</span></label>
+                    <input 
+                      type="tel" 
+                      value={createForm.contact_phone || user?.phone || ''} 
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCreateForm(prev => ({
+                          ...prev,
+                          contact_phone: val,
+                          contact_verified: val === (user?.phone || '')
+                        }));
+                      }}
+                      placeholder="01xxxxxxxxx" 
+                      required 
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>
+                      افتراضياً تم إدراج رقم هاتفك الموثق ({user?.phone || 'غير مسجل'}).
+                    </small>
+
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={createForm.no_whatsapp || false}
+                          onChange={(e) => setCreateForm(prev => ({
+                            ...prev,
+                            no_whatsapp: e.target.checked,
+                            whatsapp_phone: e.target.checked ? prev.whatsapp_phone : ''
+                          }))}
+                        />
+                        لا يوجد واتساب على هذا الرقم؟
+                      </label>
+                    </div>
+
+                    {createForm.no_whatsapp && (
+                      <div style={{ marginTop: '0.75rem' }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>رقم الواتساب للتواصل المباشر <span style={{ color: 'var(--danger)' }}>*</span></label>
+                        <input 
+                          type="tel" 
+                          value={createForm.whatsapp_phone || ''} 
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, whatsapp_phone: e.target.value }))}
+                          placeholder="01xxxxxxxxx" 
+                          required={createForm.no_whatsapp}
+                        />
+                      </div>
+                    )}
+                  </div>
 
                   <div className="grid-cols-2">
                     <div className="form-group">
@@ -1870,6 +2898,32 @@ export default function App() {
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>تهيئة الغرف والأسعار والعمولة</h4>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>يمكنك إدراج نوع واحد أو أكثر للغرف المتوفرة في الشقة. السعر المطلوب للسرير الفردي فقط.</p>
                   
+                  {/* Minimum lease duration option moved to the TOP */}
+                  <div style={{ background: '#EFF6FF', border: '1px solid #bfdbfe', borderRadius: 'var(--r-md)', padding: '1rem', marginBottom: '1.25rem' }}>
+                    <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={!!createForm.min_lease_months}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, min_lease_months: e.target.checked ? 6 : null }))}
+                      />
+                      تحديد حد أدنى لمدة الإيجار (شرط تعاقد)
+                    </label>
+                    {createForm.min_lease_months && (
+                      <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'white', padding: '0.5rem 0.75rem', borderRadius: 'var(--r-sm)', border: '1px solid #93c5fd' }}>
+                        <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>الحد الأدنى بالشهور:</label>
+                        <input 
+                          type="number" 
+                          min="1" 
+                          max="36" 
+                          value={createForm.min_lease_months} 
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, min_lease_months: Number(e.target.value) || null }))}
+                          style={{ width: '90px', padding: '0.25rem 0.5rem', borderRadius: 'var(--r-sm)' }}
+                        />
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>أشهر</span>
+                      </div>
+                    )}
+                  </div>
+
                   {createForm.room_configurations.map((config, index) => (
                     <div key={index} style={{ background: '#f8fafc', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem', display: 'grid', gap: '0.75rem' }}>
                       <div style={{ display: 'flex', justifySelf: 'space-between', alignItems: 'center' }}>
@@ -1907,6 +2961,7 @@ export default function App() {
                             value={config.price_per_person} 
                             onChange={(e) => updateRoomConfig(index, 'price_per_person', Number(e.target.value))} 
                             min="0" 
+                            step="50"
                           />
                         </div>
 
@@ -1946,7 +3001,7 @@ export default function App() {
                     </div>
                   ))}
 
-                  <button className="btn-outline" onClick={addRoomConfig} style={{ width: '100%', marginBottom: '1.25rem' }}>➕ إضافة فئة غرفة أخرى</button>
+                  <button className="btn-outline" onClick={addRoomConfig} style={{ width: '100%', marginBottom: '1.25rem' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><Plus style={{ width: 16, height: 16 }} /> إضافة فئة غرفة أخرى</span></button>
 
                   <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(2)}>السابق</button>
@@ -2059,8 +3114,33 @@ export default function App() {
                       }}
                       onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
                       onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                      onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                      onDragLeave={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = 'var(--border)'; }}
+                      onDrop={async e => {
+                        e.preventDefault(); e.stopPropagation();
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
+                        if (!files.length) return;
+                        const remaining = 30 - createForm.photo_urls.length;
+                        const toUpload = files.slice(0, remaining);
+                        showToast(`جاري رفع ${toUpload.length} صورة...`);
+                        const newUrls = [];
+                        for (const file of toUpload) {
+                          const fd = new FormData();
+                          fd.append('file', file);
+                          try {
+                            const res = await fetch('http://127.0.0.1:8000/upload/listing-photo', { method: 'POST', body: fd });
+                            if (res.ok) {
+                              const data = await res.json();
+                              newUrls.push(`http://127.0.0.1:8000${data.url}`);
+                            }
+                          } catch {}
+                        }
+                        setCreateForm(prev => ({ ...prev, photo_urls: [...prev.photo_urls, ...newUrls] }));
+                        if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح`);
+                      }}
                     >
-                      <span style={{ fontSize: '2rem' }}>📷</span>
+                      <span style={{ fontSize: '2rem' }}><Camera style={{ width: 32, height: 32, color: 'var(--text-muted)' }} /></span>
                       <span style={{ fontWeight: 600 }}>اضغط لرفع صور</span>
                       <span style={{ fontSize: '0.75rem' }}>JPG, PNG, WEBP — حد أقصى 10 ميجابايت لكل صورة</span>
                       <input
@@ -2088,7 +3168,7 @@ export default function App() {
                             } catch {}
                           }
                           setCreateForm(prev => ({ ...prev, photo_urls: [...prev.photo_urls, ...newUrls] }));
-                          if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح ✅`);
+                          if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح <CheckCircle style={{ width: 16, height: 16, display: 'inline', color: '#16a34a' }} />`);
                           e.target.value = '';
                         }}
                       />
@@ -2124,7 +3204,7 @@ export default function App() {
               {/* STEP 6: CHOOSE TIER & SUBMIT */}
               {createStep === 6 && (
                 <div>
-                  <h4 style={{ fontWeight: 700, marginBottom: '1.25rem' }}>اختر باقة الإعلان وانشر عقارك 🚀</h4>
+                  <h4 style={{ fontWeight: 700, marginBottom: '1.25rem' }}>اختر باقة الإعلان وانشر عقارك</h4>
                   <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
                     <label style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: createForm.tier === 'regular' ? '#f0fdf4' : 'white', borderColor: createForm.tier === 'regular' ? 'var(--primary)' : 'var(--border-color)' }}>
                       <input type="radio" name="tier" checked={createForm.tier === 'regular'} onChange={() => setCreateForm({ ...createForm, tier: 'regular' })} />
@@ -2137,7 +3217,7 @@ export default function App() {
                     <label style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: createForm.tier === 'premium' ? '#fffbeb' : 'white', borderColor: createForm.tier === 'premium' ? 'var(--premium-gold)' : 'var(--border-color)' }}>
                       <input type="radio" name="tier" checked={createForm.tier === 'premium'} onChange={() => setCreateForm({ ...createForm, tier: 'premium' })} />
                       <div>
-                        <strong>⭐ إعلان مميز (Premium Listing) - ١٥٠ جنيه مصري / شهر</strong>
+                        <strong><Star style={{ width: 14, height: 14, display: 'inline', color: '#f59e0b' }} /> إعلان مميز (Premium Listing) - ١٥٠ جنيه مصري / شهر</strong>
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>أولوية ظهور الإعلان في أعلى نتائج البحث ووضع شارة عقار مميز ملفتة للانتباه.</p>
                       </div>
                     </label>
@@ -2145,7 +3225,7 @@ export default function App() {
 
                   <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(5)}>السابق</button>
-                    <button className="btn-primary" onClick={handleCreateSubmit}>نشر الإعلان 🚀</button>
+                    <button className="btn-primary" onClick={handleCreateSubmit}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>نشر الإعلان <Send style={{ width: 16, height: 16 }} /></span></button>
                   </div>
                 </div>
               )}
@@ -2162,10 +3242,10 @@ export default function App() {
             <div className="modal-header">
               <div>
                 <span className={`badge-gender ${selectedListingDetail.listing.gender === 'male' ? 'gender-male' : 'gender-female'}`} style={{ position: 'static', display: 'inline-flex', marginBottom: '0.25rem' }}>
-                  {selectedListingDetail.listing.gender === 'male' ? '♂ سكن طلاب' : '♀ سكن طالبات'}
+                  {selectedListingDetail.listing.gender === 'male' ? 'سكن طلاب' : 'سكن طالبات'}
                 </span>
                 <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{selectedListingDetail.listing.title}</h2>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>📍 {selectedListingDetail.listing.governorate}، {selectedListingDetail.listing.city}، {selectedListingDetail.listing.neighborhood}</p>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {selectedListingDetail.listing.governorate}، {selectedListingDetail.listing.city}، {selectedListingDetail.listing.neighborhood}</p>
               </div>
               <button className="modal-close" onClick={() => setSelectedListingDetail(null)}>×</button>
             </div>
@@ -2200,8 +3280,8 @@ export default function App() {
                 {/* 1. Unit Info */}
                 <div className="details-section">
                   <h3 className="details-title">تفاصيل الإقامة</h3>
-                  <p>🔹 <strong>العنوان بالتفصيل:</strong> {formatAddress(selectedListingDetail.listing)}</p>
-                  <p>🔹 <strong>عدد الأسرّة المتوفرة:</strong> {selectedListingDetail.listing.available_beds} أسرة</p>
+                  <p><span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>•</span> <strong>العنوان بالتفصيل:</strong> {formatAddress(selectedListingDetail.listing)}</p>
+                  <p><span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>•</span> <strong>عدد الأسرّة المتوفرة:</strong> {selectedListingDetail.listing.available_beds} أسرة</p>
                   {(() => {
                     const { latitude, longitude, address, city } = selectedListingDetail.listing;
                     const hasCoords = latitude != null && longitude != null;
@@ -2229,7 +3309,7 @@ export default function App() {
                           onError={(e) => { if (gmSrc) e.target.src = osmSrc; }}
                         />
                         <div style={{ height: '28px', flex: '0 0 28px', background: '#f8fafc', fontSize: '0.75rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border-color)' }}>
-                          <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>فتح في خرائط جوجل 🗺️</a>
+                          <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>فتح في خرائط جوجل <MapPin style={{ width: 14, height: 14 }} /></span></a>
                         </div>
                       </div>
                     );
@@ -2245,10 +3325,30 @@ export default function App() {
                             <strong style={{ color: 'var(--primary)' }}>{c.price_per_person} ج.م / شهر</strong>
                           </div>
                           
-                          <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                            {c.commission && <span>💰 عمولة: {c.commission} ج.م</span>}
-                            {c.insurance_price ? <span>🛡️ تأمين: {c.insurance_price} ج.م</span> : <span>🛡️ بدون تأمين</span>}
-                            {c.services_inclusive ? <span style={{ color: '#16a34a' }}>⚡ شامل الخدمات</span> : <span>🔌 الخدمات غير مشمولة</span>}
+                          <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                            {c.commission && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <FileText style={{ width: 14, height: 14 }} /> عمولة: {c.commission} ج.م
+                              </span>
+                            )}
+                            {c.insurance_price ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <Shield style={{ width: 14, height: 14 }} /> تأمين: {c.insurance_price} ج.م
+                              </span>
+                            ) : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <Shield style={{ width: 14, height: 14 }} /> بدون تأمين
+                              </span>
+                            )}
+                            {c.services_inclusive ? (
+                              <span style={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <Zap style={{ width: 14, height: 14 }} /> شامل الخدمات
+                              </span>
+                            ) : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <Plug style={{ width: 14, height: 14 }} /> الخدمات غير مشمولة
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -2264,13 +3364,33 @@ export default function App() {
                       className="btn-outline" 
                       style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
                       onClick={() => {
-                        const url = window.location.href;
-                        const text = `شاهد هذا السكن على سكن:\n${selectedListingDetail.listing.title}\n${selectedListingDetail.listing.address}\n\nالرابط: ${url}`;
-                        navigator.clipboard.writeText(text);
+                        const l = selectedListingDetail.listing;
+                        const a = selectedListingDetail.advertiser;
+                        const configs = l.room_configurations || [];
+                        const hasInsurance = configs.some(c => c.insurance_price && c.insurance_price > 0);
+                        const servicesInclusive = configs.some(c => c.services_inclusive);
+                        const totalBeds = configs.reduce((sum, c) => {
+                          const mult = c.room_type === 'double' ? 2 : c.room_type === 'triple' ? 3 : 4;
+                          return sum + (c.count || 1) * (c.room_type === 'single' ? 1 : mult);
+                        }, 0);
+                        const desc = l.description ? l.description.substring(0, 100) + (l.description.length > 100 ? '...' : '') : '';
+                        const genderText = l.gender === 'male' ? 'طلاب (شباب)' : 'طالبات (بنات)';
+                        const parts = [
+                          `${l.title} — ${genderText}`,
+                          `${l.governorate}، ${l.city}، ${l.neighborhood}`,
+                          desc ? desc : null,
+                          `${l.available_beds} سرير متاح من أصل ${totalBeds}`,
+                          hasInsurance ? 'يوجد تأمين' : 'بدون تأمين',
+                          servicesInclusive ? 'شامل الخدمات' : 'غير شامل الخدمات',
+                          '',
+                          `شاهد التفاصيل الكاملة والأسعار على سكن:`,
+                          window.location.href
+                        ].filter(p => p !== null);
+                        navigator.clipboard.writeText(parts.join('\n'));
                         alert("تم نسخ رابط العقار وتفاصيله بنجاح!");
                       }}
                     >
-                      🔗 مشاركة السكن
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Share2 style={{ width: 14, height: 14 }} /> مشاركة السكن</span>
                     </button>
                   </div>
                   <div className="advertiser-profile-card" style={{ marginTop: '1rem' }}>
@@ -2278,16 +3398,20 @@ export default function App() {
                       {selectedListingDetail.advertiser.profile_photo_url ? (
                         <img src={selectedListingDetail.advertiser.profile_photo_url} className="avatar-img" alt="" />
                       ) : (
-                        <span style={{ fontSize: '1.75rem' }}>👤</span>
+                        <span style={{ fontSize: '1.75rem' }}><User style={{ width: 18, height: 18, display: 'inline' }} /></span>
                       )}
                     </div>
                     <div>
                       <h4 style={{ fontWeight: 700 }}>{selectedListingDetail.advertiser.name}</h4>
                       <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', fontWeight: 600, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         <span style={{ background: 'var(--bg-muted)', padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-full)' }}>
-                          {selectedListingDetail.advertiser.account_type === 'broker' ? '👔 سمسار عقاري' : '🏠 مالك مباشر'}
+                          {selectedListingDetail.advertiser.account_type === 'broker' ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Briefcase style={{ width: 14, height: 14 }} /> سمسار عقاري</span>
+                          ) : (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Home style={{ width: 14, height: 14 }} /> مالك مباشر</span>
+                          )}
                         </span>
-                        {selectedListingDetail.listing.tier === 'premium' && <span style={{ color: 'var(--premium-gold)' }}>⭐ معلن مميز</span>}
+                        {selectedListingDetail.listing.tier === 'premium' && <span style={{ color: 'var(--premium-gold)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Star style={{ width: 14, height: 14, color: '#f59e0b' }} /> معلن مميز</span>}
                       </p>
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
@@ -2300,20 +3424,20 @@ export default function App() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                     <a 
                       className="btn btn-primary" 
-                      style={{ textDecoration: 'none', backgroundColor: '#22c55e', color: 'white' }}
+                      style={{ textDecoration: 'none', backgroundColor: '#22c55e', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
                       href={`https://wa.me/${selectedListingDetail.advertiser.phone}?text=${encodeURIComponent(`مرحباً أستاذ ${selectedListingDetail.advertiser.name}، أنا مهتم بوحدتك السكنية المعروضة على منصة سكن في حي ${selectedListingDetail.listing.neighborhood}`)}`}
                       target="_blank" 
                       rel="noreferrer"
                     >
-                      تواصل واتساب 💬
+                      <MessageSquare style={{ width: 16, height: 16 }} /> تواصل واتساب
                     </a>
                     
                     <a 
                       className="btn btn-secondary" 
-                      style={{ textDecoration: 'none', textAlign: 'center' }}
+                      style={{ textDecoration: 'none', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
                       href={`tel:${selectedListingDetail.advertiser.phone}`}
                     >
-                      اتصال هاتفي 📞
+                      <Phone style={{ width: 16, height: 16 }} /> اتصال هاتفي
                     </a>
                   </div>
                 </div>
@@ -2355,9 +3479,9 @@ export default function App() {
               {(!user || isNormalUser) && (
                 <div className="complaint-banner">
                   <div>
-                    ⚠️ إذا خالف المعلن أي من التفاصيل المعلنة في السعر أو العمولة، قدّم شكوى من خلال المنصة وسيتم اتخاذ الإجراءات اللازمة.
+                    <AlertTriangle style={{ width: 18, height: 18, display: 'inline', color: '#f59e0b', marginLeft: '0.4rem' }} /> إذا خالف المعلن أي من التفاصيل المعلنة في السعر أو العمولة، قدّم شكوى من خلال المنصة وسيتم اتخاذ الإجراءات اللازمة.
                   </div>
-                  <button className="btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={handleOpenComplaintForm}>تقديم شكوى 📄</button>
+                  <button className="btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={handleOpenComplaintForm}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تقديم شكوى <FileText style={{ width: 14, height: 14 }} /></span></button>
                 </div>
               )}
 
@@ -2370,7 +3494,7 @@ export default function App() {
                   </div>
                   
                   {(!user || isNormalUser) ? (
-                    <button className="btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }} onClick={handleOpenRatingForm}>أضف تقييمك ✍️</button>
+                    <button className="btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }} onClick={handleOpenRatingForm}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>أضف تقييمك <PenTool style={{ width: 14, height: 14 }} /></span></button>
                   ) : (
                     <span style={{ fontSize: '0.85rem', color: 'var(--text-light)', fontWeight: 600 }}>التقييمات والشكاوى متاحة للطلاب والمستخدمين العاديين فقط</span>
                   )}
@@ -2434,7 +3558,7 @@ export default function App() {
 
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                       <button type="button" className="btn-secondary" onClick={() => setShowRatingForm(false)}>إلغاء</button>
-                      <button type="submit" className="btn-primary">نشر التقييم فوراً 🚀</button>
+                      <button type="submit" className="btn-primary"><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>نشر التقييم فوراً <Send style={{ width: 16, height: 16 }} /></span></button>
                     </div>
                   </form>
                 )}
@@ -2477,7 +3601,7 @@ export default function App() {
 
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                       <button type="button" className="btn-secondary" onClick={() => setShowComplaintForm(false)}>إلغاء</button>
-                      <button type="submit" className="btn-danger">إرسال البلاغ للتحقيق ⚠️</button>
+                      <button type="submit" className="btn-danger"><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال البلاغ للتحقيق <AlertTriangle style={{ width: 16, height: 16 }} /></span></button>
                     </div>
                   </form>
                 )}
@@ -2492,7 +3616,7 @@ export default function App() {
                         <div key={r.id} className="rating-card">
                           <div className="rating-card-header">
                             <span className="rating-stars">{"★".repeat(r.star_count) + "☆".repeat(5 - r.star_count)}</span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>🗓️ {new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}><Calendar style={{ width: 12, height: 12, display: 'inline' }} /> {new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
                           </div>
                           {r.review_text && <p className="rating-review-text">{r.review_text}</p>}
                           {r.photo_urls && r.photo_urls.length > 0 && (
@@ -2513,7 +3637,7 @@ export default function App() {
                         <div key={r.id} className="rating-card">
                           <div className="rating-card-header">
                             <span className="rating-stars">{"★".repeat(r.star_count) + "☆".repeat(5 - r.star_count)}</span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>🗓️ {new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}><Calendar style={{ width: 12, height: 12, display: 'inline' }} /> {new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
                           </div>
                           <p className="rating-review-text">{r.review_text}</p>
                         </div>
@@ -2523,6 +3647,368 @@ export default function App() {
                 </div>
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Amenities Filter Modal */}
+      {showAmenitiesModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '600px', maxHeight: '80vh', overflow: 'auto', padding: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontWeight: 700, margin: 0 }}>اختر المرافق المطلوبة</h3>
+              <button className="modal-close" onClick={() => setShowAmenitiesModal(false)}>×</button>
+            </div>
+            <h5 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem' }}>مرافق داخلية</h5>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
+              {INDOOR_AMENITIES.map(amenity => {
+                const isChecked = filters.amenities.includes(amenity.name);
+                return (
+                  <label key={amenity.name} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', padding: '0.4rem', background: isChecked ? 'var(--primary-light)' : '#f8fafc', borderRadius: 'var(--radius-sm)', cursor: 'pointer', border: isChecked ? '1px solid var(--primary)' : '1px solid var(--border-color)' }}>
+                    <input type="checkbox" checked={isChecked} onChange={() => {
+                      const updated = isChecked ? filters.amenities.filter(a => a !== amenity.name) : [...filters.amenities, amenity.name];
+                      setFilters(prev => ({ ...prev, amenities: updated }));
+                    }} />
+                    {amenity.name}
+                  </label>
+                );
+              })}
+            </div>
+            <h5 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem' }}>خدمات خارجية</h5>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
+              {OUTDOOR_AMENITIES.map(amenity => {
+                const isChecked = filters.amenities.includes(amenity.name);
+                return (
+                  <label key={amenity.name} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', padding: '0.4rem', background: isChecked ? 'var(--primary-light)' : '#f8fafc', borderRadius: 'var(--radius-sm)', cursor: 'pointer', border: isChecked ? '1px solid var(--primary)' : '1px solid var(--border-color)' }}>
+                    <input type="checkbox" checked={isChecked} onChange={() => {
+                      const updated = isChecked ? filters.amenities.filter(a => a !== amenity.name) : [...filters.amenities, amenity.name];
+                      setFilters(prev => ({ ...prev, amenities: updated }));
+                    }} />
+                    {amenity.name}
+                  </label>
+                );
+              })}
+            </div>
+            <button className="btn-primary" style={{ width: '100%' }} onClick={() => setShowAmenitiesModal(false)}>تطبيق الفلتر</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- AREA SELECTION GATE MODAL (Step 1 before any listing form or sign-in) --- */}
+      {isAreaGateOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h3>اختر نطاق الإعلان الجغرافي</h3>
+              <button className="modal-close" onClick={() => setIsAreaGateOpen(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+                حدد المحافظة التي تقع بها وحدتك السكنية للتحقق من جاهزية نطاق الخدمة:
+              </p>
+
+              <div className="form-group">
+                <label>المحافظة <span style={{ color: 'var(--danger)' }}>*</span></label>
+                <select
+                  value={areaGateForm.governorate_id || ''}
+                  onChange={(e) => setAreaGateForm(prev => ({ ...prev, governorate_id: Number(e.target.value) }))}
+                >
+                  {dbGovernorates.map(g => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {(() => {
+                const selectedGov = dbGovernorates.find(g => g.id === areaGateForm.governorate_id);
+                if (!selectedGov) return null;
+                return selectedGov.status === 'live' ? (
+                  <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', padding: '0.75rem', borderRadius: 'var(--radius-sm)', color: '#166534', fontSize: '0.85rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <CheckCircle style={{ width: 18, height: 18, flexShrink: 0 }} />
+                    <span>خدمة سكن مفعلة وجاهزة استقبال الإعلانات في <strong>{selectedGov.name}</strong>.</span>
+                  </div>
+                ) : (
+                  <div style={{ background: '#fef3c7', border: '1px solid #fde68a', padding: '0.75rem', borderRadius: 'var(--radius-sm)', color: '#92400e', fontSize: '0.85rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Clock style={{ width: 18, height: 18, flexShrink: 0 }} />
+                    <span>خدمة سكن قادمة قريباً في <strong>{selectedGov.name}</strong>. يمكنك الانضمام لقائمة الانتظار وحجز مزايا التسجيل المبكر.</span>
+                  </div>
+                );
+              })()}
+
+              <button
+                className="btn-primary"
+                style={{ width: '100%', marginTop: '0.5rem' }}
+                disabled={!areaGateForm.governorate_id}
+                onClick={() => {
+                  const selectedGov = dbGovernorates.find(g => g.id === areaGateForm.governorate_id);
+                  if (!selectedGov) return;
+                  setIsAreaGateOpen(false);
+
+                  if (selectedGov.status === 'live') {
+                    // Live path: Proceed to 7-step full listing wizard
+                    setCreateForm({
+                      title: '',
+                      governorate: selectedGov.name,
+                      city: '',
+                      neighborhood: '',
+                      address: '',
+                      street: '',
+                      building_number: '',
+                      apartment_number: '',
+                      floor: '',
+                      maps_link: '',
+                      latitude: null,
+                      longitude: null,
+                      gender: 'female',
+                      available_beds: 1,
+                      room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
+                      amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
+                      photo_urls: [...PRESETS_PROPERTY_IMAGES],
+                      video_urls: [...PRESETS_PROPERTY_VIDEOS],
+                      description: '',
+                      tier: 'regular',
+                      min_lease_months: null
+                    });
+                    setShowMapPicker(false);
+                    setIsCreateOpen(true);
+                    setCreateStep(1);
+                    setTermsChecked(false);
+                  } else {
+                    // Waitlist path: Proceed to Waitlist Submission Wizard (listing flow NEVER opens)
+                    setWaitlistForm({
+                      governorate_id: selectedGov.id,
+                      governorate_name: selectedGov.name,
+                      city: '',
+                      name: user?.name || '',
+                      phone: user?.phone || '',
+                      work_volume_range: '1-4',
+                      verified_channel: 'whatsapp',
+                      otp: ''
+                    });
+                    setWaitlistStep('form');
+                    setIsWaitlistOpen(true);
+                  }
+                }}
+              >
+                استمرار المتابعة
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- WAITLIST SUBMISSION WIZARD MODAL (Step 2b) --- */}
+      {isWaitlistOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '520px' }}>
+            <div className="modal-header">
+              <h3>تسجيل رغبة / انضمام لقائمة الانتظار للمعلنين</h3>
+              <button className="modal-close" onClick={() => setIsWaitlistOpen(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              
+              {/* STEP 1: FORM */}
+              {waitlistStep === 'form' && (
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!waitlistForm.phone.trim() || !waitlistForm.name.trim() || !waitlistForm.city.trim()) {
+                    showToast('يرجى ملء جميع الحقول المطلوبة (الاسم، الهاتف، المدينة)');
+                    return;
+                  }
+                  setWaitlistStep('otp');
+                }}>
+                  <div style={{ background: '#fff7ed', border: '1px solid #ffedd5', padding: '0.75rem', borderRadius: 'var(--radius-sm)', color: '#c2410c', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+                    <strong>تنبيه نطاق الخدمة:</strong> خدمة "سكن" غير مفعلة للجمهور حالياً في محافظة <strong>{waitlistForm.governorate_name}</strong>. انضم لقائمة الانتظار المبكرة مجاناً واحصل على مزايا الفئات الخاصة فور الإطلاق.
+                  </div>
+
+                  <div className="form-group">
+                    <label>الاسم بالكامل <span style={{ color: 'var(--danger)' }}>*</span></label>
+                    <input
+                      type="text"
+                      value={waitlistForm.name}
+                      onChange={(e) => setWaitlistForm(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="اسمك الثلاثي"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>رقم الهاتف <span style={{ color: 'var(--danger)' }}>*</span></label>
+                    <input
+                      type="tel"
+                      value={waitlistForm.phone}
+                      onChange={(e) => setWaitlistForm(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="01xxxxxxxxx"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>المدينة / المركز <span style={{ color: 'var(--danger)' }}>*</span></label>
+                    <input
+                      type="text"
+                      value={waitlistForm.city}
+                      onChange={(e) => setWaitlistForm(prev => ({ ...prev, city: e.target.value }))}
+                      placeholder="مثال: أسيوط الجديدة، شربين، بنها..."
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>حجم وحدات الأعمال / المحفظة السكنية <span style={{ color: 'var(--danger)' }}>*</span></label>
+                    <select
+                      value={waitlistForm.work_volume_range}
+                      onChange={(e) => setWaitlistForm(prev => ({ ...prev, work_volume_range: e.target.value }))}
+                    >
+                      <option value="1-4">من 1 إلى 4 وحدات (مالك / سمسار صغير)</option>
+                      <option value="5-9">من 5 إلى 9 وحدات (سمسار متوسط)</option>
+                      <option value="10-19">من 10 إلى 19 وحدة (مكتب عقارات)</option>
+                      <option value="20+">أكثر من 20 وحدة (شركة / محفظة كبرى)</option>
+                    </select>
+                  </div>
+
+                  <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
+                    إرسال كود التحقق وانضمام للقائمة
+                  </button>
+                </form>
+              )}
+
+              {/* STEP 2: OTP VERIFICATION */}
+              {waitlistStep === 'otp' && (
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (waitlistForm.otp !== '123456') {
+                    showToast('كود التحقق غير صحيح، الكود التجريبي هو 123456');
+                    return;
+                  }
+                  try {
+                    const res = await fetch(`${API_BASE}/waitlist`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        phone: waitlistForm.phone,
+                        name: waitlistForm.name,
+                        governorate_id: waitlistForm.governorate_id,
+                        city: waitlistForm.city,
+                        work_volume_range: waitlistForm.work_volume_range,
+                        verified_channel: 'whatsapp'
+                      })
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setWaitlistResult(data);
+                      setWaitlistStep('success');
+                      loadGovernorates();
+                    } else {
+                      const errData = await res.json();
+                      showToast(errData.detail || 'خطأ في تسجيل قائمة الانتظار');
+                    }
+                  } catch {
+                    showToast('فشل الاتصال بالخادم');
+                  }
+                }}>
+                  <p style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                    تم إرسال كود التحقق إلى الرقم <strong>{waitlistForm.phone}</strong> (التحقق التلقائي عبر Akedly)
+                  </p>
+                  <div className="form-group">
+                    <label>كود التحقق (أدخل الكود التجريبي: 123456)</label>
+                    <input
+                      type="text"
+                      placeholder="123456"
+                      value={waitlistForm.otp}
+                      onChange={(e) => setWaitlistForm(prev => ({ ...prev, otp: e.target.value }))}
+                      style={{ textAlign: 'center', letterSpacing: '0.5rem', fontSize: '1.2rem' }}
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="btn-primary" style={{ width: '100%' }}>
+                    تأكيد الانضمام للقائمة
+                  </button>
+                  <button type="button" className="btn-secondary" style={{ width: '100%', marginTop: '0.5rem' }} onClick={() => setWaitlistStep('form')}>
+                    تعديل البيانات
+                  </button>
+                </form>
+              )}
+
+              {/* STEP 3: SUCCESS & TIER BADGE */}
+              {waitlistStep === 'success' && waitlistResult && (
+                <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+                  <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#dcfce7', color: '#15803d', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                    <CheckCircle style={{ width: 32, height: 32 }} />
+                  </div>
+                  <h3 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>تم انضمامك لقائمة الانتظار بنجاح!</h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+                    محافظة <strong>{waitlistResult.governorate_name}</strong> ({waitlistResult.city})
+                  </p>
+
+                  <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1.5rem', textAlign: 'right' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>تصنيف أسبقية التسجيل:</span>
+                      <span style={{
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '999px',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        background: waitlistResult.tier === 1 ? '#fef3c7' : waitlistResult.tier === 2 ? '#e0e7ff' : '#f1f5f9',
+                        color: waitlistResult.tier === 1 ? '#b45309' : waitlistResult.tier === 2 ? '#3730a3' : '#475569',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem'
+                      }}>
+                        <Award style={{ width: 16, height: 16 }} />
+                        {waitlistResult.tier === 1 ? 'Tier 1 (الفئة الأولى - الأولوية القصوى)' : waitlistResult.tier === 2 ? 'Tier 2 (الفئة الثانية - أولوية ممتازة)' : 'Tier 3 (الفئة الثالثة - مسجل برغبة)'}
+                      </span>
+                    </div>
+                    <ul style={{ fontSize: '0.85rem', color: 'var(--text-main)', paddingRight: '1.2rem', margin: 0, lineHeight: 1.6 }}>
+                      <li>تثبيت أولوية تمييز إعلاناتك وترتيب الظهور فور إطلاق الخدمة بالمحافظة.</li>
+                      <li>فترة تجريبية مجانية وخصومات خاصة للمسجلين المبكرين.</li>
+                      <li>سيتم التواصل فوراً مع رقمك عند جاهزية إطلاق المنصة في نطاقك.</li>
+                    </ul>
+                  </div>
+
+                  <button className="btn-primary" style={{ width: '100%' }} onClick={() => setIsWaitlistOpen(false)}>
+                    إغلاق
+                  </button>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- OUTREACH DISPATCH SUMMARY MODAL --- */}
+      {outreachSummaryModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '560px' }}>
+            <div className="modal-header">
+              <h3>تفعيل المحافظة وإرسال رسائل الإطلاق</h3>
+              <button className="modal-close" onClick={() => setOutreachSummaryModal(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-main)', marginBottom: '1rem' }}>
+                تم تغيير حالة محافظة <strong>{outreachSummaryModal.gov_name}</strong> إلى <strong>مفعلة (Live)</strong>.
+                تم إرسال إشعارات التفعيل لـ <strong>{outreachSummaryModal.count} معلن</strong> مسجل بقائمة الانتظار حسب الفئات Tiers:
+              </p>
+
+              <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem', background: '#f8fafc', fontSize: '0.8rem' }}>
+                {outreachSummaryModal.summary.map(item => (
+                  <div key={item.entry_id} style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                      <span>{item.name} ({item.phone})</span>
+                      <span style={{ color: item.tier === 1 ? '#b45309' : '#3730a3' }}>Tier {item.tier} [{item.channel}]</span>
+                    </div>
+                    <p style={{ color: 'var(--text-light)', margin: '0.2rem 0 0', fontSize: '0.75rem' }}>{item.outreach_message}</p>
+                  </div>
+                ))}
+              </div>
+
+              <button className="btn-primary" style={{ width: '100%', marginTop: '1rem' }} onClick={() => setOutreachSummaryModal(null)}>
+                حسناً، تم
+              </button>
             </div>
           </div>
         </div>
