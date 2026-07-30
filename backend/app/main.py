@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -13,11 +13,12 @@ from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 import json
 import shutil
+import urllib.request
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -331,6 +332,30 @@ def safe_json_loads(val, default):
         return default
 
 
+def process_photo_urls(urls: List[str]) -> List[str]:
+    processed = []
+    for url in urls:
+        if not url or not isinstance(url, str):
+            continue
+        url_str = url.strip()
+        if url_str.startswith("http://") or url_str.startswith("https://"):
+            try:
+                req = urllib.request.Request(url_str, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    content_type = response.info().get_content_type()
+                    ext = ".png" if "png" in content_type else ".jpg"
+                    filename = f"{uuid.uuid4().hex}{ext}"
+                    filepath = LISTING_DIR / filename
+                    with open(filepath, "wb") as f:
+                        f.write(response.read())
+                    processed.append(f"/static/uploads/listings/{filename}")
+                    continue
+            except Exception:
+                pass
+        processed.append(url_str)
+    return processed
+
+
 def verify_admin_user(db, x_user_id: Optional[int]):
     if x_user_id is None:
         raise HTTPException(status_code=403, detail="مطلوب تسجيل الدخول كمسؤول للوصول لهذه الخدمة")
@@ -400,6 +425,7 @@ class ListingCreate(BaseModel):
     city: str
     neighborhood: str
     address: str = ""
+    full_address: Optional[str] = None
     street: Optional[str] = None
     building_number: Optional[str] = None
     apartment_number: Optional[str] = None
@@ -802,7 +828,8 @@ def create_listing(payload: ListingCreate):
             advertiser_id=payload.advertiser_id,
             min_lease_months=payload.min_lease_months,
             contact_phone=payload.contact_phone,
-            whatsapp_phone=payload.whatsapp_phone
+            whatsapp_phone=payload.whatsapp_phone,
+            description=payload.description
         )
         db.add(listing)
         db.commit()
@@ -830,6 +857,7 @@ def create_listing(payload: ListingCreate):
             amenities=safe_json_loads(listing.amenities, []),
             photo_urls=safe_json_loads(listing.photo_urls, []),
             video_urls=safe_json_loads(listing.video_urls, []),
+            description=listing.description or "",
             tier=listing.tier,
             status=listing.status,
             advertiser_id=listing.advertiser_id,
@@ -927,7 +955,136 @@ def create_listing(payload: ListingCreate):
         db.close()
 
 
-ensure_schema()
+@app.post('/listings/bulk')
+def bulk_create_listings(payload: List[dict], x_user_id: Optional[int] = Header(None)):
+    db = SessionLocal()
+    created_ids = []
+    errors = []
+    
+    try:
+        default_advertiser = None
+        if x_user_id:
+            default_advertiser = db.query(User).filter(User.id == x_user_id).first()
+        if default_advertiser and default_advertiser.account_type not in ["owner", "broker", "admin"]:
+            raise HTTPException(status_code=403, detail="خدمة الاستيراد متاحة للملاك والوسطاء والمسؤولين فقط.")
+        if not default_advertiser:
+            default_advertiser = db.query(User).filter(User.account_type.in_(["owner", "broker", "admin"])).first()
+        if not default_advertiser:
+            default_advertiser = User(
+                phone="01000000000",
+                name="مسؤول المنصة (استيراد)",
+                account_type="admin",
+                is_verified=True,
+                verified_by_sakan=True
+            )
+            db.add(default_advertiser)
+            db.commit()
+            db.refresh(default_advertiser)
+
+        for idx, raw_item in enumerate(payload):
+            try:
+                item = {k: v for k, v in raw_item.items() if k != "scraper_metadata"}
+
+                governorate = item.get("governorate")
+                city = item.get("city")
+                neighborhood = item.get("neighborhood")
+                full_addr_raw = item.get("full_address") or item.get("address") or ""
+
+                if not governorate:
+                    errors.append({"index": idx, "title": item.get("title", f"عنصر #{idx+1}"), "error": "المحافظة حقل إجباري"})
+                    continue
+
+                # Auto-fill city/neighborhood from full_address if empty
+                if not city:
+                    city = governorate
+                if not neighborhood:
+                    if full_addr_raw:
+                        addr_parts = [p.strip() for p in full_addr_raw.replace("،", ",").split(",") if p.strip()]
+                        if len(addr_parts) >= 2:
+                            neighborhood = addr_parts[1] if addr_parts[1] != city else (addr_parts[2] if len(addr_parts) > 2 else "")
+                        elif len(addr_parts) == 1:
+                            neighborhood = addr_parts[0]
+                    if not neighborhood:
+                        neighborhood = city
+
+                gender = item.get("gender", "male")
+                if gender not in ["male", "female"]:
+                    gender = "female" if "طالبات" in str(item) or "بنات" in str(item) else "male"
+
+                configs = item.get("room_configurations") or []
+                if not configs:
+                    price = item.get("price_per_person", 1000)
+                    configs = [{
+                        "room_type": item.get("room_type", "single"),
+                        "price_per_person": price,
+                        "commission": round(price * 0.5) if price else 500,
+                        "count": 1,
+                        "insurance_price": None,
+                        "services_inclusive": False
+                    }]
+
+                available_beds = item.get("available_beds")
+                if available_beds is None:
+                    available_beds = sum(
+                        c.get("count", 1) * (2 if c.get("room_type") == "double" else 3 if c.get("room_type") == "triple" else 4 if c.get("room_type") in ["quadruple", "triple+"] else 1)
+                        for c in configs
+                    )
+
+                full_addr = item.get("full_address") or item.get("address") or f"{governorate}، {city}، {neighborhood}"
+
+                lat = item.get("latitude")
+                lng = item.get("longitude")
+
+                raw_photos = item.get("photo_urls", [])
+                processed_photos = process_photo_urls(raw_photos)
+
+                listing = Listing(
+                    title=item.get("title") or f"سكن مفروش في {neighborhood}",
+                    governorate=governorate,
+                    city=city,
+                    neighborhood=neighborhood,
+                    address=full_addr,
+                    street=item.get("street"),
+                    building_number=item.get("building_number"),
+                    apartment_number=item.get("apartment_number"),
+                    floor=item.get("floor"),
+                    maps_link=item.get("maps_link"),
+                    latitude=lat,
+                    longitude=lng,
+                    gender=gender,
+                    available_beds=available_beds,
+                    price_per_person=configs[0].get("price_per_person", 0),
+                    room_type=configs[0].get("room_type", "single"),
+                    room_configurations=json.dumps(configs, ensure_ascii=False),
+                    amenities=json.dumps(item.get("amenities", []), ensure_ascii=False),
+                    photo_urls=json.dumps(processed_photos, ensure_ascii=False),
+                    video_urls=json.dumps(item.get("video_urls", []), ensure_ascii=False),
+                    tier=item.get("tier", "regular"),
+                    status="active",
+                    advertiser_id=adv_id,
+                    description=item.get("description", ""),
+                    min_lease_months=item.get("min_lease_months"),
+                    contact_phone=item.get("contact_phone") or default_advertiser.phone,
+                    whatsapp_phone=item.get("whatsapp_phone") or item.get("contact_phone") or default_advertiser.phone
+                )
+                db.add(listing)
+                db.commit()
+                db.refresh(listing)
+                created_ids.append(listing.id)
+
+            except Exception as e:
+                db.rollback()
+                errors.append({"index": idx, "title": raw_item.get("title", f"عنصر #{idx+1}"), "error": str(e)})
+
+        return {
+            "status": "success",
+            "created_count": len(created_ids),
+            "failed_count": len(errors),
+            "created_ids": created_ids,
+            "errors": errors
+        }
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -948,7 +1105,6 @@ def list_listings(
     services_inclusive: Optional[bool] = None,
     has_insurance: Optional[bool] = None,
     min_lease_months: Optional[int] = None,
-    fully_vacant: Optional[bool] = None,
     min_total_beds: Optional[int] = None,
     max_total_beds: Optional[int] = None
 ):
@@ -1063,25 +1219,17 @@ def list_listings(
                     if has_ins == has_insurance:
                         match_insurance = True
                         break
-                if not match_insurance:
-                    continue
-
             # 7. Min lease months filter
             if min_lease_months is not None:
                 if item.min_lease_months is None or item.min_lease_months > min_lease_months:
                     continue
 
-            # 8. Fully vacant filter
+            # 8. Total beds range filter
             total_beds = sum(
                 c.get('count', 1) * (2 if c.get('room_type') == 'double' else 3 if c.get('room_type') == 'triple' else 4 if c.get('room_type') in ['quadruple', 'triple+'] else 1)
                 for c in configs
             ) if configs else item.available_beds
 
-            if fully_vacant:
-                if item.available_beds < total_beds or total_beds == 0:
-                    continue
-
-            # 9. Total beds range filter
             if min_total_beds is not None and total_beds < min_total_beds:
                 continue
             if max_total_beds is not None and total_beds > max_total_beds:

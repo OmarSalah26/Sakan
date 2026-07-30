@@ -7,7 +7,7 @@ import {
   AlertTriangle, Ban, Trash2, StopCircle, Star, Info, Megaphone, 
   User, Home, Briefcase, MessageSquare, Phone, Camera, Send, 
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
-  Bed, Check, Clock, Award, Sparkles
+  Bed, Check, Clock, Award, Sparkles, Upload
 } from 'lucide-react';
 
 
@@ -24,74 +24,18 @@ L.Icon.Default.mergeOptions({
 // Falls back to raw address string for old listings
 // ---------------------------------------------------------------------------
 function formatAddress(listing) {
-  const { street, building_number, apartment_number, floor, address } = listing;
-  if (!building_number && !street) return address || '';
-  const parts = [];
-  if (building_number) parts.push(`مبنى ${building_number}`);
-  if (apartment_number) parts.push(`شقة ${apartment_number}`);
-  if (floor) parts.push(`الدور ${floor}`);
-  if (street) parts.push(`شارع ${street}`);
-  return parts.join('، ');
+  return listing.full_address || listing.address || '';
 }
 
 // ---------------------------------------------------------------------------
-// MapPickerModal — full-screen modal with Leaflet, draggable marker,
-// pre-geocoded from address fields. Confirm saves lat/lng.
-// Hierarchical geocoding helper: governorate -> city -> neighborhood -> street
-async function geocodeHierarchicalAddress({ street, neighborhood, city, governorate }) {
-  const govKey = Object.keys(GOVERNORATE_COORDS).find(g => governorate?.includes(g)) || "القاهرة";
-  const govCoords = GOVERNORATE_COORDS[govKey] || [30.0444, 31.2357];
-
-  // Tight distance check: <= 0.35 deg (~35km) radius from governorate center to prevent city jumping
-  const isValidNearGov = (lat, lng) => {
-    const dist = Math.hypot(lat - govCoords[0], lng - govCoords[1]);
-    return dist <= 0.35;
-  };
-
-  const queries = [
-    // 1. Precise: street + neighborhood + city + governorate
-    [street && `شارع ${street}`, neighborhood, city, governorate, "مصر"].filter(Boolean).join(' ، '),
-    // 2. Neighborhood + city + governorate
-    [neighborhood, city, governorate, "مصر"].filter(Boolean).join(' ، '),
-    // 3. City + governorate
-    [city, governorate, "مصر"].filter(Boolean).join(' ، '),
-    // 4. Governorate only
-    [governorate, "مصر"].filter(Boolean).join(' ، ')
-  ];
-
-  for (const q of queries) {
-    if (!q || !q.trim()) continue;
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1&countrycodes=eg`,
-        { headers: { 'Accept-Language': 'ar' } }
-      );
-      const data = await res.json();
-      if (data && data.length > 0) {
-        const lat = parseFloat(data[0].lat);
-        const lng = parseFloat(data[0].lon);
-        if (isValidNearGov(lat, lng)) {
-          return { lat, lng };
-        }
-      }
-    } catch {}
-  }
-
-  // Guaranteed fallback: exact governorate coordinates
-  return { lat: govCoords[0], lng: govCoords[1] };
-}
-
+// MapPickerModal — full-screen modal with Leaflet, draggable marker.
 // ---------------------------------------------------------------------------
-// MapPickerModal — full-screen modal with Leaflet, draggable marker,
-// pre-geocoded from address fields. Confirm saves lat/lng.
-// ---------------------------------------------------------------------------
-function MapPickerModal({ street, neighborhood, city, governorate, initialLat, initialLng, onConfirm, onClose }) {
+function MapPickerModal({ cityFallback, governorate, initialLat, initialLng, onConfirm, onClose }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const tileLayerRef = useRef(null);
   const [pending, setPending] = useState({ lat: initialLat, lng: initialLng });
-  const [geocoding, setGeocoding] = useState(false);
   const [mapType, setMapType] = useState('hybrid'); // default to Hybrid Satellite with Labels
 
   const MAP_PROVIDERS = {
@@ -133,10 +77,10 @@ function MapPickerModal({ street, neighborhood, city, governorate, initialLat, i
   };
 
   useEffect(() => {
-    const init = async () => {
+    const init = () => {
       if (!containerRef.current) return;
 
-      const govKey = Object.keys(GOVERNORATE_COORDS).find(g => governorate?.includes(g)) || "القاهرة";
+      const govKey = Object.keys(GOVERNORATE_COORDS).find(g => (governorate || cityFallback)?.includes(g)) || "القاهرة";
       const defaultCenter = GOVERNORATE_COORDS[govKey] || [30.0444, 31.2357];
 
       const map = L.map(containerRef.current).setView(defaultCenter, 13);
@@ -165,14 +109,9 @@ function MapPickerModal({ street, neighborhood, city, governorate, initialLat, i
 
       if (initialLat && initialLng) {
         placeMarker(initialLat, initialLng, 16);
-        return;
+      } else {
+        placeMarker(defaultCenter[0], defaultCenter[1], 13);
       }
-
-      // Automatically center map over the city/neighborhood entered by user
-      setGeocoding(true);
-      const coords = await geocodeHierarchicalAddress({ street, neighborhood, city, governorate });
-      placeMarker(coords.lat, coords.lng, 15);
-      setGeocoding(false);
 
       map.on('click', (e) => placeMarker(e.latlng.lat, e.latlng.lng, map.getZoom()));
     };
@@ -351,6 +290,49 @@ export default function App() {
   const [listings, setListings] = useState([]);
   const [toast, setToast] = useState('');
   
+  // Bulk Add state
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkJsonText, setBulkJsonText] = useState('');
+  const [isBulkLoading, setIsBulkLoading] = useState(false);
+  const [bulkImportResult, setBulkImportResult] = useState(null);
+
+  const handleBulkSubmit = async () => {
+    try {
+      setIsBulkLoading(true);
+      setBulkImportResult(null);
+      const parsed = JSON.parse(bulkJsonText);
+      if (!Array.isArray(parsed)) {
+        showToast('البيانات يجب أن تكون مصفوفة JSON Array [ ... ]');
+        setIsBulkLoading(false);
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/listings/bulk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(user ? { 'x-user-id': String(user.id) } : {})
+        },
+        body: JSON.stringify(parsed)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setBulkImportResult(data);
+        showToast(`تم استيراد ${data.created_count} إعلان بنجاح!`);
+        loadListings();
+        if (user && user.account_type === 'admin') loadAdminData();
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'خطأ أثناء تنفيذ الاستيراد');
+      }
+    } catch (e) {
+      showToast('تنسيق JSON غير صالح، يرجى مراجعة القواعد والفاصلات');
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+  
   // Auth state
   const [user, setUser] = useState(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -380,7 +362,6 @@ export default function App() {
     max_commission: '',
     services_inclusive: false,
     has_insurance: false,
-    fully_vacant: false,
     min_total_beds: '',
     max_total_beds: ''
   });
@@ -397,10 +378,8 @@ export default function App() {
     governorate: '',
     city: '',
     neighborhood: '',
+    full_address: '',
     address: '',
-    street: '',
-    building_number: '',
-    apartment_number: '',
     floor: '',
     maps_link: '',
     latitude: null,
@@ -522,7 +501,6 @@ export default function App() {
       if (filters.max_commission) q.append('max_commission', filters.max_commission);
       if (filters.services_inclusive) q.append('services_inclusive', 'true');
       if (filters.has_insurance) q.append('has_insurance', 'true');
-      if (filters.fully_vacant) q.append('fully_vacant', 'true');
       if (filters.min_total_beds) q.append('min_total_beds', filters.min_total_beds);
       if (filters.max_total_beds) q.append('max_total_beds', filters.max_total_beds);
 
@@ -554,20 +532,8 @@ export default function App() {
         const uid = hash.replace('#/profile/', '');
         setProfileUserId(uid);
         setTab('profile');
-      } else if (hash === '#/about') {
-        setTab('about');
-      } else if (hash === '#/terms') {
-        setTab('terms');
-      } else if (hash === '#/guide') {
-        setTab('guide');
-      } else if (hash === '#/saved') {
-        setTab('saved');
-      } else if (hash === '#/dashboard') {
-        setTab('dashboard');
-      } else if (hash === '#/admin') {
-        setTab('admin');
-      } else if (hash === '' || hash === '#/' || hash === '#/browse') {
-        setTab('browse');
+      } else {
+        navigateTo(hash || '#/browse');
       }
     };
     handleHashChange();
@@ -585,13 +551,30 @@ export default function App() {
   }, [tab, profileUserId]);
 
   const navigateTo = (newHash) => {
-    window.location.hash = newHash;
+    const raw = newHash.replace('#/', '').replace('#', '');
+    const targetTab = raw || 'browse';
+    setTab(targetTab);
+    if (window.location.hash !== newHash) {
+      window.location.hash = newHash;
+    }
   };
 
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(''), 3500);
   };
+
+  // Role verification tags
+  const isBroker = user && (user.account_type === 'broker' || user.account_type === 'owner');
+  const isAdmin = user && user.account_type === 'admin';
+  const isNormalUser = user && (user.account_type === 'student' || user.account_type === 'normal_user');
+
+  // Bulletproof tab resolution to prevent blank pages
+  const isDashboardTabValid = tab === 'dashboard' && (isBroker || isAdmin);
+  const isAdminTabValid = tab === 'admin' && isAdmin;
+  const isSavedTabValid = tab === 'saved' && user;
+  const isOtherTab = ['guide', 'about', 'terms', 'profile'].includes(tab);
+  const isBrowseTab = tab === 'browse' || (!isDashboardTabValid && !isAdminTabValid && !isSavedTabValid && !isOtherTab);
 
   const pendingActionRef = useRef(null); // persistent callback after auth success
 
@@ -678,11 +661,19 @@ export default function App() {
         } else {
           setUser(finalUser);
           setIsAuthOpen(false);
-          showToast(`تم تسجيل الدخول بنجاح! مرحباً بك، ${data.name}`);
+          showToast(`تم تسجيل الدخول بنجاح! مرحباً بك، ${data.name || ''}`);
           if (pendingActionRef.current) {
             const cb = pendingActionRef.current;
             pendingActionRef.current = null;
             cb(finalUser);
+          } else {
+            if (data.account_type === 'broker' || data.account_type === 'owner') {
+              navigateTo('#/dashboard');
+            } else if (data.account_type === 'admin') {
+              navigateTo('#/admin');
+            } else {
+              navigateTo('#/browse');
+            }
           }
         }
       } else {
@@ -723,6 +714,14 @@ export default function App() {
           const cb = pendingActionRef.current;
           pendingActionRef.current = null;
           cb(updatedUser);
+        } else {
+          if (updatedUser.account_type === 'broker' || updatedUser.account_type === 'owner') {
+            navigateTo('#/dashboard');
+          } else if (updatedUser.account_type === 'admin') {
+            navigateTo('#/admin');
+          } else {
+            navigateTo('#/browse');
+          }
         }
       }
     } catch (err) {
@@ -762,10 +761,8 @@ export default function App() {
           governorate: liveGov.name,
           city: '',
           neighborhood: '',
+          full_address: '',
           address: '',
-          street: '',
-          building_number: '',
-          apartment_number: '',
           floor: '',
           maps_link: '',
           latitude: null,
@@ -791,21 +788,7 @@ export default function App() {
     setAreaGateForm({ governorate_id: dbGovernorates[0]?.id || 1 });
   };
 
-  const handleStep2Next = async () => {
-    if (!createForm.latitude || !createForm.longitude) {
-      showToast("جاري التحديد التلقائي لموقع العقار على الخريطة...");
-      const coords = await geocodeHierarchicalAddress({
-        street: createForm.street,
-        neighborhood: createForm.neighborhood,
-        city: createForm.city,
-        governorate: createForm.governorate
-      });
-      setCreateForm(prev => ({
-        ...prev,
-        latitude: coords.lat,
-        longitude: coords.lng
-      }));
-    }
+  const handleStep2Next = () => {
     setCreateStep(3);
   };
 
@@ -849,22 +832,12 @@ export default function App() {
 
       let payload = {
         ...createForm,
+        address: createForm.full_address || createForm.address,
         room_configurations: cleanedConfigs,
         contact_phone: targetContact,
         whatsapp_phone: createForm.no_whatsapp ? (createForm.whatsapp_phone || targetContact) : targetContact,
         advertiser_id: currentUser.id
       };
-
-      if (!payload.latitude || !payload.longitude) {
-        const coords = await geocodeHierarchicalAddress({
-          street: payload.street,
-          neighborhood: payload.neighborhood,
-          city: payload.city,
-          governorate: payload.governorate
-        });
-        payload.latitude = coords.lat;
-        payload.longitude = coords.lng;
-      }
 
       const res = await fetch(`${API_BASE}/listings`, {
         method: 'POST',
@@ -1201,11 +1174,6 @@ export default function App() {
     return ["غير نظيف", "المرافق مش زي ما اتعلن", "الموقع بعيد", "السعر مش مناسب", "مشاكل في الصيانة"];
   };
 
-  // Role verification tags
-  const isBroker = user && (user.account_type === 'broker' || user.account_type === 'owner');
-  const isAdmin = user && user.account_type === 'admin';
-  const isNormalUser = user && (user.account_type === 'student' || user.account_type === 'normal_user');
-
   return (
     <div>
       {/* Toast Alert Banner */}
@@ -1269,6 +1237,18 @@ export default function App() {
             </button>
           )}
 
+          {/* Bulk import button accessible ONLY for Brokers, Owners, and Admins */}
+          {(isBroker || isAdmin) && (
+            <button 
+              className="btn-outline" 
+              onClick={() => { setIsBulkModalOpen(true); setBulkImportResult(null); }}
+              style={{ fontWeight: 600, fontSize: '0.8rem', padding: '0.45rem 0.75rem', background: '#f8fafc' }}
+              title="استيراد وتغذية إعلانات بالجملة عبر JSON"
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Upload style={{ width: 16, height: 16 }} /> استيراد بالجملة</span>
+            </button>
+          )}
+
           {/* Show dashboard to logged-in Brokers and Admins */}
           {(isBroker || isAdmin) && (
             <button 
@@ -1311,7 +1291,7 @@ export default function App() {
       <main className="container">
         
         {/* TAB 1: BROWSE LISTINGS FEED */}
-        {tab === 'browse' && (
+        {isBrowseTab && (
           <div>
             <div className="hero-section">
               <h1 className="hero-title">ابحث عن <span>سكنك الطلابي</span> المثالي</h1>
@@ -1544,12 +1524,6 @@ export default function App() {
                               {item.tier === 'premium' && (
                                 <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#eff6ff', color: '#0d63ea', border: '1px solid #bfdbfe', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
                                   <Star style={{ width: 12, height: 12, color: '#f59e0b' }} /> مميز
-                                </span>
-                              )}
-
-                              {(item.available_beds === totalBeds && totalBeds > 0) && (
-                                <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                                  <CheckCircle style={{ width: 12, height: 12 }} /> شاغر بالكامل
                                 </span>
                               )}
                             </div>
@@ -2712,59 +2686,24 @@ export default function App() {
                   </div>
 
                   <div className="form-group">
-                    <label>الحي / المنطقة</label>
-                    <input 
-                      type="text" 
-                      placeholder="اسم الحي بالتفصيل"
-                      value={createForm.neighborhood} 
-                      onChange={(e) => setCreateForm({ ...createForm, neighborhood: e.target.value })} 
+                    <label>العنوان بالتفصيل <span style={{ color: 'var(--danger)' }}>*</span></label>
+                    <textarea 
+                      placeholder="ادخل العنوان بالتفاصيل (الحي والشارع ورقم المبنى)" 
+                      value={createForm.full_address} 
+                      onChange={(e) => setCreateForm({ ...createForm, full_address: e.target.value })} 
+                      rows={2}
                       required 
                     />
                   </div>
 
-                  {/* Structured address fields */}
-                  <div className="grid-cols-2">
-                    <div className="form-group">
-                      <label>الشارع <span style={{ color: 'var(--danger)' }}>*</span></label>
-                      <input
-                        type="text"
-                        placeholder="مثال: شارع التحرير"
-                        value={createForm.street}
-                        onChange={(e) => setCreateForm({ ...createForm, street: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>رقم المبنى <span style={{ color: 'var(--danger)' }}>*</span></label>
-                      <input
-                        type="text"
-                        placeholder="مثال: 12"
-                        value={createForm.building_number}
-                        onChange={(e) => setCreateForm({ ...createForm, building_number: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid-cols-2">
-                    <div className="form-group">
-                      <label>رقم الشقة <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(اختياري)</span></label>
-                      <input
-                        type="text"
-                        placeholder="مثال: 3"
-                        value={createForm.apartment_number}
-                        onChange={(e) => setCreateForm({ ...createForm, apartment_number: e.target.value })}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>الدور <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(اختياري)</span></label>
-                      <input
-                        type="text"
-                        placeholder="مثال: 2"
-                        value={createForm.floor}
-                        onChange={(e) => setCreateForm({ ...createForm, floor: e.target.value })}
-                      />
-                    </div>
+                  <div className="form-group">
+                    <label>الدور <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(اختياري)</span></label>
+                    <input
+                      type="text"
+                      placeholder="مثال: الدور الثاني"
+                      value={createForm.floor}
+                      onChange={(e) => setCreateForm({ ...createForm, floor: e.target.value })}
+                    />
                   </div>
 
                   {/* Map picker trigger */}
@@ -2792,19 +2731,14 @@ export default function App() {
                         >
                           <MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> تحديد موقع العقار على الخريطة (اختياري)
                         </button>
-                        <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>في حال عدم التحديد، سيتم استنباط الموقع تلقائياً من اسم الشارع والحي والمدينة.</small>
                       </div>
                     )}
                   </div>
 
                   {showMapPicker && (
                     <MapPickerModal
-                      addressQuery={[
-                        createForm.street && `شارع ${createForm.street}`,
-                        createForm.neighborhood,
-                        createForm.city
-                      ].filter(Boolean).join(' ')}
                       cityFallback={`${createForm.city} ${createForm.governorate}`}
+                      governorate={createForm.governorate}
                       initialLat={createForm.latitude}
                       initialLng={createForm.longitude}
                       onConfirm={(lat, lng) => {
@@ -2887,7 +2821,7 @@ export default function App() {
 
                   <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%', marginTop: '1rem' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(1)}>السابق</button>
-                    <button className="btn-primary" disabled={!createForm.title || !createForm.city || !createForm.neighborhood || !createForm.street || !createForm.building_number} onClick={handleStep2Next}>التالي</button>
+                    <button className="btn-primary" disabled={!createForm.title || !createForm.city || !createForm.full_address} onClick={handleStep2Next}>التالي</button>
                   </div>
                 </div>
               )}
@@ -3754,10 +3688,8 @@ export default function App() {
                       governorate: selectedGov.name,
                       city: '',
                       neighborhood: '',
+                      full_address: '',
                       address: '',
-                      street: '',
-                      building_number: '',
-                      apartment_number: '',
                       floor: '',
                       maps_link: '',
                       latitude: null,
@@ -4009,6 +3941,110 @@ export default function App() {
               <button className="btn-primary" style={{ width: '100%', marginTop: '1rem' }} onClick={() => setOutreachSummaryModal(null)}>
                 حسناً، تم
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- BULK ADD LISTINGS MODAL --- */}
+      {isBulkModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '680px' }}>
+            <div className="modal-header">
+              <h3><Upload style={{ width: 18, height: 18, display: 'inline', verticalAlign: 'middle', marginLeft: '0.25rem' }} /> إضافة / استيراد إعلانات بالجملة (Bulk Import)</h3>
+              <button className="modal-close" onClick={() => setIsBulkModalOpen(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.5 }}>
+                قم بلصق بيانات JSON الخاصة بالإعلانات (التي تم استخراجها من الـ Scraper) أو اختر ملف <code>.json</code> مباشرة لاستيرادها دفعة واحدة إلى المنصة.
+              </p>
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                <button 
+                  className="btn-outline" 
+                  style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                  onClick={() => {
+                    const sample = [
+                      {
+                        "title": "شقة مفروشة للطلاب بالدقي بالقرب من جامعة القاهرة",
+                        "governorate": "الجيزة",
+                        "city": "الجيزة",
+                        "neighborhood": "الدقي",
+                        "full_address": "الجيزة، الدقي، شارع التحرير، عمارة 14، شقة 2، الدور 3",
+                        "maps_link": "https://maps.google.com/?q=30.0381,31.2118",
+                        "latitude": 30.0381,
+                        "longitude": 31.2118,
+                        "gender": "male",
+                        "available_beds": 4,
+                        "contact_phone": "01012345678",
+                        "whatsapp_phone": "01012345678",
+                        "min_lease_months": 3,
+                        "tier": "regular",
+                        "description": "شقة 3 غرف مفروشة بالكامل بالقرب من جامعة القاهرة وبجوار محطة مترو الدقي.",
+                        "room_configurations": [
+                          { "room_type": "single", "count": 2, "price_per_person": 2500, "commission": 1250, "insurance_price": 2500, "services_inclusive": false }
+                        ],
+                        "amenities": ["تكييف", "واي فاي مجاني", "سخان مياه", "غسالة", "قريب من الجامعة", "سوبر ماركت"],
+                        "photo_urls": ["https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"]
+                      }
+                    ];
+                    setBulkJsonText(JSON.stringify(sample, null, 2));
+                  }}
+                >
+                  إدراج نموذج تجريبي (Sample JSON)
+                </button>
+
+                <label className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', cursor: 'pointer' }}>
+                  رفع ملف JSON 📁
+                  <input 
+                    type="file" 
+                    accept=".json,application/json" 
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (evt) => setBulkJsonText(evt.target.result);
+                      reader.readAsText(file);
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="form-group">
+                <textarea 
+                  rows={10} 
+                  style={{ fontFamily: 'monospace', fontSize: '0.8rem', direction: 'ltr', textAlign: 'left', background: '#f8fafc' }}
+                  value={bulkJsonText}
+                  onChange={(e) => setBulkJsonText(e.target.value)}
+                  placeholder="[ { 'governorate': 'أسيوط', 'city': 'أسيوط', ... } ]"
+                />
+              </div>
+
+              {bulkImportResult && (
+                <div style={{ background: bulkImportResult.failed_count > 0 ? '#fff7ed' : '#f0fdf4', border: `1px solid ${bulkImportResult.failed_count > 0 ? '#ffedd5' : '#bbf7d0'}`, padding: '0.85rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem' }}>
+                  <strong style={{ color: bulkImportResult.failed_count > 0 ? '#c2410c' : '#15803d', fontSize: '0.9rem' }}>
+                    نتيجة الاستيراد: تم إضافة {bulkImportResult.created_count} إعلان بنجاح إلى قاعدة البيانات!
+                  </strong>
+                  {bulkImportResult.failed_count > 0 && (
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#9a3412' }}>
+                      تعذر إضافة {bulkImportResult.failed_count} عنصر بسبب أخطاء التنسيق:
+                      <ul style={{ paddingRight: '1.2rem', marginTop: '0.25rem', marginBottom: 0 }}>
+                        {bulkImportResult.errors.map((err, i) => (
+                          <li key={i}>العنصر #{err.index + 1} ({err.title}): {err.error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                <button className="btn-secondary" onClick={() => setIsBulkModalOpen(false)}>إغلاق</button>
+                <button className="btn-primary" disabled={isBulkLoading || !bulkJsonText.trim()} onClick={handleBulkSubmit}>
+                  {isBulkLoading ? 'جاري الاستيراد...' : 'تأكيد واستيراد الإعلانات'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
