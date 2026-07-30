@@ -974,7 +974,7 @@ def bulk_create_listings(payload: List[dict], x_user_id: Optional[int] = Header(
     
     try:
         default_advertiser = None
-        if x_user_id:
+        if x_user_id and isinstance(x_user_id, int):
             default_advertiser = db.query(User).filter(User.id == x_user_id).first()
         if default_advertiser and default_advertiser.account_type not in ["owner", "broker", "admin"]:
             raise HTTPException(status_code=403, detail="خدمة الاستيراد متاحة للملاك والوسطاء والمسؤولين فقط.")
@@ -1048,6 +1048,7 @@ def bulk_create_listings(payload: List[dict], x_user_id: Optional[int] = Header(
 
                 raw_photos = item.get("photo_urls", [])
                 processed_photos = process_photo_urls(raw_photos)
+                adv_id = item.get("advertiser_id") or default_advertiser.id
 
                 listing = Listing(
                     title=item.get("title") or f"سكن مفروش في {neighborhood}",
