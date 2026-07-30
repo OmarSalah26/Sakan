@@ -332,6 +332,17 @@ def safe_json_loads(val, default):
         return default
 
 
+def parse_amenities_list(val) -> List[str]:
+    parsed = safe_json_loads(val, [])
+    if isinstance(parsed, list):
+        return [str(x) for x in parsed if x]
+    elif isinstance(parsed, dict):
+        return [str(k) for k, v in parsed.items() if v]
+    elif isinstance(parsed, str):
+        return [x.strip() for x in parsed.split(",") if x.strip()]
+    return []
+
+
 def process_photo_urls(urls: List[str]) -> List[str]:
     processed = []
     for url in urls:
@@ -854,7 +865,7 @@ def create_listing(payload: ListingCreate):
             price_per_person=listing.price_per_person,
             room_type=listing.room_type,
             room_configurations=safe_json_loads(listing.room_configurations, []),
-            amenities=safe_json_loads(listing.amenities, []),
+            amenities=parse_amenities_list(listing.amenities),
             photo_urls=safe_json_loads(listing.photo_urls, []),
             video_urls=safe_json_loads(listing.video_urls, []),
             description=listing.description or "",
@@ -1176,11 +1187,7 @@ def list_listings(
 
             # 3. Amenities filter ("all of" matching)
             if target_amenities:
-                item_amenities = safe_json_loads(item.amenities, [])
-                # Support legacy string arrays or split list
-                if isinstance(item_amenities, str):
-                    item_amenities = [x.strip() for x in item_amenities.split(",")]
-                
+                item_amenities = parse_amenities_list(item.amenities)
                 # Check if all target amenities are in item amenities
                 if not all(t in item_amenities for t in target_amenities):
                     continue
@@ -1257,7 +1264,7 @@ def list_listings(
                     price_per_person=item.price_per_person,
                     room_type=item.room_type,
                     room_configurations=configs,
-                    amenities=safe_json_loads(item.amenities, []),
+                    amenities=parse_amenities_list(item.amenities),
                     photo_urls=safe_json_loads(item.photo_urls, []),
                     video_urls=safe_json_loads(item.video_urls, []),
                     tier=item.tier,
@@ -1328,7 +1335,7 @@ def get_listing_detail(listing_id: int):
                 price_per_person=listing.price_per_person,
                 room_type=listing.room_type,
                 room_configurations=safe_json_loads(listing.room_configurations, []),
-                amenities=safe_json_loads(listing.amenities, []),
+                amenities=parse_amenities_list(listing.amenities),
                 photo_urls=safe_json_loads(listing.photo_urls, []),
                 video_urls=safe_json_loads(listing.video_urls, []),
                 tier=listing.tier,
@@ -1777,7 +1784,7 @@ def admin_list_listings(x_user_id: Optional[int] = None):
                 price_per_person=item.price_per_person,
                 room_type=item.room_type,
                 room_configurations=safe_json_loads(item.room_configurations, []),
-                amenities=safe_json_loads(item.amenities, []),
+                amenities=parse_amenities_list(item.amenities),
                 photo_urls=safe_json_loads(item.photo_urls, []),
                 video_urls=safe_json_loads(item.video_urls, []),
                 tier=item.tier,
