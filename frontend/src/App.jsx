@@ -180,6 +180,22 @@ function MapPickerModal({ cityFallback, governorate, initialLat, initialLng, onC
 
 const API_BASE = '/api';
 
+function formatImageUrl(url) {
+  if (!url) return "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
+  if (typeof url !== 'string') return url;
+
+  let cleanUrl = url.trim();
+  cleanUrl = cleanUrl.replace(/^http:\/\/(127\.0\.0\.1|localhost):(8000|3000)/, '');
+
+  if (cleanUrl.startsWith('/static/') || cleanUrl.startsWith('/media/')) {
+    return cleanUrl;
+  }
+  if (cleanUrl.startsWith('static/') || cleanUrl.startsWith('media/')) {
+    return `/${cleanUrl}`;
+  }
+  return cleanUrl;
+}
+
 const GOVERNORATES = [
   "القاهرة", "الجيزة", "الإسكندرية", "الدقهلية", "البحر الأحمر", "المنوفية", 
   "الفيوم", "قنا", "الأقصر", "أسوان", "أسيوط", "المنيا", "بني سويف", 
@@ -297,15 +313,23 @@ export default function App() {
   const [bulkImportResult, setBulkImportResult] = useState(null);
 
   const handleBulkSubmit = async () => {
+    if (!bulkJsonText.trim()) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(bulkJsonText);
+    } catch (e) {
+      showToast('تنسيق JSON غير صالح، يرجى مراجعة القواعد والفاصلات');
+      return;
+    }
+
+    if (!Array.isArray(parsed)) {
+      showToast('البيانات يجب أن تكون مصفوفة JSON Array [ ... ]');
+      return;
+    }
+
     try {
       setIsBulkLoading(true);
       setBulkImportResult(null);
-      const parsed = JSON.parse(bulkJsonText);
-      if (!Array.isArray(parsed)) {
-        showToast('البيانات يجب أن تكون مصفوفة JSON Array [ ... ]');
-        setIsBulkLoading(false);
-        return;
-      }
 
       const res = await fetch(`${API_BASE}/listings/bulk`, {
         method: 'POST',
@@ -327,7 +351,7 @@ export default function App() {
         showToast(err.detail || 'خطأ أثناء تنفيذ الاستيراد');
       }
     } catch (e) {
-      showToast('تنسيق JSON غير صالح، يرجى مراجعة القواعد والفاصلات');
+      showToast('خطأ في الاتصال بالخادم أثناء تنفيذ الاستيراد');
     } finally {
       setIsBulkLoading(false);
     }
@@ -1484,7 +1508,7 @@ export default function App() {
                   <div className="listings-grid">
                     {listings.map((item) => {
                       const coverImage = item.photo_urls && item.photo_urls.length > 0
-                        ? item.photo_urls[0]
+                        ? formatImageUrl(item.photo_urls[0])
                         : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
 
                       let totalBeds = 0;
@@ -2124,7 +2148,7 @@ export default function App() {
               <div className="listings-grid">
                 {listings.filter(l => bookmarkedIds.includes(l.id)).map(item => {
                   const coverImage = item.photo_urls && item.photo_urls.length > 0
-                    ? item.photo_urls[0]
+                    ? formatImageUrl(item.photo_urls[0])
                     : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
                   return (
                     <article key={item.id} className="listing-card" onClick={() => openListingDetail(item.id)}>
@@ -2354,7 +2378,7 @@ export default function App() {
                       {profileData.listings.map(item => (
                         <article key={item.id} className="listing-card" onClick={() => openListingDetail(item.id)}>
                           <div className="card-img-wrapper">
-                            <img className="card-img" src={item.photo_urls?.[0] || "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"} alt={item.title} />
+                            <img className="card-img" src={formatImageUrl(item.photo_urls?.[0])} alt={item.title} />
                           </div>
                           <div className="card-content">
                             <div className="card-location"><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {item.city}، {item.neighborhood}</div>
@@ -3019,7 +3043,7 @@ export default function App() {
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
                         {createForm.photo_urls.map((url, idx) => (
                           <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-muted)' }}>
-                            <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={formatImageUrl(url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             <button
                               type="button"
                               onClick={() => setCreateForm(prev => ({ ...prev, photo_urls: prev.photo_urls.filter((_, i) => i !== idx) }))}
@@ -3063,10 +3087,10 @@ export default function App() {
                           const fd = new FormData();
                           fd.append('file', file);
                           try {
-                            const res = await fetch('http://127.0.0.1:8000/upload/listing-photo', { method: 'POST', body: fd });
+                            const res = await fetch(`${API_BASE}/upload/listing-photo`, { method: 'POST', body: fd });
                             if (res.ok) {
                               const data = await res.json();
-                              newUrls.push(`http://127.0.0.1:8000${data.url}`);
+                              newUrls.push(formatImageUrl(data.url));
                             }
                           } catch {}
                         }
@@ -3094,10 +3118,10 @@ export default function App() {
                             const fd = new FormData();
                             fd.append('file', file);
                             try {
-                              const res = await fetch('http://127.0.0.1:8000/upload/listing-photo', { method: 'POST', body: fd });
+                              const res = await fetch(`${API_BASE}/upload/listing-photo`, { method: 'POST', body: fd });
                               if (res.ok) {
                                 const data = await res.json();
-                                newUrls.push(`http://127.0.0.1:8000${data.url}`);
+                                newUrls.push(formatImageUrl(data.url));
                               }
                             } catch {}
                           }
@@ -3190,7 +3214,7 @@ export default function App() {
                 <div className="carousel-slide-wrapper">
                   <div className="carousel-slide">
                     {carouselIndex < selectedListingDetail.listing.photo_urls.length ? (
-                      <img src={selectedListingDetail.listing.photo_urls[carouselIndex]} alt="" />
+                      <img src={formatImageUrl(selectedListingDetail.listing.photo_urls[carouselIndex])} alt="" />
                     ) : (
                       <video src={selectedListingDetail.listing.video_urls[carouselIndex - selectedListingDetail.listing.photo_urls.length]} controls />
                     )}

@@ -315,9 +315,12 @@ app.add_middleware(
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "static" / "uploads"
 AVATAR_DIR = UPLOAD_DIR / "avatars"
 LISTING_DIR = UPLOAD_DIR / "listings"
+MEDIA_DIR = Path(__file__).resolve().parent.parent / "media"
 AVATAR_DIR.mkdir(parents=True, exist_ok=True)
 LISTING_DIR.mkdir(parents=True, exist_ok=True)
+MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(UPLOAD_DIR.parent)), name="static")
+app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
