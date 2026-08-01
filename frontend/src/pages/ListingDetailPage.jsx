@@ -89,35 +89,7 @@ export default function ListingDetailPage() {
     }
   };
 
-  useEffect(() => {
-    if (!data || !data.listing) return;
-    const { latitude, longitude } = data.listing;
-    if (latitude == null || longitude == null) return;
-    if (!mapContainerRef.current) return;
-    if (mapInstanceRef.current) return;
 
-    const L = window.L;
-    if (!L) return;
-
-    const map = L.map(mapContainerRef.current, { dragging: false, zoomControl: false, scrollWheelZoom: false }).setView([latitude, longitude], 16);
-    mapInstanceRef.current = map;
-
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19
-    }).addTo(map);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19
-    }).addTo(map);
-
-    L.marker([latitude, longitude]).addTo(map);
-
-    return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-    };
-  }, [data]);
 
   if (loading) {
     return (
@@ -449,17 +421,33 @@ export default function ListingDetailPage() {
               </button>
             </div>
 
-            {/* Read-Only Map */}
-            {hasCoords && (
-              <div style={{ marginTop: '1rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <div ref={mapContainerRef} style={{ width: '100%', height: '220px' }} />
-                <div style={{ background: '#f8fafc', padding: '0.5rem 1rem', textAlign: 'center', borderTop: '1px solid var(--border)' }}>
-                  <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.85rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                    فتح الموقع في خرائط جوجل <MapPin style={{ width: 14, height: 14 }} />
-                  </a>
+            {/* Embedded Google Map (only rendered if coordinates exist) */}
+            {hasCoords && (() => {
+              const { latitude, longitude } = listing;
+              const gmSrc = `https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`;
+              const osmSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${longitude-0.006},${latitude-0.004},${longitude+0.006},${latitude+0.004}&layer=mapnik&marker=${latitude},${longitude}`;
+              return (
+                <div style={{ marginTop: '1rem', width: '100%', height: '228px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+                  <iframe
+                    key={gmSrc}
+                    src={gmSrc}
+                    width="100%"
+                    height={195}
+                    style={{ border: 0, display: 'block', flex: '0 0 195px' }}
+                    allowFullScreen=""
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    title="Listing Location Map"
+                    onError={(e) => { e.target.src = osmSrc; }}
+                  />
+                  <div style={{ height: '33px', flex: '0 0 33px', background: '#f8fafc', fontSize: '0.8rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border)' }}>
+                    <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      فتح الموقع في خرائط جوجل <MapPin style={{ width: 14, height: 14 }} />
+                    </a>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Description */}
