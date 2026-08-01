@@ -1181,14 +1181,6 @@ export default function App() {
 
   return (
     <div>
-      {/* Toast Alert Banner */}
-      {toast && (
-        <div className="alert-toast">
-          <span><Bell style={{ width: 18, height: 18 }} /></span>
-          <span>{toast}</span>
-        </div>
-      )}
-
       {/* Navigation Header */}
       <header className="navbar">
         <a href="#/browse" className="logo" onClick={(e) => { e.preventDefault(); navigateTo('#/browse'); }}>
