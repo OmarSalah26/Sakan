@@ -3,7 +3,8 @@ import { useParams, useNavigate, Link } from '../router/Router';
 import { 
   MapPin, Bed, FileText, Shield, Zap, Plug, Share2, 
   User, Briefcase, Home, Star, MessageSquare, Phone, 
-  Calendar, PenTool, Send, AlertTriangle, ArrowRight, Check, CheckCircle, Copy
+  Calendar, PenTool, Send, AlertTriangle, ArrowRight, Check, CheckCircle, Copy,
+  ChevronLeft, ChevronRight, Play, ShieldCheck
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -55,7 +56,7 @@ export default function ListingDetailPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
-  const [detailRatingTab, setDetailRatingTab] = useState('property'); // 'property' | 'advertiser'
+  const [detailRatingTab, setDetailRatingTab] = useState('property');
   const [showRatingForm, setShowRatingForm] = useState(false);
   const [showComplaintForm, setShowComplaintForm] = useState(false);
 
@@ -80,7 +81,6 @@ export default function ListingDetailPage() {
       }
       const json = await res.json();
       setData(json);
-      // Track view count fire-and-forget
       fetch(`${API_BASE}/listings/${id}/view`, { method: 'POST' }).catch(() => {});
     } catch {
       showToast('خطأ في الاتصال بالخادم');
@@ -89,13 +89,12 @@ export default function ListingDetailPage() {
     }
   };
 
-  // Initialize Read-Only Leaflet Map if coordinates exist
   useEffect(() => {
     if (!data || !data.listing) return;
     const { latitude, longitude } = data.listing;
     if (latitude == null || longitude == null) return;
     if (!mapContainerRef.current) return;
-    if (mapInstanceRef.current) return; // already init
+    if (mapInstanceRef.current) return;
 
     const L = window.L;
     if (!L) return;
@@ -146,7 +145,7 @@ export default function ListingDetailPage() {
       } catch {}
     } else {
       navigator.clipboard.writeText(url);
-      showToast('تم نسخ رابط العقار وتفاصيله بنجاح! 📋');
+      showToast('تم نسخ رابط العقار وتفاصيله بنجاح');
     }
   };
 
@@ -280,17 +279,21 @@ export default function ListingDetailPage() {
             />
           )}
 
-          {/* Controls */}
+          {/* Controls with Lucide icons */}
           {allMedia.length > 1 && (
             <>
               <button 
                 onClick={() => setCarouselIndex(prev => prev === 0 ? allMedia.length - 1 : prev - 1)}
-                style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >▶</button>
+                style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <ChevronRight style={{ width: 22, height: 22 }} />
+              </button>
               <button 
                 onClick={() => setCarouselIndex(prev => prev === allMedia.length - 1 ? 0 : prev + 1)}
-                style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >◀</button>
+                style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <ChevronLeft style={{ width: 22, height: 22 }} />
+              </button>
             </>
           )}
 
@@ -319,7 +322,9 @@ export default function ListingDetailPage() {
                   onClick={() => setCarouselIndex(globalIdx)}
                   style={{ border: carouselIndex === globalIdx ? '2px solid var(--primary)' : '2px solid transparent', borderRadius: '8px', overflow: 'hidden', padding: 0, cursor: 'pointer', flexShrink: 0, width: '70px', height: '50px', position: 'relative', background: '#000' }}
                 >
-                  <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1rem' }}>▶</span>
+                  <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                    <Play style={{ width: 20, height: 20, fill: '#fff' }} />
+                  </span>
                 </button>
               );
             })}
@@ -399,15 +404,15 @@ export default function ListingDetailPage() {
                     </strong>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
                     {c.commission != null && (
                       <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
                         عمولة: {c.commission} ج.م
                       </span>
                     )}
                     {c.insurance_price ? (
-                      <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
-                        تأمين: {c.insurance_price} ج.م
+                      <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                        <Shield style={{ width: 13, height: 13 }} /> تأمين: {c.insurance_price} ج.م
                       </span>
                     ) : (
                       <span style={{ background: '#f1f5f9', color: '#475569', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
@@ -415,12 +420,12 @@ export default function ListingDetailPage() {
                       </span>
                     )}
                     {c.services_inclusive ? (
-                      <span style={{ background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
-                        ⚡ شامل الخدمات (مياه/كهرباء/إنترنت)
+                      <span style={{ background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <Zap style={{ width: 13, height: 13 }} /> شامل الخدمات (مياه/كهرباء/إنترنت)
                       </span>
                     ) : (
-                      <span style={{ background: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
-                        🔌 الخدمات غير مشمولة
+                      <span style={{ background: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <Plug style={{ width: 13, height: 13 }} /> الخدمات غير مشمولة
                       </span>
                     )}
                   </div>
@@ -437,7 +442,7 @@ export default function ListingDetailPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
               <span style={{ fontWeight: 600, color: 'var(--text-dark)', fontSize: '0.95rem' }}>{listing.address}</span>
               <button 
-                onClick={() => { navigator.clipboard.writeText(listing.address); showToast('تم نسخ العنوان 📋'); }}
+                onClick={() => { navigator.clipboard.writeText(listing.address); showToast('تم نسخ العنوان'); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontWeight: 600, fontSize: '0.8rem' }}
               >
                 <Copy style={{ width: 14, height: 14 }} /> نسخ
@@ -495,8 +500,8 @@ export default function ListingDetailPage() {
                     {advertiser.account_type === 'broker' ? 'سمسار عقاري' : 'مالك مباشر'}
                   </span>
                   {advertiser.verified_by_sakan && (
-                    <span style={{ fontSize: '0.75rem', background: '#dbeafe', color: '#1e40af', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
-                      ✓ موثق
+                    <span style={{ fontSize: '0.75rem', background: '#dbeafe', color: '#1e40af', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                      <ShieldCheck style={{ width: 13, height: 13 }} /> موثق
                     </span>
                   )}
                 </div>
@@ -511,9 +516,9 @@ export default function ListingDetailPage() {
             {/* View Full Profile Link */}
             <Link 
               to={`/users/${advertiser.id}`} 
-              style={{ display: 'block', textAlign: 'center', background: '#f8fafc', border: '1px solid var(--border)', padding: '0.5rem', borderRadius: '8px', color: 'var(--primary)', fontWeight: 600, fontSize: '0.85rem', textDecoration: 'none', marginBottom: '1.25rem' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: '#f8fafc', border: '1px solid var(--border)', padding: '0.55rem', borderRadius: '8px', color: 'var(--primary)', fontWeight: 600, fontSize: '0.85rem', textDecoration: 'none', marginBottom: '1.25rem' }}
             >
-              عرض الملف الشخصي للمعلن 👤
+              <User style={{ width: 14, height: 14 }} /> عرض الملف الشخصي للمعلن
             </Link>
 
             {/* CTAs */}
@@ -551,13 +556,13 @@ export default function ListingDetailPage() {
             <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق سكنية داخلية</h4>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
               {listing.amenities?.filter(a => INDOOR_AMENITIES.includes(a)).map(amen => (
-                <span key={amen} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                  🏠 {amen}
+                <span key={amen} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                  {amen}
                 </span>
               ))}
               {listing.amenities?.filter(a => !INDOOR_AMENITIES.includes(a) && !OUTDOOR_AMENITIES.includes(a)).map(amen => (
-                <span key={amen} style={{ background: '#f8fafc', color: '#475569', border: '1px solid var(--border)', padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                  ✨ {amen}
+                <span key={amen} style={{ background: '#f8fafc', color: '#475569', border: '1px solid var(--border)', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                  {amen}
                 </span>
               ))}
             </div>
@@ -567,8 +572,8 @@ export default function ListingDetailPage() {
             <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق وخدمات مجاورة</h4>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
               {listing.amenities?.filter(a => OUTDOOR_AMENITIES.includes(a)).map(amen => (
-                <span key={amen} style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                  📍 {amen}
+                <span key={amen} style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                  {amen}
                 </span>
               ))}
             </div>
