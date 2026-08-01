@@ -1,0 +1,740 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, Link } from '../router/Router';
+import { 
+  MapPin, Bed, FileText, Shield, Zap, Plug, Share2, 
+  User, Briefcase, Home, Star, MessageSquare, Phone, 
+  Calendar, PenTool, Send, AlertTriangle, ArrowRight, Check, CheckCircle, Copy
+} from 'lucide-react';
+import { useApp } from '../context/AppContext';
+
+const API_BASE = '/api';
+
+function formatImageUrl(url) {
+  if (!url) return "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
+  if (typeof url !== 'string') return url;
+
+  let cleanUrl = url.trim();
+  cleanUrl = cleanUrl.replace(/^http:\/\/(127\.0\.0\.1|localhost):(8000|3000)/, '');
+
+  if (cleanUrl.startsWith('/static/') || cleanUrl.startsWith('/media/')) {
+    return cleanUrl;
+  }
+  if (cleanUrl.startsWith('static/') || cleanUrl.startsWith('media/')) {
+    return `/${cleanUrl}`;
+  }
+  return cleanUrl;
+}
+
+function getTimeAgo(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffTime = Math.abs(now - date);
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return 'اليوم';
+  if (diffDays === 1) return 'أمس';
+  if (diffDays <= 10) return `منذ ${diffDays} أيام`;
+  return `منذ ${diffDays} يوماً`;
+}
+
+const INDOOR_AMENITIES = [
+  "واي فاي مجاني", "تكييف", "مراوح", "سخان مياه", "ثلاجة", 
+  "غسالة", "بوتاجاز / ميكروويف", "فلتر مياه", "سرير إضافي", "مكتب للمذاكرة", "دولاب ملابس"
+];
+
+const OUTDOOR_AMENITIES = [
+  "قريب من الجامعة", "قريب من المواصلات العامة", "سوبر ماركت", 
+  "مطاعم", "كافيهات", "صيدلية", "عيادة طبية", "جيم (Gym)", "ماكينة صراف آلي (ATM)"
+];
+
+export default function ListingDetailPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user, showToast } = useApp();
+
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [detailRatingTab, setDetailRatingTab] = useState('property'); // 'property' | 'advertiser'
+  const [showRatingForm, setShowRatingForm] = useState(false);
+  const [showComplaintForm, setShowComplaintForm] = useState(false);
+
+  const [ratingInput, setRatingInput] = useState({ star_count: 5, review_text: '', photo_urls: [] });
+  const [complaintInput, setComplaintInput] = useState({ violation_type: 'السعر المطلوب أعلى من المعلن', description: '', evidence_urls: [] });
+
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+
+  useEffect(() => {
+    fetchListingDetail();
+  }, [id]);
+
+  const fetchListingDetail = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/listings/${id}`);
+      if (!res.ok) {
+        showToast('تعذر تحميل تفاصيل العقار السكني');
+        navigate('/');
+        return;
+      }
+      const json = await res.json();
+      setData(json);
+      // Track view count fire-and-forget
+      fetch(`${API_BASE}/listings/${id}/view`, { method: 'POST' }).catch(() => {});
+    } catch {
+      showToast('خطأ في الاتصال بالخادم');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initialize Read-Only Leaflet Map if coordinates exist
+  useEffect(() => {
+    if (!data || !data.listing) return;
+    const { latitude, longitude } = data.listing;
+    if (latitude == null || longitude == null) return;
+    if (!mapContainerRef.current) return;
+    if (mapInstanceRef.current) return; // already init
+
+    const L = window.L;
+    if (!L) return;
+
+    const map = L.map(mapContainerRef.current, { dragging: false, zoomControl: false, scrollWheelZoom: false }).setView([latitude, longitude], 16);
+    mapInstanceRef.current = map;
+
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19
+    }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19
+    }).addTo(map);
+
+    L.marker([latitude, longitude]).addTo(map);
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [data]);
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" style={{ width: '40px', height: '40px', border: '4px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 1rem' }} />
+          <p style={{ color: 'var(--text-muted)', fontWeight: 600 }}>جاري تحميل تفاصيل السكن...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || !data.listing) return null;
+
+  const { listing, advertiser, property_ratings = [], advertiser_ratings = [] } = data;
+  const allMedia = [...(listing.photo_urls || []), ...(listing.video_urls || [])];
+  const isNormalUser = !user || user.account_type === 'student';
+
+  const handleShare = async () => {
+    const url = window.location.href;
+    const title = listing.title;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, url });
+      } catch {}
+    } else {
+      navigator.clipboard.writeText(url);
+      showToast('تم نسخ رابط العقار وتفاصيله بنجاح! 📋');
+    }
+  };
+
+  const handleRatingSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      showToast('يرجى تسجيل الدخول أولاً لإضافة تقييم');
+      return;
+    }
+    const targetType = detailRatingTab === 'property' ? 'property' : 'advertiser';
+    if (targetType === 'advertiser' && ratingInput.review_text.length < 20) {
+      showToast('تعليق تقييم المعلن يجب ألا يقل عن ٢٠ حرفاً');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/ratings/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listing_id: listing.id,
+          student_id: user.id,
+          target_type: targetType,
+          star_count: ratingInput.star_count,
+          review_text: ratingInput.review_text,
+          photo_urls: ratingInput.photo_urls
+        })
+      });
+      if (res.ok) {
+        showToast('تم إرسال تقييمك بنجاح');
+        setShowRatingForm(false);
+        setRatingInput({ star_count: 5, review_text: '', photo_urls: [] });
+        fetchListingDetail();
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'فشل إرسال التقييم');
+      }
+    } catch {
+      showToast('خطأ في شبكة الاتصال');
+    }
+  };
+
+  const handleComplaintSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      showToast('يرجى تسجيل الدخول أولاً لتقديم بلاغ');
+      return;
+    }
+    if (complaintInput.description.length < 20) {
+      showToast('تفاصيل الشكوى يجب ألا تقل عن ٢٠ حرفاً');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/complaints`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listing_id: listing.id,
+          student_id: user.id,
+          violation_type: complaintInput.violation_type,
+          description: complaintInput.description,
+          evidence_urls: complaintInput.evidence_urls
+        })
+      });
+      if (res.ok) {
+        showToast('تم إرسال البلاغ لمشرفي المنصة للتحقيق');
+        setShowComplaintForm(false);
+        setComplaintInput({ violation_type: 'السعر المطلوب أعلى من المعلن', description: '', evidence_urls: [] });
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'فشل إرسال البلاغ');
+      }
+    } catch {
+      showToast('خطأ في شبكة الاتصال');
+    }
+  };
+
+  const hasCoords = listing.latitude != null && listing.longitude != null;
+  const googleMapsLink = hasCoords
+    ? `https://www.google.com/maps?q=${listing.latitude},${listing.longitude}`
+    : `https://www.google.com/maps/search/${encodeURIComponent(listing.address || listing.city)}`;
+
+  return (
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem 1rem' }}>
+      
+      {/* ─── Top Bar: Breadcrumb & Actions ─── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+          <button 
+            onClick={() => navigate('/')} 
+            style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: 'var(--primary)', fontWeight: 600, fontSize: '0.875rem', padding: 0 }}
+          >
+            <ArrowRight style={{ width: 18, height: 18 }} /> العودة للرئيسية
+          </button>
+          <span>/</span>
+          <span>{listing.governorate}</span>
+          <span>/</span>
+          <span>{listing.city}</span>
+        </div>
+
+        <button 
+          onClick={handleShare}
+          className="btn-outline"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem' }}
+        >
+          <Share2 style={{ width: 16, height: 16 }} /> مشاركة السكن
+        </button>
+      </div>
+
+      {/* ─── Hero Gallery Section ─── */}
+      <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', overflow: 'hidden', marginBottom: '1.5rem', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+        <div style={{ position: 'relative', width: '100%', height: '420px', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {allMedia.length > 0 ? (
+            carouselIndex < (listing.photo_urls?.length || 0) ? (
+              <img 
+                src={formatImageUrl(listing.photo_urls[carouselIndex])} 
+                alt={listing.title} 
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            ) : (
+              <video 
+                src={formatImageUrl(listing.video_urls[carouselIndex - (listing.photo_urls?.length || 0)])} 
+                controls 
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            )
+          ) : (
+            <img 
+              src="https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80" 
+              alt="placeholder" 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          )}
+
+          {/* Controls */}
+          {allMedia.length > 1 && (
+            <>
+              <button 
+                onClick={() => setCarouselIndex(prev => prev === 0 ? allMedia.length - 1 : prev - 1)}
+                style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >▶</button>
+              <button 
+                onClick={() => setCarouselIndex(prev => prev === allMedia.length - 1 ? 0 : prev + 1)}
+                style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >◀</button>
+            </>
+          )}
+
+          <span style={{ position: 'absolute', bottom: '16px', left: '16px', background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600 }}>
+            {carouselIndex + 1} / {allMedia.length || 1} وسائط
+          </span>
+        </div>
+
+        {/* Thumbnails strip */}
+        {allMedia.length > 1 && (
+          <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem', overflowX: 'auto', background: '#f8fafc', borderTop: '1px solid var(--border)' }}>
+            {listing.photo_urls?.map((photo, idx) => (
+              <button 
+                key={`photo-${idx}`}
+                onClick={() => setCarouselIndex(idx)}
+                style={{ border: carouselIndex === idx ? '2px solid var(--primary)' : '2px solid transparent', borderRadius: '8px', overflow: 'hidden', padding: 0, cursor: 'pointer', flexShrink: 0, width: '70px', height: '50px' }}
+              >
+                <img src={formatImageUrl(photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </button>
+            ))}
+            {listing.video_urls?.map((video, idx) => {
+              const globalIdx = (listing.photo_urls?.length || 0) + idx;
+              return (
+                <button 
+                  key={`video-${idx}`}
+                  onClick={() => setCarouselIndex(globalIdx)}
+                  style={{ border: carouselIndex === globalIdx ? '2px solid var(--primary)' : '2px solid transparent', borderRadius: '8px', overflow: 'hidden', padding: 0, cursor: 'pointer', flexShrink: 0, width: '70px', height: '50px', position: 'relative', background: '#000' }}
+                >
+                  <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1rem' }}>▶</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ─── Title & Quick Stats Section ─── */}
+      <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+          <span className={`badge-gender ${listing.gender === 'male' ? 'gender-male' : 'gender-female'}`} style={{ position: 'static' }}>
+            {listing.gender === 'male' ? 'طلاب (شباب)' : 'طالبات (بنات)'}
+          </span>
+          {listing.tier === 'premium' && (
+            <span style={{ fontSize: '0.75rem', background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.6rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+              <Star style={{ width: 14, height: 14, color: '#f59e0b', fill: '#f59e0b' }} /> إعلان مميز
+            </span>
+          )}
+        </div>
+
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-dark)', margin: '0.25rem 0 0.5rem' }}>{listing.title}</h1>
+        <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem', margin: 0 }}>
+          <MapPin style={{ width: 18, height: 18, color: 'var(--primary)' }} />
+          {listing.governorate}، {listing.city}، {listing.neighborhood}
+        </p>
+
+        {/* Quick Stats Pill Row */}
+        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+          <div style={{ background: '#f1f5f9', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Bed style={{ width: 16, height: 16, color: 'var(--primary)' }} />
+            {listing.available_beds} أسرة متاحة
+          </div>
+
+          {listing.min_lease_months && (
+            <div style={{ background: '#f1f5f9', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Calendar style={{ width: 16, height: 16, color: 'var(--primary)' }} />
+              حد أدنى للإيجار: {listing.min_lease_months} أشهر
+            </div>
+          )}
+
+          {listing.floor && (
+            <div style={{ background: '#f1f5f9', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Home style={{ width: 16, height: 16, color: 'var(--primary)' }} />
+              الدور: {listing.floor}
+            </div>
+          )}
+
+          {listing.created_at && (
+            <div style={{ background: '#f1f5f9', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Calendar style={{ width: 16, height: 16, color: 'var(--primary)' }} />
+              نُشر {getTimeAgo(listing.created_at)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Main Body: 2 Column Grid ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', marginBottom: '1.5rem' }}>
+        
+        {/* LEFT COLUMN (60%): Rooms, Address, Map, Description */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          
+          {/* Room Configurations */}
+          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+              فئات الغرف والأسعار المتاحة
+            </h3>
+            <div style={{ display: 'grid', gap: '0.85rem' }}>
+              {listing.room_configurations?.map((c, idx) => (
+                <div key={idx} style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>
+                      {c.room_type === 'single' ? 'غرفة فردية' : c.room_type === 'double' ? 'غرفة ثنائية' : c.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية'} ({c.count || 1} غرفة متوفرة)
+                    </span>
+                    <strong style={{ color: 'var(--primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                      {c.price_per_person} ج.م <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ شهرياً</span>
+                    </strong>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap' }}>
+                    {c.commission != null && (
+                      <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
+                        عمولة: {c.commission} ج.م
+                      </span>
+                    )}
+                    {c.insurance_price ? (
+                      <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
+                        تأمين: {c.insurance_price} ج.م
+                      </span>
+                    ) : (
+                      <span style={{ background: '#f1f5f9', color: '#475569', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
+                        بدون تأمين
+                      </span>
+                    )}
+                    {c.services_inclusive ? (
+                      <span style={{ background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
+                        ⚡ شامل الخدمات (مياه/كهرباء/إنترنت)
+                      </span>
+                    ) : (
+                      <span style={{ background: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
+                        🔌 الخدمات غير مشمولة
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Full Address */}
+          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+              العنوان بالتفصيل
+            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-dark)', fontSize: '0.95rem' }}>{listing.address}</span>
+              <button 
+                onClick={() => { navigator.clipboard.writeText(listing.address); showToast('تم نسخ العنوان 📋'); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontWeight: 600, fontSize: '0.8rem' }}
+              >
+                <Copy style={{ width: 14, height: 14 }} /> نسخ
+              </button>
+            </div>
+
+            {/* Read-Only Map */}
+            {hasCoords && (
+              <div style={{ marginTop: '1rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <div ref={mapContainerRef} style={{ width: '100%', height: '220px' }} />
+                <div style={{ background: '#f8fafc', padding: '0.5rem 1rem', textAlign: 'center', borderTop: '1px solid var(--border)' }}>
+                  <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.85rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                    فتح الموقع في خرائط جوجل <MapPin style={{ width: 14, height: 14 }} />
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Description */}
+          {listing.description && (
+            <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                وصف السكن
+              </h3>
+              <p style={{ whiteSpace: 'pre-line', color: '#475569', lineHeight: 1.7, fontSize: '0.95rem', margin: 0 }}>
+                {listing.description}
+              </p>
+            </div>
+          )}
+
+        </div>
+
+        {/* RIGHT COLUMN (40%): Sticky Advertiser Card & CTAs */}
+        <div>
+          <div style={{ position: 'sticky', top: '1.5rem', background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+            
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+              معلومات المعلن والتواصل
+            </h3>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '1.25rem' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {advertiser.profile_photo_url ? (
+                  <img src={formatImageUrl(advertiser.profile_photo_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <User style={{ width: 28, height: 28, color: '#64748b' }} />
+                )}
+              </div>
+
+              <div>
+                <h4 style={{ fontWeight: 700, fontSize: '1.05rem', margin: '0 0 0.25rem' }}>{advertiser.name}</h4>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', background: '#f1f5f9', color: '#334155', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
+                    {advertiser.account_type === 'broker' ? 'سمسار عقاري' : 'مالك مباشر'}
+                  </span>
+                  {advertiser.verified_by_sakan && (
+                    <span style={{ fontSize: '0.75rem', background: '#dbeafe', color: '#1e40af', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
+                      ✓ موثق
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.35rem' }}>
+                  <span style={{ color: '#f59e0b', fontSize: '0.9rem' }}>★</span>
+                  <strong style={{ fontSize: '0.85rem' }}>{advertiser.avg_rating ? advertiser.avg_rating.toFixed(1) : 'جديد'}</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* View Full Profile Link */}
+            <Link 
+              to={`/users/${advertiser.id}`} 
+              style={{ display: 'block', textAlign: 'center', background: '#f8fafc', border: '1px solid var(--border)', padding: '0.5rem', borderRadius: '8px', color: 'var(--primary)', fontWeight: 600, fontSize: '0.85rem', textDecoration: 'none', marginBottom: '1.25rem' }}
+            >
+              عرض الملف الشخصي للمعلن 👤
+            </Link>
+
+            {/* CTAs */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <a 
+                href={`https://wa.me/${listing.contact_phone || advertiser.phone}?text=${encodeURIComponent(`مرحباً أستاذ ${advertiser.name}، أنا مهتم بوحدتك السكنية المعروضة على سكن: ${listing.title}`)}`}
+                target="_blank" 
+                rel="noreferrer"
+                style={{ background: '#22c55e', color: '#fff', textDecoration: 'none', padding: '0.75rem', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.95rem' }}
+              >
+                <MessageSquare style={{ width: 18, height: 18 }} /> تواصل عبر الواتساب
+              </a>
+
+              <a 
+                href={`tel:${listing.contact_phone || advertiser.phone}`}
+                style={{ background: 'var(--bg-muted)', color: 'var(--text-dark)', border: '1px solid var(--border)', textDecoration: 'none', padding: '0.75rem', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.95rem' }}
+              >
+                <Phone style={{ width: 18, height: 18 }} /> اتصال هاتفي ({listing.contact_phone || advertiser.phone})
+              </a>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      {/* ─── Amenities Section ─── */}
+      <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+          الخدمات والمرافق المتوفرة
+        </h3>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+          <div>
+            <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق سكنية داخلية</h4>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {listing.amenities?.filter(a => INDOOR_AMENITIES.includes(a)).map(amen => (
+                <span key={amen} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                  🏠 {amen}
+                </span>
+              ))}
+              {listing.amenities?.filter(a => !INDOOR_AMENITIES.includes(a) && !OUTDOOR_AMENITIES.includes(a)).map(amen => (
+                <span key={amen} style={{ background: '#f8fafc', color: '#475569', border: '1px solid var(--border)', padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                  ✨ {amen}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق وخدمات مجاورة</h4>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {listing.amenities?.filter(a => OUTDOOR_AMENITIES.includes(a)).map(amen => (
+                <span key={amen} style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.3rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                  📍 {amen}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Ratings & Trust Section ─── */}
+      <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
+        
+        {/* Rating Summary Bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+          <div>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 0.25rem' }}>التقييمات وآراء الطلاب</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>تقييمات حقيقية من الطلاب الذين أقاموا أو تواصلوا مع المعلن.</p>
+          </div>
+
+          {isNormalUser && (
+            <button 
+              onClick={() => setShowRatingForm(!showRatingForm)}
+              className="btn-primary"
+              style={{ fontSize: '0.85rem', padding: '0.45rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              <PenTool style={{ width: 14, height: 14 }} /> أضف تقييمك
+            </button>
+          )}
+        </div>
+
+        {/* Inline Rating Form */}
+        {showRatingForm && isNormalUser && (
+          <form onSubmit={handleRatingSubmit} style={{ background: '#f8fafc', border: '1px solid var(--border)', padding: '1.25rem', borderRadius: '12px', marginBottom: '1.5rem' }}>
+            <h4 style={{ fontWeight: 700, marginBottom: '0.75rem' }}>إضافة تقييم جديد لـ {detailRatingTab === 'property' ? 'العقار السكني' : 'أمانة وتواصل المعلن'}</h4>
+
+            <div className="form-group">
+              <label>التقييم بالنجوم</label>
+              <div style={{ display: 'flex', gap: '0.5rem', fontSize: '1.75rem', color: '#fbbf24', cursor: 'pointer' }}>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <span key={star} onClick={() => setRatingInput({ ...ratingInput, star_count: star })}>
+                    {ratingInput.star_count >= star ? '★' : '☆'}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>التعليق المكتوب</label>
+              <textarea 
+                rows="3" 
+                placeholder="اكتب تجربتك بالتفصيل..."
+                value={ratingInput.review_text}
+                onChange={(e) => setRatingInput({ ...ratingInput, review_text: e.target.value })}
+                required={detailRatingTab === 'advertiser'}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowRatingForm(false)}>إلغاء</button>
+              <button type="submit" className="btn-primary">نشر التقييم</button>
+            </div>
+          </form>
+        )}
+
+        {/* Tabs for Property vs Advertiser Ratings */}
+        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+          <button 
+            className={`tab-btn ${detailRatingTab === 'property' ? 'active' : ''}`}
+            onClick={() => setDetailRatingTab('property')}
+            style={{ padding: '0.5rem 1rem', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700, borderBottom: detailRatingTab === 'property' ? '2px solid var(--primary)' : '2px solid transparent', color: detailRatingTab === 'property' ? 'var(--primary)' : 'var(--text-muted)' }}
+          >
+            تقييمات العقار ({property_ratings.length})
+          </button>
+          <button 
+            className={`tab-btn ${detailRatingTab === 'advertiser' ? 'active' : ''}`}
+            onClick={() => setDetailRatingTab('advertiser')}
+            style={{ padding: '0.5rem 1rem', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700, borderBottom: detailRatingTab === 'advertiser' ? '2px solid var(--primary)' : '2px solid transparent', color: detailRatingTab === 'advertiser' ? 'var(--primary)' : 'var(--text-muted)' }}
+          >
+            تقييمات أمانة المعلن ({advertiser_ratings.length})
+          </button>
+        </div>
+
+        {/* Ratings List */}
+        <div>
+          {detailRatingTab === 'property' ? (
+            property_ratings.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1.5rem 0' }}>لا توجد تقييمات مسجلة لهذا السكن بعد.</p>
+            ) : (
+              property_ratings.map(r => (
+                <div key={r.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: '1rem', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <span style={{ color: '#f59e0b', fontWeight: 700 }}>{"★".repeat(r.star_count) + "☆".repeat(5 - r.star_count)}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
+                  </div>
+                  {r.review_text && <p style={{ color: '#334155', fontSize: '0.9rem', margin: 0 }}>{r.review_text}</p>}
+                </div>
+              ))
+            )
+          ) : (
+            advertiser_ratings.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1.5rem 0' }}>لا توجد تقييمات لأمانة المعلن بعد.</p>
+            ) : (
+              advertiser_ratings.map(r => (
+                <div key={r.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: '1rem', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <span style={{ color: '#f59e0b', fontWeight: 700 }}>{"★".repeat(r.star_count) + "☆".repeat(5 - r.star_count)}</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
+                  </div>
+                  <p style={{ color: '#334155', fontSize: '0.9rem', margin: 0 }}>{r.review_text}</p>
+                </div>
+              ))
+            )
+          )}
+        </div>
+
+        {/* Complaint Banner */}
+        {isNormalUser && (
+          <div style={{ marginTop: '1.5rem', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ fontSize: '0.875rem', color: '#92400e', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <AlertTriangle style={{ width: 18, height: 18, color: '#f59e0b' }} /> 
+              إذا خالف المعلن أي من التفاصيل المعلنة في السعر أو العمولة، قدّم شكوى وسنحقق فوراً.
+            </div>
+            <button 
+              onClick={() => setShowComplaintForm(!showComplaintForm)}
+              style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '0.4rem 0.85rem', borderRadius: '8px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}
+            >
+              تقديم شكوى
+            </button>
+          </div>
+        )}
+
+        {/* Inline Complaint Form */}
+        {showComplaintForm && isNormalUser && (
+          <form onSubmit={handleComplaintSubmit} style={{ marginTop: '1rem', background: '#fff1f2', border: '1px solid #fecdd3', padding: '1.25rem', borderRadius: '12px' }}>
+            <h4 style={{ fontWeight: 700, color: '#9f1239', marginBottom: '0.75rem' }}>تقديم بلاغ شكوى رسمي لمشرفي المنصة</h4>
+
+            <div className="form-group">
+              <label>نوع المخالفة المرتكبة</label>
+              <select value={complaintInput.violation_type} onChange={(e) => setComplaintInput({ ...complaintInput, violation_type: e.target.value })}>
+                <option value="السعر المطلوب أعلى من المعلن">السعر المطلوب أعلى من المعلن</option>
+                <option value="العمولة أعلى من المعلن">العمولة أعلى من المعلن</option>
+                <option value="تفاصيل السكن لا تطابق الواقع">تفاصيل السكن لا تطابق الواقع</option>
+                <option value="أخرى">أخرى</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>تفاصيل الشكوى والواقعة (٢٠ حرف كحد أدنى)</label>
+              <textarea 
+                rows="3" 
+                placeholder="اشرح الواقعة بالتفصيل..."
+                value={complaintInput.description}
+                onChange={(e) => setComplaintInput({ ...complaintInput, description: e.target.value })}
+                required
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowComplaintForm(false)}>إلغاء</button>
+              <button type="submit" style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '0.45rem 1rem', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
+                إرسال البلاغ للتحقيق
+              </button>
+            </div>
+          </form>
+        )}
+
+      </div>
+
+    </div>
+  );
+}

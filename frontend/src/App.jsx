@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useNavigate } from './router/Router';
+import { useApp } from './context/AppContext';
 
 import { 
   Bell, BookOpen, Plus, Search, MapPin, CheckCircle, ShieldCheck, 
@@ -300,11 +302,13 @@ const OUTDOOR_AMENITIES = [
 ];
 
 export default function App() {
+  const { user, setUser, showToast } = useApp();
+  const navigate = useNavigate();
+
   const [tab, setTab] = useState('browse'); // 'browse' | 'dashboard' | 'admin' | 'saved' | 'guide' | 'about' | 'terms' | 'profile'
   const [profileUserId, setProfileUserId] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [listings, setListings] = useState([]);
-  const [toast, setToast] = useState('');
   
   // Bulk Add state
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -358,7 +362,6 @@ export default function App() {
   };
   
   // Auth state
-  const [user, setUser] = useState(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('register'); // 'register' | 'login'
   const [authStep, setAuthStep] = useState('phone'); // 'phone' | 'otp' | 'details'
@@ -583,10 +586,7 @@ export default function App() {
     }
   };
 
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3500);
-  };
+
 
   // Role verification tags
   const isBroker = user && (user.account_type === 'broker' || user.account_type === 'owner');
@@ -753,26 +753,7 @@ export default function App() {
     }
   };
 
-  // --- Listing Details modal ---
-  const openListingDetail = async (listingId) => {
-    try {
-      const res = await fetch(`${API_BASE}/listings/${listingId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedListingDetail(data);
-        // Fire-and-forget view count increment
-        fetch(`${API_BASE}/listings/${listingId}/view`, { method: 'POST' }).catch(() => {});
-        setCarouselIndex(0);
-        setShowRatingForm(false);
-        setShowComplaintForm(false);
-        setRatingInput({ star_count: 5, review_text: '', photo_urls: [] });
-      } else {
-        showToast("فشل تحميل تفاصيل العقار");
-      }
-    } catch (err) {
-      showToast("خطأ في الاتصال بالخادم");
-    }
-  };
+
 
   // --- Create Listing wizard flow ---
   const handleOpenCreateFlow = () => {
@@ -1535,7 +1516,7 @@ export default function App() {
                         <article 
                           key={item.id} 
                           className="listing-card"
-                          onClick={() => openListingDetail(item.id)}
+                          onClick={() => navigate(`/listings/${item.id}`)}
                         >
                           <div className="card-img-wrapper">
                             <img className="card-img" src={coverImage} alt={item.title} />
@@ -2151,7 +2132,7 @@ export default function App() {
                     ? formatImageUrl(item.photo_urls[0])
                     : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
                   return (
-                    <article key={item.id} className="listing-card" onClick={() => openListingDetail(item.id)}>
+                    <article key={item.id} className="listing-card" onClick={() => navigate(`/listings/${item.id}`)}>
                       <div className="card-img-wrapper">
                         <img className="card-img" src={coverImage} alt={item.title} />
                         <button
@@ -2376,7 +2357,7 @@ export default function App() {
                   ) : (
                     <div className="listings-grid">
                       {profileData.listings.map(item => (
-                        <article key={item.id} className="listing-card" onClick={() => openListingDetail(item.id)}>
+                        <article key={item.id} className="listing-card" onClick={() => navigate(`/listings/${item.id}`)}>
                           <div className="card-img-wrapper">
                             <img className="card-img" src={formatImageUrl(item.photo_urls?.[0])} alt={item.title} />
                           </div>
@@ -3193,422 +3174,7 @@ export default function App() {
         </div>
       )}
 
-      {/* --- DETAILED LISTING MODAL --- */}
-      {selectedListingDetail && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <div>
-                <span className={`badge-gender ${selectedListingDetail.listing.gender === 'male' ? 'gender-male' : 'gender-female'}`} style={{ position: 'static', display: 'inline-flex', marginBottom: '0.25rem' }}>
-                  {selectedListingDetail.listing.gender === 'male' ? 'سكن طلاب' : 'سكن طالبات'}
-                </span>
-                <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{selectedListingDetail.listing.title}</h2>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {selectedListingDetail.listing.governorate}، {selectedListingDetail.listing.city}، {selectedListingDetail.listing.neighborhood}</p>
-              </div>
-              <button className="modal-close" onClick={() => setSelectedListingDetail(null)}>×</button>
-            </div>
 
-            <div className="modal-body">
-              {/* Media Carousel */}
-              <div className="media-carousel">
-                <div className="carousel-slide-wrapper">
-                  <div className="carousel-slide">
-                    {carouselIndex < selectedListingDetail.listing.photo_urls.length ? (
-                      <img src={formatImageUrl(selectedListingDetail.listing.photo_urls[carouselIndex])} alt="" />
-                    ) : (
-                      <video src={selectedListingDetail.listing.video_urls[carouselIndex - selectedListingDetail.listing.photo_urls.length]} controls />
-                    )}
-                  </div>
-                </div>
-
-                {(selectedListingDetail.listing.photo_urls.length + selectedListingDetail.listing.video_urls.length) > 1 && (
-                  <>
-                    <button className="carousel-btn carousel-btn-prev" onClick={() => setCarouselIndex(prev => prev === 0 ? selectedListingDetail.listing.photo_urls.length + selectedListingDetail.listing.video_urls.length - 1 : prev - 1)}>▶</button>
-                    <button className="carousel-btn carousel-btn-next" onClick={() => setCarouselIndex(prev => prev === selectedListingDetail.listing.photo_urls.length + selectedListingDetail.listing.video_urls.length - 1 ? 0 : prev + 1)}>◀</button>
-                  </>
-                )}
-
-                <span className="carousel-counter">
-                  {carouselIndex + 1} / {selectedListingDetail.listing.photo_urls.length + selectedListingDetail.listing.video_urls.length} (وسائط)
-                </span>
-              </div>
-
-              {/* Informational columns */}
-              <div className="grid-cols-2">
-                {/* 1. Unit Info */}
-                <div className="details-section">
-                  <h3 className="details-title">تفاصيل الإقامة</h3>
-                  <p><span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>•</span> <strong>العنوان بالتفصيل:</strong> {formatAddress(selectedListingDetail.listing)}</p>
-                  <p><span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>•</span> <strong>عدد الأسرّة المتوفرة:</strong> {selectedListingDetail.listing.available_beds} أسرة</p>
-                  {(() => {
-                    const { latitude, longitude, address, city } = selectedListingDetail.listing;
-                    const hasCoords = latitude != null && longitude != null;
-                    const gmSrc = hasCoords
-                      ? `https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`
-                      : null;
-                    const osmSrc = hasCoords
-                      ? `https://www.openstreetmap.org/export/embed.html?bbox=${longitude-0.006},${latitude-0.004},${longitude+0.006},${latitude+0.004}&layer=mapnik&marker=${latitude},${longitude}`
-                      : `https://www.openstreetmap.org/export/embed.html?query=${encodeURIComponent((address || '') + ' ' + city)}`;
-                    const googleMapsLink = hasCoords
-                      ? `https://www.google.com/maps?q=${latitude},${longitude}`
-                      : `https://www.google.com/maps/search/${encodeURIComponent((address || '') + ' ' + city)}`;
-                    return (
-                      <div style={{ marginTop: '1rem', width: '100%', height: '228px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
-                        <iframe
-                          key={gmSrc || osmSrc}
-                          src={gmSrc || osmSrc}
-                          width="100%"
-                          height={200}
-                          style={{ border: 0, display: 'block', flex: '0 0 200px' }}
-                          allowFullScreen=""
-                          loading="lazy"
-                          referrerPolicy="no-referrer-when-downgrade"
-                          title="Map"
-                          onError={(e) => { if (gmSrc) e.target.src = osmSrc; }}
-                        />
-                        <div style={{ height: '28px', flex: '0 0 28px', background: '#f8fafc', fontSize: '0.75rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border-color)' }}>
-                          <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>فتح في خرائط جوجل <MapPin style={{ width: 14, height: 14 }} /></span></a>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  
-                  <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
-                    <strong>فئات الغرف والأسعار المتاحة:</strong>
-                    <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.5rem' }}>
-                      {selectedListingDetail.listing.room_configurations?.map((c, idx) => (
-                        <div key={idx} style={{ display: 'flex', flexDirection: 'column', background: '#f8fafc', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                            <span style={{ fontWeight: 600 }}>{c.room_type === 'single' ? 'غرفة فردية' : c.room_type === 'double' ? 'غرفة ثنائية' : c.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية'} ({c.count || 1} متاح)</span>
-                            <strong style={{ color: 'var(--primary)' }}>{c.price_per_person} ج.م / شهر</strong>
-                          </div>
-                          
-                          <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                            {c.commission && (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                                <FileText style={{ width: 14, height: 14 }} /> عمولة: {c.commission} ج.م
-                              </span>
-                            )}
-                            {c.insurance_price ? (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                                <Shield style={{ width: 14, height: 14 }} /> تأمين: {c.insurance_price} ج.م
-                              </span>
-                            ) : (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                                <Shield style={{ width: 14, height: 14 }} /> بدون تأمين
-                              </span>
-                            )}
-                            {c.services_inclusive ? (
-                              <span style={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                                <Zap style={{ width: 14, height: 14 }} /> شامل الخدمات
-                              </span>
-                            ) : (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                                <Plug style={{ width: 14, height: 14 }} /> الخدمات غير مشمولة
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Advertiser card */}
-                <div className="details-section">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 className="details-title" style={{ margin: 0 }}>معلومات المعلن</h3>
-                    <button 
-                      className="btn-outline" 
-                      style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
-                      onClick={() => {
-                        const l = selectedListingDetail.listing;
-                        const a = selectedListingDetail.advertiser;
-                        const configs = l.room_configurations || [];
-                        const hasInsurance = configs.some(c => c.insurance_price && c.insurance_price > 0);
-                        const servicesInclusive = configs.some(c => c.services_inclusive);
-                        const totalBeds = configs.reduce((sum, c) => {
-                          const mult = c.room_type === 'double' ? 2 : c.room_type === 'triple' ? 3 : 4;
-                          return sum + (c.count || 1) * (c.room_type === 'single' ? 1 : mult);
-                        }, 0);
-                        const desc = l.description ? l.description.substring(0, 100) + (l.description.length > 100 ? '...' : '') : '';
-                        const genderText = l.gender === 'male' ? 'طلاب (شباب)' : 'طالبات (بنات)';
-                        const parts = [
-                          `${l.title} — ${genderText}`,
-                          `${l.governorate}، ${l.city}، ${l.neighborhood}`,
-                          desc ? desc : null,
-                          `${l.available_beds} سرير متاح من أصل ${totalBeds}`,
-                          hasInsurance ? 'يوجد تأمين' : 'بدون تأمين',
-                          servicesInclusive ? 'شامل الخدمات' : 'غير شامل الخدمات',
-                          '',
-                          `شاهد التفاصيل الكاملة والأسعار على سكن:`,
-                          window.location.href
-                        ].filter(p => p !== null);
-                        navigator.clipboard.writeText(parts.join('\n'));
-                        alert("تم نسخ رابط العقار وتفاصيله بنجاح!");
-                      }}
-                    >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Share2 style={{ width: 14, height: 14 }} /> مشاركة السكن</span>
-                    </button>
-                  </div>
-                  <div className="advertiser-profile-card" style={{ marginTop: '1rem' }}>
-                    <div className="avatar-wrapper">
-                      {selectedListingDetail.advertiser.profile_photo_url ? (
-                        <img src={selectedListingDetail.advertiser.profile_photo_url} className="avatar-img" alt="" />
-                      ) : (
-                        <span style={{ fontSize: '1.75rem' }}><User style={{ width: 18, height: 18, display: 'inline' }} /></span>
-                      )}
-                    </div>
-                    <div>
-                      <h4 style={{ fontWeight: 700 }}>{selectedListingDetail.advertiser.name}</h4>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', fontWeight: 600, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <span style={{ background: 'var(--bg-muted)', padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-full)' }}>
-                          {selectedListingDetail.advertiser.account_type === 'broker' ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Briefcase style={{ width: 14, height: 14 }} /> سمسار عقاري</span>
-                          ) : (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Home style={{ width: 14, height: 14 }} /> مالك مباشر</span>
-                          )}
-                        </span>
-                        {selectedListingDetail.listing.tier === 'premium' && <span style={{ color: 'var(--premium-gold)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Star style={{ width: 14, height: 14, color: '#f59e0b' }} /> معلن مميز</span>}
-                      </p>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
-                        <span className="rating-stars">{"★".repeat(Math.round(selectedListingDetail.advertiser.avg_rating || 0)) + "☆".repeat(5 - Math.round(selectedListingDetail.advertiser.avg_rating || 0))}</span>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>({selectedListingDetail.advertiser.avg_rating.toFixed(1)})</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                    <a 
-                      className="btn btn-primary" 
-                      style={{ textDecoration: 'none', backgroundColor: '#22c55e', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
-                      href={`https://wa.me/${selectedListingDetail.advertiser.phone}?text=${encodeURIComponent(`مرحباً أستاذ ${selectedListingDetail.advertiser.name}، أنا مهتم بوحدتك السكنية المعروضة على منصة سكن في حي ${selectedListingDetail.listing.neighborhood}`)}`}
-                      target="_blank" 
-                      rel="noreferrer"
-                    >
-                      <MessageSquare style={{ width: 16, height: 16 }} /> تواصل واتساب
-                    </a>
-                    
-                    <a 
-                      className="btn btn-secondary" 
-                      style={{ textDecoration: 'none', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
-                      href={`tel:${selectedListingDetail.advertiser.phone}`}
-                    >
-                      <Phone style={{ width: 16, height: 16 }} /> اتصال هاتفي
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              {/* Description */}
-              <div className="details-section">
-                <h3 className="details-title">الوصف</h3>
-                <p style={{ whiteSpace: 'pre-line', color: 'var(--text-muted)' }}>{selectedListingDetail.listing.description}</p>
-              </div>
-
-              {/* Category divided Amenities */}
-              <div className="details-section">
-                <h3 className="details-title">الخدمات والمرافق المتوفرة</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-                  <div>
-                    <h5 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem' }}>مرافق سكنية داخلية</h5>
-                    <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-                      {selectedListingDetail.listing.amenities.filter(a => INDOOR_AMENITIES.some(i => i.name === a)).map(amen => (
-                        <span key={amen} className="amenity-badge amenity-essential">{amen}</span>
-                      ))}
-                      {selectedListingDetail.listing.amenities.filter(a => !INDOOR_AMENITIES.some(i => i.name === a) && !OUTDOOR_AMENITIES.some(o => o.name === a)).map(amen => (
-                        <span key={amen} className="amenity-badge">{amen}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <h5 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem' }}>مرافق وخدمات مجاورة</h5>
-                    <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-                      {selectedListingDetail.listing.amenities.filter(a => OUTDOOR_AMENITIES.some(o => o.name === a)).map(amen => (
-                        <span key={amen} className="amenity-badge">{amen}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Complaint Banner - Only editable for normal users/students or guests */}
-              {(!user || isNormalUser) && (
-                <div className="complaint-banner">
-                  <div>
-                    <AlertTriangle style={{ width: 18, height: 18, display: 'inline', color: '#f59e0b', marginLeft: '0.4rem' }} /> إذا خالف المعلن أي من التفاصيل المعلنة في السعر أو العمولة، قدّم شكوى من خلال المنصة وسيتم اتخاذ الإجراءات اللازمة.
-                  </div>
-                  <button className="btn-danger" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={handleOpenComplaintForm}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تقديم شكوى <FileText style={{ width: 14, height: 14 }} /></span></button>
-                </div>
-              )}
-
-              {/* RATINGS SECTION */}
-              <div className="details-section">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <div className="tabs-header" style={{ marginBottom: 0 }}>
-                    <button className={`tab-btn ${detailRatingTab === 'property' ? 'active' : ''}`} onClick={() => setDetailRatingTab('property')}>تقييمات العقار السكني ({selectedListingDetail.property_ratings.length})</button>
-                    <button className={`tab-btn ${detailRatingTab === 'advertiser' ? 'active' : ''}`} onClick={() => setDetailRatingTab('advertiser')}>تقييمات أمانة المعلن ({selectedListingDetail.advertiser_ratings.length})</button>
-                  </div>
-                  
-                  {(!user || isNormalUser) ? (
-                    <button className="btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }} onClick={handleOpenRatingForm}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>أضف تقييمك <PenTool style={{ width: 14, height: 14 }} /></span></button>
-                  ) : (
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-light)', fontWeight: 600 }}>التقييمات والشكاوى متاحة للطلاب والمستخدمين العاديين فقط</span>
-                  )}
-                </div>
-
-                {/* Rating creation form overlay within listing */}
-                {showRatingForm && isNormalUser && (
-                  <form onSubmit={handleRatingSubmit} style={{ background: '#f8fafc', border: '1px solid var(--border-color)', padding: '1.25rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem' }}>
-                    <h4 style={{ fontWeight: 700, marginBottom: '0.75rem' }}>إضافة تقييم جديد لـ {detailRatingTab === 'property' ? 'العقار السكني' : 'أمانة وتواصل المعلن'}</h4>
-                    
-                    <div className="form-group">
-                      <label>التقييم بالنجوم</label>
-                      <div style={{ display: 'flex', gap: '0.5rem', fontSize: '1.5rem', color: '#fbbf24', cursor: 'pointer' }}>
-                        {[1, 2, 3, 4, 5].map(star => (
-                          <span key={star} onClick={() => setRatingInput({ ...ratingInput, star_count: star })}>
-                            {ratingInput.star_count >= star ? '★' : '☆'}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {detailRatingTab === 'property' && (
-                      <div className="form-group">
-                        <label>عبارات تقييم سريعة مقترحة لتقييمك</label>
-                        <div className="preset-tags-container">
-                          {getPresetOptions(ratingInput.star_count).map(tag => (
-                            <span 
-                              key={tag} 
-                              className="preset-tag"
-                              onClick={() => setRatingInput(prev => ({ ...prev, review_text: prev.review_text ? `${prev.review_text} - ${tag}` : tag }))}
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="form-group">
-                      <label>التعليق المكتوب {detailRatingTab === 'advertiser' && <span style={{ color: 'red' }}>(٢٠ حرف كحد أدنى)</span>}</label>
-                      <textarea 
-                        rows="3" 
-                        placeholder={detailRatingTab === 'advertiser' ? "اكتب تجربتك مع المعلن. اذكر السبب بوضوح." : "تفاصيل التقييم (اختياري)..."}
-                        value={ratingInput.review_text}
-                        onChange={(e) => setRatingInput({ ...ratingInput, review_text: e.target.value })}
-                        required={detailRatingTab === 'advertiser'}
-                      />
-                    </div>
-
-                    {detailRatingTab === 'property' && (
-                      <div className="form-group">
-                        <label>صور العقار المرفقة مع التقييم (اختياري - حتى ٥ صور)</label>
-                        <textarea 
-                          rows="2" 
-                          placeholder="ضع روابط الصور المرفقة (رابط واحد لكل سطر)..."
-                          value={ratingInput.photo_urls.join('\n')}
-                          onChange={(e) => setRatingInput({ ...ratingInput, photo_urls: e.target.value.split('\n').filter(Boolean) })}
-                        />
-                      </div>
-                    )}
-
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                      <button type="button" className="btn-secondary" onClick={() => setShowRatingForm(false)}>إلغاء</button>
-                      <button type="submit" className="btn-primary"><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>نشر التقييم فوراً <Send style={{ width: 16, height: 16 }} /></span></button>
-                    </div>
-                  </form>
-                )}
-
-                {/* Complaint Form Modal */}
-                {showComplaintForm && isNormalUser && (
-                  <form onSubmit={handleComplaintSubmit} style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '1.25rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem' }}>
-                    <h4 style={{ fontWeight: 700, color: '#b45309', marginBottom: '0.75rem' }}>تقديم بلاغ شكوى رسمي لمشرفي المنصة</h4>
-                    
-                    <div className="form-group">
-                      <label>نوع المخالفة المرتكبة</label>
-                      <select value={complaintInput.violation_type} onChange={(e) => setComplaintInput({ ...complaintInput, violation_type: e.target.value })}>
-                        <option value="السعر المطلوب أعلى من المعلن">السعر المطلوب أعلى من المعلن</option>
-                        <option value="العمولة أعلى من المعلن">العمولة أعلى من المعلن</option>
-                        <option value="تفاصيل السكن لا تطابق الواقع">تفاصيل السكن لا تطابق الواقع</option>
-                        <option value="أخرى">أخرى</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group">
-                      <label>تفاصيل الشكوى والواقعة (٢٠ حرف كحد أدنى للتوضيح)</label>
-                      <textarea 
-                        rows="3" 
-                        placeholder="اشرح الواقعة بالتفصيل لمساعدتنا في اتخاذ الإجراء المناسب..."
-                        value={complaintInput.description}
-                        onChange={(e) => setComplaintInput({ ...complaintInput, description: e.target.value })}
-                        required
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label>روابط لقطات شاشة إثبات الشكوى (اختياري - حتى ٣ لقطات)</label>
-                      <textarea 
-                        rows="2" 
-                        placeholder="روابط لقطات شاشة الإثبات (رابط واحد بكل سطر)..."
-                        value={complaintInput.evidence_urls.join('\n')}
-                        onChange={(e) => setComplaintInput({ ...complaintInput, evidence_urls: e.target.value.split('\n').filter(Boolean) })}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                      <button type="button" className="btn-secondary" onClick={() => setShowComplaintForm(false)}>إلغاء</button>
-                      <button type="submit" className="btn-danger"><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال البلاغ للتحقيق <AlertTriangle style={{ width: 16, height: 16 }} /></span></button>
-                    </div>
-                  </form>
-                )}
-
-                {/* Ratings list view */}
-                <div>
-                  {detailRatingTab === 'property' ? (
-                    selectedListingDetail.property_ratings.length === 0 ? (
-                      <p style={{ color: 'var(--text-light)', textAlign: 'center', padding: '1rem' }}>لا توجد تقييمات مسجلة لهذا السكن بعد.</p>
-                    ) : (
-                      selectedListingDetail.property_ratings.map(r => (
-                        <div key={r.id} className="rating-card">
-                          <div className="rating-card-header">
-                            <span className="rating-stars">{"★".repeat(r.star_count) + "☆".repeat(5 - r.star_count)}</span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}><Calendar style={{ width: 12, height: 12, display: 'inline' }} /> {new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
-                          </div>
-                          {r.review_text && <p className="rating-review-text">{r.review_text}</p>}
-                          {r.photo_urls && r.photo_urls.length > 0 && (
-                            <div className="rating-photos-row">
-                              {r.photo_urls.map((photo, idx) => (
-                                <img key={idx} className="rating-photo" src={photo} alt="" />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )
-                  ) : (
-                    selectedListingDetail.advertiser_ratings.length === 0 ? (
-                      <p style={{ color: 'var(--text-light)', textAlign: 'center', padding: '1rem' }}>لا توجد تقييمات لأمانة المعلن بعد.</p>
-                    ) : (
-                      selectedListingDetail.advertiser_ratings.map(r => (
-                        <div key={r.id} className="rating-card">
-                          <div className="rating-card-header">
-                            <span className="rating-stars">{"★".repeat(r.star_count) + "☆".repeat(5 - r.star_count)}</span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}><Calendar style={{ width: 12, height: 12, display: 'inline' }} /> {new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
-                          </div>
-                          <p className="rating-review-text">{r.review_text}</p>
-                        </div>
-                      ))
-                    )
-                  )}
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Amenities Filter Modal */}
       {showAmenitiesModal && (
