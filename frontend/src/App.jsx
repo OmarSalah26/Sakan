@@ -32,7 +32,8 @@ function formatAddress(listing) {
 // ---------------------------------------------------------------------------
 // MapPickerModal — full-screen modal with Leaflet, draggable marker.
 // ---------------------------------------------------------------------------
-function MapPickerModal({ cityFallback, governorate, initialLat, initialLng, onConfirm, onClose }) {
+function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLng, onConfirm, onClose }) {
+  const currentCity = city || cityFallback || governorate || '';
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -134,10 +135,10 @@ function MapPickerModal({ cityFallback, governorate, initialLat, initialLng, onC
         <div>
           <h3 style={{ fontWeight: 700, margin: 0, fontSize: '1.1rem' }}>
             <MapPin style={{ width: 18, height: 18, display: 'inline', verticalAlign: 'middle', color: 'var(--primary)', marginLeft: '0.25rem' }} /> 
-            تحديد موقع العقار على الخريطة {city ? `(${city})` : ''}
+            تحديد موقع العقار على الخريطة {currentCity ? `(${currentCity})` : ''}
           </h3>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>
-            {geocoding ? `جاري التكبير والتركيز على مدينة ${city || governorate}...` : 'اسحب الدبوس الأحمر أو اضغط على الخريطة لضبط الموقع بدقة.'}
+            اسحب الدبوس الأحمر أو اضغط على الخريطة لضبط الموقع بدقة.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
