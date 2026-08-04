@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -87,11 +87,18 @@ class Listing(Base):
     min_lease_months = Column(Integer, nullable=True)
     contact_phone = Column(String, nullable=True)
     whatsapp_phone = Column(String, nullable=True)
-    min_lease_months = Column(Integer, nullable=True)
     subscription_expires_at = Column(DateTime, nullable=True)
     advertiser_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Group 1 & Round 3 additions
+    source = Column(String, default="normal")              # "normal", "scraped", "bulk"
+    full_edit_available = Column(Boolean, default=False)   # always False by default for ALL ads
+    edit_token = Column(String, nullable=True)             # unique token generated per outreach
+    cover_photo_index = Column(Integer, default=0)         # cover photo index
+    location_precise = Column(Boolean, default=False)      # True only if set via map picker
+    not_vacant_reports = Column(Integer, default=0)        # count of not vacant reports
 
     advertiser = relationship("User", back_populates="listings")
     ratings = relationship("Rating", back_populates="listing")
@@ -243,6 +250,18 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE listings ADD COLUMN contact_phone VARCHAR"))
             if "whatsapp_phone" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN whatsapp_phone VARCHAR"))
+            if "source" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN source VARCHAR DEFAULT 'normal'"))
+            if "full_edit_available" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN full_edit_available BOOLEAN DEFAULT 0"))
+            if "edit_token" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN edit_token VARCHAR"))
+            if "cover_photo_index" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN cover_photo_index INTEGER DEFAULT 0"))
+            if "location_precise" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN location_precise BOOLEAN DEFAULT 0"))
+            if "not_vacant_reports" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN not_vacant_reports INTEGER DEFAULT 0"))
 
         # Check ratings table
         if "ratings" in inspector.get_table_names():
@@ -459,6 +478,12 @@ class ListingCreate(BaseModel):
     min_lease_months: Optional[int] = None
     contact_phone: Optional[str] = None
     whatsapp_phone: Optional[str] = None
+    source: str = "normal"
+    full_edit_available: bool = False
+    edit_token: Optional[str] = None
+    cover_photo_index: int = 0
+    location_precise: bool = False
+    not_vacant_reports: int = 0
 
     # Legacy fields for test compatibility
     price_per_person: Optional[int] = None
@@ -499,6 +524,56 @@ class ListingOut(BaseModel):
     advertiser_name: Optional[str] = None
     advertiser_type: Optional[str] = None
     advertiser_verified: bool = False
+    source: str = "normal"
+    full_edit_available: bool = False
+    edit_token: Optional[str] = None
+    cover_photo_index: int = 0
+    location_precise: bool = False
+    not_vacant_reports: int = 0
+
+
+def build_listing_out(item: Listing, advertiser: Optional[User] = None) -> ListingOut:
+    return ListingOut(
+        id=item.id,
+        title=item.title or "سكن طلاب",
+        governorate=item.governorate,
+        city=item.city,
+        neighborhood=item.neighborhood,
+        address=item.address or "",
+        street=item.street,
+        building_number=item.building_number,
+        apartment_number=item.apartment_number,
+        floor=item.floor,
+        maps_link=item.maps_link,
+        latitude=item.latitude,
+        longitude=item.longitude,
+        gender=item.gender,
+        available_beds=item.available_beds,
+        price_per_person=item.price_per_person,
+        room_type=item.room_type,
+        room_configurations=safe_json_loads(item.room_configurations, []),
+        amenities=parse_amenities_list(item.amenities),
+        photo_urls=safe_json_loads(item.photo_urls, []),
+        video_urls=safe_json_loads(item.video_urls, []),
+        description=item.description or "",
+        tier=item.tier or "regular",
+        status=item.status or "active",
+        advertiser_id=item.advertiser_id,
+        created_at=item.created_at,
+        view_count=item.view_count or 0,
+        min_lease_months=item.min_lease_months,
+        contact_phone=item.contact_phone,
+        whatsapp_phone=item.whatsapp_phone,
+        advertiser_name=advertiser.name if advertiser else None,
+        advertiser_type=advertiser.account_type if advertiser else None,
+        advertiser_verified=advertiser.verified_by_sakan if advertiser else False,
+        source=item.source or "normal",
+        full_edit_available=bool(item.full_edit_available),
+        edit_token=item.edit_token,
+        cover_photo_index=item.cover_photo_index or 0,
+        location_precise=bool(item.location_precise),
+        not_vacant_reports=item.not_vacant_reports or 0
+    )
 
 
 class RatingCreate(BaseModel):
@@ -843,44 +918,17 @@ def create_listing(payload: ListingCreate):
             min_lease_months=payload.min_lease_months,
             contact_phone=payload.contact_phone,
             whatsapp_phone=payload.whatsapp_phone,
-            description=payload.description
+            description=payload.description,
+            source=payload.source or "normal",
+            full_edit_available=False,
+            location_precise=payload.location_precise or False,
+            cover_photo_index=payload.cover_photo_index or 0
         )
         db.add(listing)
         db.commit()
         db.refresh(listing)
 
-        return ListingOut(
-            id=listing.id,
-            title=listing.title,
-            governorate=listing.governorate,
-            city=listing.city,
-            neighborhood=listing.neighborhood,
-            address=listing.address,
-            street=listing.street,
-            building_number=listing.building_number,
-            apartment_number=listing.apartment_number,
-            floor=listing.floor,
-            maps_link=listing.maps_link,
-            latitude=listing.latitude,
-            longitude=listing.longitude,
-            gender=listing.gender,
-            available_beds=listing.available_beds,
-            price_per_person=listing.price_per_person,
-            room_type=listing.room_type,
-            room_configurations=safe_json_loads(listing.room_configurations, []),
-            amenities=parse_amenities_list(listing.amenities),
-            photo_urls=safe_json_loads(listing.photo_urls, []),
-            video_urls=safe_json_loads(listing.video_urls, []),
-            description=listing.description or "",
-            tier=listing.tier,
-            status=listing.status,
-            advertiser_id=listing.advertiser_id,
-            created_at=listing.created_at,
-            view_count=0,
-            min_lease_months=listing.min_lease_months,
-            contact_phone=listing.contact_phone,
-            whatsapp_phone=listing.whatsapp_phone
-        )
+        return build_listing_out(listing, advertiser)
     finally:
         db.close()
 
@@ -1080,7 +1128,10 @@ def bulk_create_listings(payload: List[dict], x_user_id: Optional[int] = Header(
                     description=item.get("description", ""),
                     min_lease_months=item.get("min_lease_months"),
                     contact_phone=item.get("contact_phone") or default_advertiser.phone,
-                    whatsapp_phone=item.get("whatsapp_phone") or item.get("contact_phone") or default_advertiser.phone
+                    whatsapp_phone=item.get("whatsapp_phone") or item.get("contact_phone") or default_advertiser.phone,
+                    source=item.get("source") or "bulk",
+                    full_edit_available=False,
+                    location_precise=bool(lat is not None and lng is not None)
                 )
                 db.add(listing)
                 db.commit()
@@ -2191,3 +2242,193 @@ def admin_list_waitlist(governorate_id: Optional[int] = None, x_user_id: Optiona
         return res
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# ROUND 3 GROUP 1 ENDPOINTS
+# ---------------------------------------------------------------------------
+
+@app.get('/governorates')
+def list_governorates():
+    db = SessionLocal()
+    try:
+        govs = db.query(Governorate).all()
+        result = []
+        for g in govs:
+            waitlist_count = db.query(WaitlistEntry).filter(WaitlistEntry.governorate_id == g.id).count()
+            result.append({
+                "id": g.id,
+                "name": g.name,
+                "status": g.status,
+                "waitlist_count": waitlist_count
+            })
+        return result
+    finally:
+        db.close()
+
+
+@app.post('/admin/listings/{listing_id}/generate-edit-link')
+def admin_generate_edit_link(
+    listing_id: int, 
+    x_user_id: Optional[int] = Query(None),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id")
+):
+    admin_id = x_user_id or x_user_id_h1 or x_user_id_h2
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, admin_id)
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        token = uuid.uuid4().hex
+        listing.edit_token = token
+        listing.full_edit_available = True
+        db.commit()
+
+        edit_url = f"/listings/{listing.id}"
+        fb_page_url = "https://www.facebook.com/share/19KKYnzN97/"
+
+        whatsapp_message = (
+            f"السلام عليكم، إحنا فريق منصة سكن، حابين نبلغك إننا عاملين منصة متخصصة في السكن الطلابي بتعرض الإعلانات بشكل احترافي ومنظم يسهل وصول الطلاب ليك، خصوصاً الجادين منهم.\n"
+            f"ده رابط إعلانك على المنصة، تقدر تعدّل عليه وتزوّد تفاصيل أكتر: {edit_url}\n"
+            f"وكمان تقدر تشاركه في أي مكان باستخدام خاصية المشاركة اللي بتكتبلك رسالة أوتوماتيك فيها كل تفاصيل إعلانك جاهزة للنشر.\n"
+            f"لو حابب تتعرف علينا أكتر، دي صفحتنا على الفيسبوك: {fb_page_url}\n"
+            f"المنصة مجانية بالكامل 🚀"
+        )
+
+        target_phone = listing.contact_phone or (listing.advertiser.phone if listing.advertiser else "")
+        return {
+            "status": "success",
+            "listing_id": listing.id,
+            "edit_token": token,
+            "edit_url": edit_url,
+            "full_edit_available": True,
+            "whatsapp_message": whatsapp_message,
+            "contact_phone": target_phone
+        }
+    finally:
+        db.close()
+
+
+@app.put('/listings/{listing_id}', response_model=ListingOut)
+def update_listing(
+    listing_id: int, 
+    payload: ListingCreate, 
+    x_user_id: Optional[int] = Query(None),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id")
+):
+    caller_id = x_user_id or x_user_id_h1 or x_user_id_h2
+    db = SessionLocal()
+    try:
+        if not caller_id:
+            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول لتعديل الإعلان")
+
+        user = db.query(User).filter(User.id == caller_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        is_admin = user.account_type == "admin"
+        is_owner = listing.advertiser_id == user.id
+
+        if not is_admin and not is_owner:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل هذا الإعلان")
+
+        source = listing.source or "normal"
+        full_edit_avail = bool(listing.full_edit_available)
+
+        # Scoped edit enforcement:
+        # If normal ad OR admin OR full_edit_available=True: full edit allowed
+        # If scraped/bulk and full_edit_available=False: only available_beds and description are updated
+        if source != "normal" and not full_edit_avail and not is_admin:
+            listing.available_beds = payload.available_beds
+            if payload.description is not None:
+                listing.description = payload.description
+        else:
+            configs = payload.room_configurations
+            if not configs and payload.price_per_person is not None:
+                configs = [{
+                    "room_type": payload.room_type or "single",
+                    "price_per_person": payload.price_per_person,
+                    "commission": None
+                }]
+
+            def build_address(street, building, apartment, floor):
+                parts = []
+                if building: parts.append(f"مبنى {building}")
+                if apartment: parts.append(f"شقة {apartment}")
+                if floor: parts.append(f"الدور {floor}")
+                if street: parts.append(f"شارع {street}")
+                return "، ".join(parts)
+
+            computed_address = build_address(
+                payload.street, payload.building_number,
+                payload.apartment_number, payload.floor
+            ) or payload.address or listing.address or ""
+
+            listing.title = payload.title or listing.title
+            listing.governorate = payload.governorate
+            listing.city = payload.city
+            listing.neighborhood = payload.neighborhood
+            listing.address = computed_address
+            listing.street = payload.street
+            listing.building_number = payload.building_number
+            listing.apartment_number = payload.apartment_number
+            listing.floor = payload.floor
+            listing.maps_link = payload.maps_link
+            listing.latitude = payload.latitude
+            listing.longitude = payload.longitude
+            listing.gender = payload.gender
+            listing.available_beds = payload.available_beds
+            if configs:
+                listing.price_per_person = configs[0].get("price_per_person", listing.price_per_person)
+                listing.room_type = configs[0].get("room_type", listing.room_type)
+                listing.room_configurations = json.dumps(configs, ensure_ascii=False)
+            listing.amenities = json.dumps(payload.amenities, ensure_ascii=False)
+            listing.photo_urls = json.dumps(payload.photo_urls, ensure_ascii=False)
+            listing.video_urls = json.dumps(payload.video_urls, ensure_ascii=False)
+            listing.description = payload.description
+            listing.min_lease_months = payload.min_lease_months
+            listing.contact_phone = payload.contact_phone
+            listing.whatsapp_phone = payload.whatsapp_phone
+            listing.location_precise = payload.location_precise
+            listing.cover_photo_index = payload.cover_photo_index
+
+            # Consume the one-time full edit flag for scraped/bulk ads
+            if source != "normal" and full_edit_avail:
+                listing.full_edit_available = False
+
+        listing.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(listing)
+
+        advertiser = db.query(User).filter(User.id == listing.advertiser_id).first()
+        return build_listing_out(listing, advertiser)
+    finally:
+        db.close()
+
+
+@app.post('/listings/{listing_id}/report-not-vacant')
+def report_listing_not_vacant(listing_id: int, payload: Optional[dict] = None):
+    db = SessionLocal()
+    try:
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        listing.not_vacant_reports = (listing.not_vacant_reports or 0) + 1
+        db.commit()
+        return {
+            "status": "success",
+            "listing_id": listing.id,
+            "not_vacant_reports": listing.not_vacant_reports
+        }
+    finally:
+        db.close()
+

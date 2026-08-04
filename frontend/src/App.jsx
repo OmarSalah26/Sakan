@@ -474,6 +474,83 @@ export default function App() {
   const [adminWaitlistEntries, setAdminWaitlistEntries] = useState([]);
   const [adminWaitlistFilterGov, setAdminWaitlistFilterGov] = useState('');
   const [outreachSummaryModal, setOutreachSummaryModal] = useState(null);
+  const [outreachModalData, setOutreachModalData] = useState(null);
+  const [editingListing, setEditingListing] = useState(null);
+
+  const handleGenerateEditLink = async (listingId) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_BASE}/admin/listings/${listingId}/generate-edit-link?x_user_id=${user.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': String(user.id),
+          'x_user_id': String(user.id)
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setOutreachModalData(data);
+
+        // 1. Auto-copy outreach message to clipboard
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(data.whatsapp_message);
+          }
+        } catch {}
+
+        // 2. Format phone number and open WhatsApp directly with pre-filled message
+        let phone = (data.contact_phone || '').replace(/\D/g, '');
+        if (phone.startsWith('01') && phone.length === 11) {
+          phone = '2' + phone;
+        }
+
+        const waUrl = phone 
+          ? `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(data.whatsapp_message)}`
+          : `https://api.whatsapp.com/send?text=${encodeURIComponent(data.whatsapp_message)}`;
+
+        window.open(waUrl, '_blank');
+        showToast('تم نسخ نص الرسالة وفتح الواتساب مباشرة!');
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'فشل توليد رابط التعديل');
+      }
+    } catch {
+      showToast('خطأ في الاتصال بالخادم');
+    }
+  };
+
+  const handleOpenEditFlow = (item) => {
+    setEditingListing(item);
+    setCreateForm({
+      title: item.title || '',
+      governorate: item.governorate || '',
+      city: item.city || '',
+      neighborhood: item.neighborhood || '',
+      full_address: item.address || '',
+      address: item.address || '',
+      floor: item.floor || '',
+      maps_link: item.maps_link || '',
+      latitude: item.latitude || null,
+      longitude: item.longitude || null,
+      gender: item.gender || 'female',
+      available_beds: item.available_beds || 1,
+      room_configurations: item.room_configurations && item.room_configurations.length > 0 ? item.room_configurations : [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
+      amenities: item.amenities || [],
+      photo_urls: item.photo_urls || [],
+      video_urls: item.video_urls || [],
+      description: item.description || '',
+      tier: item.tier || 'regular',
+      min_lease_months: item.min_lease_months || null,
+      source: item.source || 'normal',
+      full_edit_available: item.full_edit_available || false,
+      location_precise: item.location_precise || false
+    });
+    setShowMapPicker(false);
+    setIsCreateOpen(true);
+    setCreateStep(1);
+    setTermsChecked(true);
+  };
 
   // Load bookmarked listing IDs
   const loadBookmarks = async () => {
@@ -624,16 +701,22 @@ export default function App() {
 
   const handlePhoneSubmit = async (e) => {
     e.preventDefault();
+    const cleanPhone = (authForm.phone || '').trim();
+    if (cleanPhone.length < 8) {
+      showToast("يرجى إدخال رقم هاتف صحيح لا يقل عن 8 أرقام");
+      return;
+    }
     try {
       const endpoint = authMode === 'register' ? 'register' : 'login-otp';
+      const validAccountType = ['student', 'owner', 'broker', 'admin'].includes(authForm.account_type) ? authForm.account_type : 'student';
       const payload = authMode === 'register' ? {
-        phone: authForm.phone,
-        name: "مستخدم جديد",
-        account_type: authForm.account_type,
-        governorates: authForm.governorates,
-        profile_photo_url: authForm.profile_photo_url
+        phone: cleanPhone,
+        name: (authForm.name || '').trim() || "مستخدم جديد",
+        account_type: validAccountType,
+        governorates: Array.isArray(authForm.governorates) ? authForm.governorates : [],
+        profile_photo_url: authForm.profile_photo_url || null
       } : {
-        phone: authForm.phone
+        phone: cleanPhone
       };
 
       const res = await fetch(`${API_BASE}/auth/${endpoint}`, {
@@ -799,24 +882,34 @@ export default function App() {
   };
 
   const handleCreateSubmit = async () => {
-    if (!user) {
+    let activeUser = user;
+    if (!activeUser) {
+      try {
+        const saved = localStorage.getItem('sakan_user');
+        if (saved) activeUser = JSON.parse(saved);
+      } catch {}
+    }
+    if (!activeUser) {
       setIsCreateOpen(false);
       showToast("لتأكيد ونشر إعلانك، يرجى إنشاء حسابك أو تسجيل الدخول أولاً");
       handleStartAuth('register', 'broker', (authUser) => {
-        const activeUser = authUser || user;
-        if (activeUser) {
-          submitListingWithUser(activeUser);
+        const u = authUser || activeUser;
+        if (u) {
+          submitListingWithUser(u);
         }
       });
       return;
     }
-    submitListingWithUser(user);
+    submitListingWithUser(activeUser);
   };
 
   const submitListingWithUser = async (currentUser) => {
     if (!currentUser || !currentUser.id) return;
+    const isEditing = Boolean(editingListing && editingListing.id);
+    const isAdminUser = currentUser.account_type === 'admin';
     const targetContact = createForm.contact_phone || currentUser.phone || '';
-    if (targetContact !== (currentUser.phone || '') && !createForm.contact_verified) {
+
+    if (!isEditing && !isAdminUser && targetContact !== (currentUser.phone || '') && !createForm.contact_verified) {
       const inputOtp = prompt(`تم إرسال كود التفعيل إلى الرقم ${targetContact}. أدخل الكود (123456):`);
       if (inputOtp !== '123456') {
         showToast('كود تفعيل رقم الهاتف للتواصل غير صحيح (الكود التجريبي: 123456)');
@@ -826,7 +919,8 @@ export default function App() {
     }
 
     try {
-      showToast("جاري نشر العقار...");
+      const isEditing = Boolean(editingListing && editingListing.id);
+      showToast(isEditing ? "جاري حفظ التعديلات..." : "جاري نشر العقار...");
 
       const cleanedConfigs = (createForm.room_configurations || []).map(c => ({
         ...c,
@@ -845,19 +939,30 @@ export default function App() {
         advertiser_id: currentUser.id
       };
 
-      const res = await fetch(`${API_BASE}/listings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const url = isEditing ? `${API_BASE}/listings/${editingListing.id}?x_user_id=${currentUser.id}` : `${API_BASE}/listings`;
+      const method = isEditing ? 'PUT' : 'POST';
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(isEditing ? { 
+          'x-user-id': String(currentUser.id),
+          'x_user_id': String(currentUser.id) 
+        } : {})
+      };
+
+      const res = await fetch(url, {
+        method,
+        headers,
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        showToast("تم نشر العقار بنجاح وتفعيله على المنصة!");
+        showToast(isEditing ? "تم حفظ التعديلات بنجاح!" : "تم نشر العقار بنجاح وتفعيله على المنصة!");
         setIsCreateOpen(false);
+        setEditingListing(null);
         setTab('browse');
         loadListings();
       } else {
         const err = await res.json();
-        showToast(err.detail || "فشل نشر العقار");
+        showToast(err.detail || (isEditing ? "فشل حفظ التعديلات" : "فشل نشر العقار"));
       }
     } catch (err) {
       showToast("خطأ في الاتصال بالخادم أثناء نشر الإعلان");
@@ -1667,6 +1772,9 @@ export default function App() {
 
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
                         <button className="btn-secondary" onClick={() => openListingDetail(item.id)}>عرض التفاصيل</button>
+                        <button className="btn-primary" style={{ padding: '0.4rem 0.85rem' }} onClick={() => handleOpenEditFlow(item)}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تعديل الإعلان <PenTool style={{ width: 14, height: 14 }} /></span>
+                        </button>
                         
                         <button 
                           className="btn-outline" 
@@ -1702,7 +1810,8 @@ export default function App() {
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flexWrap: 'wrap' }}>
               <button className={adminTab === 'complaints' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('complaints')}>طابور الشكاوى ({adminComplaints.length})</button>
               <button className={adminTab === 'users' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('users')}>إدارة المعلنين ({adminUsers.length})</button>
-              <button className={adminTab === 'listings' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('listings')}>إدارة الوحدات ({adminListings.length})</button>
+              <button className={adminTab === 'listings' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('listings')}>جميع الوحدات ({adminListings.length})</button>
+              <button className={adminTab === 'admin_listings' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('admin_listings')}>إعلانات الإدارة والإستيراد ({adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.advertiser_id === user?.id).length})</button>
               <button className={adminTab === 'ratings' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('ratings'); loadAdminRatings(); }}>التقييمات</button>
               <button className={adminTab === 'leaderboard' ? 'active-tab' : 'inactive-tab'} onClick={() => setAdminTab('leaderboard')}>الأعلى تقييماً</button>
               <button className={adminTab === 'governorates' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('governorates'); loadAdminGovernorates(); loadAdminWaitlist(); }}>إدارة المحافظات والانتظار</button>
@@ -1840,8 +1949,11 @@ export default function App() {
                         <strong>{l.title}</strong>
                         <p style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {l.governorate}، {l.city} | حالة الإعلان: {l.status}</p>
                       </div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => openListingDetail(l.id)}>عرض</button>
+                        <button className="btn-outline" style={{ fontSize: '0.8rem', color: '#2563eb', borderColor: '#bfdbfe' }} onClick={() => handleGenerateEditLink(l.id)}>
+                          أرسل رابط التعديل للمعلن
+                        </button>
                         {l.status === 'active' ? (
                           <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => handleListingDeactivate(l.id)}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إلغاء تفعيل <StopCircle style={{ width: 14, height: 14 }} /></span>
@@ -1854,6 +1966,84 @@ export default function App() {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                {/* WhatsApp Outreach Edit Link Modal */}
+                {outreachModalData && (
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+                    <div style={{ background: '#fff', borderRadius: '16px', maxWidth: '600px', width: '100%', padding: '1.5rem', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+                      <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-dark)' }}>رسالة التواصل الجاهزة عبر الواتساب</h3>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                        تم تفعيل التعديل الشامل لمرة واحدة لهذا الإعلان وتوليد الرابط بنجاح.
+                      </p>
+                      <textarea 
+                        readOnly 
+                        rows="8" 
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.85rem', lineHeight: 1.6, background: '#f8fafc', color: '#334155' }} 
+                        value={outreachModalData.whatsapp_message} 
+                      />
+                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <button className="btn-secondary" onClick={() => setOutreachModalData(null)}>إغلاق</button>
+                        <button className="btn-primary" onClick={() => { navigator.clipboard.writeText(outreachModalData.whatsapp_message); showToast('تم نسخ نص الرسالة بالكامل!'); }}>
+                          نسخ الرسالة
+                        </button>
+                        <a 
+                          href={`https://wa.me/?text=${encodeURIComponent(outreachModalData.whatsapp_message)}`} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="btn-primary"
+                          style={{ background: '#22c55e', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                        >
+                          إرسال عبر الواتساب Direct
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 3b. Admin & Bulk/Scraped Listings subtab */}
+            {adminTab === 'admin_listings' && (
+              <div>
+                <h3>إعلانات المنصة والإدارة (المستوردة والمضافة يدوياً)</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                  متابعة الإعلانات التي تم رفعها عبر الاستيراد بالجملة أو كشط البيانات أو إضافتها بواسطة الإدارة، وتوليد روابط التعديل المخصصة للمعلنين.
+                </p>
+
+                <div style={{ display: 'grid', gap: '1rem' }}>
+                  {adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.advertiser_id === user?.id).length === 0 ? (
+                    <div style={{ padding: '2rem', textAlign: 'center', background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)' }}>
+                      لا توجد إعلانات خاصة بالإدارة أو مستوردة بالجملة حالياً.
+                    </div>
+                  ) : (
+                    adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.advertiser_id === user?.id).map(l => (
+                      <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'white', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <strong style={{ fontSize: '1rem' }}>{l.title}</strong>
+                            <span style={{ fontSize: '0.7rem', background: l.source === 'bulk' ? '#e0e7ff' : l.source === 'scraped' ? '#fef3c7' : '#dcfce7', color: l.source === 'bulk' ? '#3730a3' : l.source === 'scraped' ? '#b45309' : '#166534', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
+                              {l.source === 'bulk' ? 'استيراد بالجملة' : l.source === 'scraped' ? 'مكشوط' : 'إضافة يدوية'}
+                            </span>
+                            <span style={{ fontSize: '0.7rem', background: l.full_edit_available ? '#dbeafe' : '#f1f5f9', color: l.full_edit_available ? '#1e40af' : '#64748b', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
+                              {l.full_edit_available ? '✓ متاح للتعديل الكامل' : 'مقفل (تعديل محدود)'}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', marginTop: '0.25rem' }}>
+                            <MapPin style={{ width: 14, height: 14, display: 'inline', verticalAlign: 'middle' }} /> {l.governorate}، {l.city} | الأسرة الشاغرة: {l.available_beds}
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => openListingDetail(l.id)}>عرض</button>
+                          <button className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => handleOpenEditFlow(l)}>تعديل الإعلان</button>
+                          <button className="btn-outline" style={{ fontSize: '0.8rem', color: '#2563eb', borderColor: '#bfdbfe' }} onClick={() => handleGenerateEditLink(l.id)}>
+                            أرسل رابط التعديل للمعلن
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -2659,16 +2849,39 @@ export default function App() {
                         value={createForm.governorate} 
                         onChange={(e) => setCreateForm({ ...createForm, governorate: e.target.value })}
                       >
-                        {user?.governorates?.length > 0 ? (
-                          user.governorates.map(gov => (
-                            <option key={gov} value={gov}>{gov}</option>
-                          ))
-                        ) : (
-                          GOVERNORATES.map(gov => (
-                            <option key={gov} value={gov}>{gov}</option>
-                          ))
-                        )}
+                        <option value="">اختر المحافظة...</option>
+                        {GOVERNORATES.map(gov => {
+                          const isLive = dbGovernorates.some(g => g.name === gov && g.status === 'live');
+                          return (
+                            <option key={gov} value={gov}>
+                              {gov} {isLive ? '✓' : '(قائمة الانتظار)'}
+                            </option>
+                          );
+                        })}
                       </select>
+                      {(() => {
+                        const selectedGov = dbGovernorates.find(g => g.name === createForm.governorate);
+                        if (selectedGov && selectedGov.status === 'waitlist_open') {
+                          return (
+                            <div style={{ background: '#fff7ed', border: '1px solid #ffedd5', padding: '0.75rem', borderRadius: 'var(--radius-sm)', color: '#c2410c', fontSize: '0.85rem', fontWeight: 600, marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              <div>تنبيه: خدمة "سكن" غير مفعلة للجمهور حالياً في محافظة <strong>{createForm.governorate}</strong>.</div>
+                              <button 
+                                type="button"
+                                className="btn-outline" 
+                                style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', borderColor: '#c2410c', color: '#c2410c', width: 'fit-content' }}
+                                onClick={() => {
+                                  setIsCreateOpen(false);
+                                  setIsAreaGateOpen(true);
+                                  setAreaGateForm({ governorate_id: selectedGov.id });
+                                }}
+                              >
+                                الانضمام لقائمة الانتظار في {createForm.governorate}
+                              </button>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
 
                     <div className="form-group">

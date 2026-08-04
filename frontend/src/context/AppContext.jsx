@@ -23,9 +23,22 @@ export function AppProvider({ children }) {
   }, [user]);
 
   const showToast = (msg) => {
-    setToastMessage(msg);
+    let cleanMsg = msg;
+    if (typeof msg === 'object' && msg !== null) {
+      if (Array.isArray(msg)) {
+        cleanMsg = msg.map(item => (typeof item === 'object' ? (item.msg || item.detail || JSON.stringify(item)) : String(item))).join(' | ');
+      } else if (msg.msg) {
+        cleanMsg = msg.msg;
+      } else if (msg.detail) {
+        cleanMsg = typeof msg.detail === 'object' ? (Array.isArray(msg.detail) ? msg.detail.map(d => d.msg || JSON.stringify(d)).join(' | ') : JSON.stringify(msg.detail)) : msg.detail;
+      } else {
+        cleanMsg = JSON.stringify(msg);
+      }
+    }
+    const textStr = String(cleanMsg || 'حدث خطأ غير متوقع');
+    setToastMessage(textStr);
     setTimeout(() => {
-      setToastMessage((prev) => (prev === msg ? null : prev));
+      setToastMessage((prev) => (prev === textStr ? null : prev));
     }, 3500);
   };
 

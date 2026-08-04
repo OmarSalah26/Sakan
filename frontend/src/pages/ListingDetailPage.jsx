@@ -217,13 +217,27 @@ export default function ListingDetailPage() {
           <span>{listing.city}</span>
         </div>
 
-        <button 
-          onClick={handleShare}
-          className="btn-outline"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem' }}
-        >
-          <Share2 style={{ width: 16, height: 16 }} /> مشاركة السكن
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {((user && (user.id === listing.advertiser_id || user.account_type === 'admin')) || listing.full_edit_available || listing.edit_token) && (
+            <button 
+              onClick={() => {
+                navigate('/?edit=' + listing.id);
+              }}
+              className="btn-primary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem' }}
+            >
+              <PenTool style={{ width: 16, height: 16 }} /> تعديل الإعلان
+            </button>
+          )}
+
+          <button 
+            onClick={handleShare}
+            className="btn-outline"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem' }}
+          >
+            <Share2 style={{ width: 16, height: 16 }} /> مشاركة السكن
+          </button>
+        </div>
       </div>
 
       {/* ─── Hero Gallery Section ─── */}
