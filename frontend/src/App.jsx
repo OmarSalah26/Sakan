@@ -212,7 +212,7 @@ function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLn
   );
 }
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '/api');
 
 function formatImageUrl(url) {
   if (!url) return "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
@@ -221,11 +221,13 @@ function formatImageUrl(url) {
   let cleanUrl = url.trim();
   cleanUrl = cleanUrl.replace(/^http:\/\/(127\.0\.0\.1|localhost):(8000|3000)/, '');
 
+  const apiServer = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '');
+
   if (cleanUrl.startsWith('/static/') || cleanUrl.startsWith('/media/')) {
-    return cleanUrl;
+    return `${apiServer}${cleanUrl}`;
   }
   if (cleanUrl.startsWith('static/') || cleanUrl.startsWith('media/')) {
-    return `/${cleanUrl}`;
+    return `${apiServer}/${cleanUrl}`;
   }
   return cleanUrl;
 }
