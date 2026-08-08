@@ -1201,3 +1201,59 @@ main.container { padding-top: 1.5rem; padding-bottom: 3rem; }
 .leaflet-tooltip-bottom::before { border-bottom-color: var(--primary) !important; }
 .leaflet-tooltip-left::before { border-left-color: var(--primary) !important; }
 .leaflet-tooltip-right::before { border-right-color: var(--primary) !important; }
+
+/* ============================================
+   DETAIL PAGE & PROFILE PAGE RESPONSIVE STYLES
+   ============================================ */
+.detail-page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+.detail-gallery-height {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  background: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.detail-grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.detail-sidebar-sticky {
+  position: sticky;
+  top: 1.5rem;
+}
+
+@media (max-width: 992px) {
+  .detail-grid-layout {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem;
+  }
+  .detail-sidebar-sticky {
+    position: static !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .detail-page-container {
+    padding: 1rem 0.75rem !important;
+  }
+  .detail-gallery-height {
+    height: 280px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .detail-gallery-height {
+    height: 230px !important;
+  }
+}

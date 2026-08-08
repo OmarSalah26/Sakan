@@ -202,7 +202,7 @@ export default function ListingDetailPage() {
     : `https://www.google.com/maps/search/${encodeURIComponent(listing.address || listing.city)}`;
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem 1rem' }}>
+    <div className="detail-page-container">
       
       {/* ─── Top Bar: Breadcrumb & Actions ─── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -244,7 +244,7 @@ export default function ListingDetailPage() {
 
       {/* ─── Hero Gallery Section ─── */}
       <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', overflow: 'hidden', marginBottom: '1.5rem', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
-        <div style={{ position: 'relative', width: '100%', height: '420px', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="detail-gallery-height">
           {allMedia.length > 0 ? (
             carouselIndex < (listing.photo_urls?.length || 0) ? (
               <img 
@@ -370,7 +370,7 @@ export default function ListingDetailPage() {
       </div>
 
       {/* ─── Main Body: 2 Column Grid ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', marginBottom: '1.5rem' }}>
+      <div className="detail-grid-layout">
         
         {/* LEFT COLUMN (60%): Rooms, Address, Map, Description */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -482,7 +482,7 @@ export default function ListingDetailPage() {
 
         {/* RIGHT COLUMN (40%): Sticky Advertiser Card & CTAs */}
         <div>
-          <div style={{ position: 'sticky', top: '1.5rem', background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+          <div className="detail-sidebar-sticky" style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
             
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
               معلومات المعلن والتواصل

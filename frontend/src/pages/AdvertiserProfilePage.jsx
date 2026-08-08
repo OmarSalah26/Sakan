@@ -72,7 +72,7 @@ export default function AdvertiserProfilePage() {
   const { user: advUser, listings = [], ratings_received = [], avg_rating = 0 } = profile;
 
   return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '1.5rem 1rem' }}>
+    <div className="detail-page-container">
       
       {/* Back link */}
       <div style={{ marginBottom: '1.25rem' }}>
