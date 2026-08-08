@@ -127,6 +127,7 @@ export default function ListingDetailPage() {
     e.preventDefault();
     if (!user) {
       showToast('يرجى تسجيل الدخول أولاً لإضافة تقييم');
+      navigate('/?auth=login');
       return;
     }
     const targetType = detailRatingTab === 'property' ? 'property' : 'advertiser';
@@ -165,6 +166,7 @@ export default function ListingDetailPage() {
     e.preventDefault();
     if (!user) {
       showToast('يرجى تسجيل الدخول أولاً لتقديم بلاغ');
+      navigate('/?auth=login');
       return;
     }
     if (complaintInput.description.length < 20) {
@@ -220,6 +222,25 @@ export default function ListingDetailPage() {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {!user && (
+            <>
+              <button 
+                onClick={() => navigate('/?auth=login')}
+                className="btn-secondary"
+                style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', fontWeight: 600 }}
+              >
+                تسجيل الدخول
+              </button>
+              <button 
+                onClick={() => navigate('/?auth=register')}
+                className="btn-outline"
+                style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', fontWeight: 600 }}
+              >
+                إنشاء حساب
+              </button>
+            </>
+          )}
+
           {((user && (user.id === listing.advertiser_id || user.account_type === 'admin')) || listing.full_edit_available || listing.edit_token) && (
             <button 
               onClick={() => {

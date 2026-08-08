@@ -663,6 +663,16 @@ export default function App() {
     else setBookmarkedIds([]);
   }, [user]);
 
+  // Auth Query Parameter Handler
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const authParam = params.get('auth');
+    if (authParam === 'login' || authParam === 'register') {
+      handleStartAuth(authParam);
+      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    }
+  }, []);
+
   // Hash Routing
   useEffect(() => {
     const handleHashChange = () => {
