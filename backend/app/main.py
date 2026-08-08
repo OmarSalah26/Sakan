@@ -1,3 +1,4 @@
+import html
 import json
 import shutil
 import uuid
@@ -5,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
 from fastapi import FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -1433,6 +1435,133 @@ def get_listing_detail(listing_id: int):
                 } for r in advertiser_ratings
             ]
         }
+    finally:
+        db.close()
+
+
+def format_og_description(listing: Listing) -> str:
+    gender_str = "طلاب (شباب)" if listing.gender == "male" else "طالبات (بنات)"
+    
+    configs = safe_json_loads(listing.room_configurations, [])
+    total_beds = 0
+    services_inclusive = False
+    has_insurance = False
+    insurance_amount = None
+
+    if configs:
+        for c in configs:
+            if isinstance(c, dict):
+                room_type = c.get("room_type", "single")
+                bed_count = 1 if room_type == "single" else 2 if room_type == "double" else 3 if room_type == "triple" else 4
+                count = c.get("count", 1) or 1
+                total_beds += bed_count * count
+                if c.get("services_inclusive"):
+                    services_inclusive = True
+                if c.get("insurance_price"):
+                    has_insurance = True
+                    insurance_amount = c.get("insurance_price")
+    
+    if total_beds == 0:
+        total_beds = listing.available_beds or 1
+        
+    avail_str = f"{listing.available_beds} سرير متاح من أصل {total_beds}"
+    
+    if has_insurance and insurance_amount:
+        deposit_str = f"تأمين: {insurance_amount} ج.م"
+    elif has_insurance:
+        deposit_str = "يوجد تأمين"
+    else:
+        deposit_str = "بدون تأمين"
+        
+    services_str = "شامل الخدمات" if services_inclusive else "الخدمات غير مشمولة"
+    
+    price_str = f"السعر: {listing.price_per_person} ج.م / شهرياً" if listing.price_per_person else ""
+    
+    location_parts = [p for p in [listing.governorate, listing.city, listing.neighborhood] if p]
+    location_str = "، ".join(location_parts)
+    
+    lines = [
+        f"{listing.title} — {gender_str}",
+        location_str,
+        avail_str,
+        deposit_str,
+        services_str,
+    ]
+    if price_str:
+        lines.append(price_str)
+        
+    lines.extend([
+        "",
+        "شاهد التفاصيل الكاملة والأسعار على سكن:",
+        f"https://sakan-egy.com/listings/{listing.id}"
+    ])
+    
+    return "\n".join(lines)
+
+
+@app.get('/listings/{listing_id}/share', response_class=HTMLResponse)
+@app.get('/listings/{listing_id}/og', response_class=HTMLResponse)
+def get_listing_og_html(listing_id: int):
+    db = SessionLocal()
+    try:
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+            
+        photos = safe_json_loads(listing.photo_urls, [])
+        cover_image = photos[0] if photos else "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80"
+        
+        if cover_image.startswith("/static/"):
+            cover_image = "https://api.sakan-egy.com" + cover_image
+        elif cover_image.startswith("static/"):
+            cover_image = "https://api.sakan-egy.com/" + cover_image
+
+        description_text = format_og_description(listing)
+        canonical_url = f"https://sakan-egy.com/listings/{listing.id}"
+        gender_str = "طلاب (شباب)" if listing.gender == "male" else "طالبات (بنات)"
+        og_title = f"{listing.title} — {gender_str}"
+        
+        safe_title = html.escape(og_title)
+        safe_description = html.escape(description_text)
+        
+        html_content = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{safe_title} | سكن Sakan</title>
+  
+  <!-- Open Graph / Facebook / WhatsApp / Telegram -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="{canonical_url}" />
+  <meta property="og:title" content="{safe_title}" />
+  <meta property="og:description" content="{safe_description}" />
+  <meta property="og:image" content="{cover_image}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:site_name" content="سكن - Sakan" />
+  
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="{canonical_url}" />
+  <meta name="twitter:title" content="{safe_title}" />
+  <meta name="twitter:description" content="{safe_description}" />
+  <meta name="twitter:image" content="{cover_image}" />
+  
+  <link rel="canonical" href="{canonical_url}" />
+  
+  <!-- Client Redirect for Browsers -->
+  <script>
+    window.location.replace("{canonical_url}");
+  </script>
+</head>
+<body style="font-family: sans-serif; text-align: center; padding: 2rem;">
+  <h2>{safe_title}</h2>
+  <p>جاري توجيهك إلى منصة سكن...</p>
+  <a href="{canonical_url}">انقر هنا إذا لم يتم توجيهك تلقائياً</a>
+</body>
+</html>"""
+        return HTMLResponse(content=html_content)
     finally:
         db.close()
 

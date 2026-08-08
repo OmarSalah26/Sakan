@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useNavigate } from './router/Router';
 import { useApp } from './context/AppContext';
+import { formatShareText } from './pages/ListingDetailPage';
 
 import { 
   Bell, BookOpen, Plus, Search, MapPin, CheckCircle, ShieldCheck, 
@@ -456,6 +457,10 @@ export default function App() {
     tier: 'regular',
     min_lease_months: null
   });
+
+  // Post-Publish Share Modal state
+  const [postPublishListing, setPostPublishListing] = useState(null);
+  const [isPostPublishModalOpen, setIsPostPublishModalOpen] = useState(false);
 
   // Listing Detail Modal state
   const [selectedListingDetail, setSelectedListingDetail] = useState(null);
@@ -999,11 +1004,17 @@ export default function App() {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
+        const publishedData = await res.json();
         showToast(isEditing ? "تم حفظ التعديلات بنجاح!" : "تم نشر العقار بنجاح وتفعيله على المنصة!");
         setIsCreateOpen(false);
         setEditingListing(null);
         setTab('browse');
         loadListings();
+
+        if (publishedData) {
+          setPostPublishListing(publishedData);
+          setIsPostPublishModalOpen(true);
+        }
       } else {
         const err = await res.json();
         showToast(err.detail || (isEditing ? "فشل حفظ التعديلات" : "فشل نشر العقار"));
@@ -1190,8 +1201,14 @@ export default function App() {
         body: JSON.stringify({ available_beds: beds > 0 ? beds : 1 })
       });
       if (res.ok) {
+        const republishData = await res.json();
         showToast("تم إعادة نشر الإعلان بنجاح");
         loadListings();
+
+        if (republishData) {
+          setPostPublishListing(republishData);
+          setIsPostPublishModalOpen(true);
+        }
       }
     } catch (err) {
       showToast("خطأ في إعادة النشر");
@@ -3953,6 +3970,60 @@ export default function App() {
                   {isBulkLoading ? 'جاري الاستيراد...' : 'تأكيد واستيراد الإعلانات'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- POST-PUBLISH SHARE MODAL --- */}
+      {isPostPublishModalOpen && postPublishListing && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-content" style={{ maxWidth: '500px', textAlign: 'center', padding: '2rem 1.5rem' }}>
+            <div style={{ background: '#dcfce7', color: '#166534', width: '56px', height: '56px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+              <CheckCircle style={{ width: 32, height: 32 }} />
+            </div>
+
+            <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-dark)', marginBottom: '0.75rem' }}>
+              تم نشر إعلانك بنجاح
+            </h3>
+
+            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+              عايز تشاركه في الجروبات وقنواتك التانية؟ دوس وهيبقى معاك نسخة تقدر تعملها لصق في أي مكان.
+            </p>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button 
+                className="btn-outline" 
+                style={{ padding: '0.65rem 1.25rem', fontWeight: 600 }}
+                onClick={() => {
+                  setIsPostPublishModalOpen(false);
+                  setPostPublishListing(null);
+                }}
+              >
+                لاحقاً
+              </button>
+
+              <button 
+                className="btn-primary" 
+                style={{ padding: '0.65rem 1.5rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                onClick={async () => {
+                  const textToCopy = formatShareText(postPublishListing);
+                  if (navigator.clipboard) {
+                    try {
+                      await navigator.clipboard.writeText(textToCopy);
+                      showToast('تم نسخ الإعلان بنجاح! جاهز للمشاركة');
+                    } catch {
+                      showToast('تعذر نسخ النص تلقائياً');
+                    }
+                  } else {
+                    showToast('تم نسخ الإعلان بنجاح! جاهز للمشاركة');
+                  }
+                  setIsPostPublishModalOpen(false);
+                  setPostPublishListing(null);
+                }}
+              >
+                <Share2 style={{ width: 18, height: 18 }} /> انسخ الإعلان
+              </button>
             </div>
           </div>
         </div>

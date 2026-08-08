@@ -60,3 +60,12 @@ def test_create_listing():
     data = response.json()
     assert data['title'] == 'Sunny Room'
     assert data['advertiser_id'] == advertiser_id
+
+    listing_id = data['id']
+    og_res = client.get(f'/listings/{listing_id}/share')
+    assert og_res.status_code == 200
+    assert 'og:title' in og_res.text
+    assert 'og:description' in og_res.text
+    assert 'Sunny Room' in og_res.text
+    assert 'twitter:card' in og_res.text
+

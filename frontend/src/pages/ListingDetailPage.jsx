@@ -50,6 +50,63 @@ const OUTDOOR_AMENITIES = [
   "مطاعم", "كافيهات", "صيدلية", "عيادة طبية", "جيم (Gym)", "ماكينة صراف آلي (ATM)"
 ];
 
+export function formatShareText(listing) {
+  if (!listing) return '';
+  const genderStr = listing.gender === 'male' ? 'طلاب (شباب)' : 'طالبات (بنات)';
+  
+  const configs = listing.room_configurations || [];
+  let totalBeds = 0;
+  let servicesInclusive = false;
+  let hasInsurance = false;
+  let insuranceAmount = null;
+
+  if (Array.isArray(configs)) {
+    configs.forEach(c => {
+      const roomType = c.room_type || 'single';
+      const bedCount = roomType === 'single' ? 1 : roomType === 'double' ? 2 : roomType === 'triple' ? 3 : 4;
+      const count = c.count || 1;
+      totalBeds += bedCount * count;
+      if (c.services_inclusive) servicesInclusive = true;
+      if (c.insurance_price) {
+        hasInsurance = true;
+        insuranceAmount = c.insurance_price;
+      }
+    });
+  }
+
+  if (totalBeds === 0) {
+    totalBeds = listing.available_beds || 1;
+  }
+
+  const availStr = `${listing.available_beds} سرير متاح من أصل ${totalBeds}`;
+  let depositStr = 'بدون تأمين';
+  if (hasInsurance && insuranceAmount) {
+    depositStr = `تأمين: ${insuranceAmount} ج.م`;
+  } else if (hasInsurance) {
+    depositStr = 'يوجد تأمين';
+  }
+
+  const servicesStr = servicesInclusive ? 'شامل الخدمات' : 'الخدمات غير مشمولة';
+  const priceStr = listing.price_per_person ? `السعر: ${listing.price_per_person} ج.م / شهرياً` : '';
+  const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
+  const locationStr = locationParts.join('، ');
+
+  const lines = [
+    `${listing.title} — ${genderStr}`,
+    locationStr,
+    availStr,
+    depositStr,
+    servicesStr,
+  ];
+  if (priceStr) lines.push(priceStr);
+
+  lines.push('');
+  lines.push('شاهد التفاصيل الكاملة والأسعار على سكن:');
+  lines.push(`https://sakan-egy.com/listings/${listing.id}`);
+
+  return lines.join('\n');
+}
+
 export default function ListingDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -61,16 +118,44 @@ export default function ListingDetailPage() {
   const [detailRatingTab, setDetailRatingTab] = useState('property');
   const [showRatingForm, setShowRatingForm] = useState(false);
   const [showComplaintForm, setShowComplaintForm] = useState(false);
-
   const [ratingInput, setRatingInput] = useState({ star_count: 5, review_text: '', photo_urls: [] });
   const [complaintInput, setComplaintInput] = useState({ violation_type: 'السعر المطلوب أعلى من المعلن', description: '', evidence_urls: [] });
-
-  const mapContainerRef = useRef(null);
-  const mapInstanceRef = useRef(null);
 
   useEffect(() => {
     fetchListingDetail();
   }, [id]);
+
+  useEffect(() => {
+    if (data && data.listing) {
+      const l = data.listing;
+      const genderStr = l.gender === 'male' ? 'طلاب (شباب)' : 'طالبات (بنات)';
+      const pageTitle = `${l.title} — ${genderStr} | سكن Sakan`;
+      document.title = pageTitle;
+
+      const setMeta = (propName, content) => {
+        let el = document.querySelector(`meta[property="${propName}"]`) || document.querySelector(`meta[name="${propName}"]`);
+        if (!el) {
+          el = document.createElement('meta');
+          if (propName.startsWith('og:')) el.setAttribute('property', propName);
+          else el.setAttribute('name', propName);
+          document.head.appendChild(el);
+        }
+        el.setAttribute('content', content);
+      };
+
+      const shareDesc = formatShareText(l);
+      const coverPhoto = l.photo_urls?.[0] ? formatImageUrl(l.photo_urls[0]) : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80";
+
+      setMeta('og:title', `${l.title} — ${genderStr}`);
+      setMeta('og:description', shareDesc);
+      setMeta('og:image', coverPhoto);
+      setMeta('og:url', `https://sakan-egy.com/listings/${l.id}`);
+      setMeta('twitter:title', `${l.title} — ${genderStr}`);
+      setMeta('twitter:description', shareDesc);
+      setMeta('twitter:image', coverPhoto);
+      setMeta('twitter:card', 'summary_large_image');
+    }
+  }, [data]);
 
   const fetchListingDetail = async () => {
     try {
@@ -91,8 +176,6 @@ export default function ListingDetailPage() {
     }
   };
 
-
-
   if (loading) {
     return (
       <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -111,15 +194,16 @@ export default function ListingDetailPage() {
   const isNormalUser = !user || user.account_type === 'student';
 
   const handleShare = async () => {
-    const url = window.location.href;
-    const title = listing.title;
-    if (navigator.share) {
+    const shareText = formatShareText(listing);
+    if (navigator.clipboard) {
       try {
-        await navigator.share({ title, url });
-      } catch {}
+        await navigator.clipboard.writeText(shareText);
+        showToast('تم نسخ الإعلان بنجاح! جاهز للمشاركة');
+      } catch {
+        showToast('تعذر نسخ النص تلقائياً');
+      }
     } else {
-      navigator.clipboard.writeText(url);
-      showToast('تم نسخ رابط العقار وتفاصيله بنجاح');
+      showToast('تم نسخ الإعلان بنجاح! جاهز للمشاركة');
     }
   };
 
