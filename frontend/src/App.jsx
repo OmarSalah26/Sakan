@@ -95,7 +95,7 @@ function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLn
           markerRef.current.setLatLng([lat, lng]);
         } else {
           markerRef.current = L.marker([lat, lng], { draggable: true }).addTo(map);
-          markerRef.current.bindTooltip('📍 مدخل العقار (اسحب الدبوس لضبط المكان)', {
+          markerRef.current.bindTooltip('مدخل العقار (اسحب الدبوس لضبط المكان)', {
             permanent: true,
             direction: 'top',
             offset: [0, -32],
@@ -123,6 +123,30 @@ function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLn
     return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; markerRef.current = null; tileLayerRef.current = null; } };
   }, []);
 
+  const handleGetCurrentLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          if (mapRef.current) {
+            if (markerRef.current) {
+              markerRef.current.setLatLng([latitude, longitude]);
+            } else {
+              markerRef.current = L.marker([latitude, longitude], { draggable: true }).addTo(mapRef.current);
+            }
+            mapRef.current.setView([latitude, longitude], 16);
+            setPending({ lat: latitude, lng: longitude });
+          }
+        },
+        () => {
+          alert("تعذر الوصول للموقع الحالي. يرجى التأكد من سماح المتصفح بمشاركة الموقع.");
+        }
+      );
+    } else {
+      alert("خاصية تحديد الموقع غير مدعومة في متصفحك.");
+    }
+  };
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 99999,
@@ -142,6 +166,13 @@ function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLn
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button 
+            type="button"
+            onClick={handleGetCurrentLocation}
+            style={{ fontSize: '0.85rem', padding: '0.4rem 0.75rem', borderRadius: 'var(--r-md)', border: '1px solid var(--primary)', background: '#eff6ff', fontWeight: 700, color: 'var(--primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+          >
+            <Navigation style={{ width: 15, height: 15 }} /> موقعي الحالي
+          </button>
           <select 
             value={mapType}
             onChange={(e) => handleMapTypeChange(e.target.value)}
@@ -1310,12 +1341,14 @@ export default function App() {
               المحفوظات
             </button>
           )}
-          <button 
-            className={tab === 'guide' ? 'active-tab' : 'inactive-tab'} 
-            onClick={() => navigateTo('#/guide')}
-          >
-            <span>دليل الطالب</span> <BookOpen style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: '0.25rem' }} />
-          </button>
+          {(!user || user.account_type === 'student') && (
+            <button 
+              className={tab === 'guide' ? 'active-tab' : 'inactive-tab'} 
+              onClick={() => navigateTo('#/guide')}
+            >
+              <span>دليل الطالب</span> <BookOpen style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: '0.25rem' }} />
+            </button>
+          )}
           <button 
             className={tab === 'about' ? 'active-tab' : 'inactive-tab'} 
             onClick={() => navigateTo('#/about')}
@@ -1415,9 +1448,18 @@ export default function App() {
                   <label>المحافظة</label>
                   <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })}>
                     <option value="">جميع المحافظات</option>
-                    {GOVERNORATES.map(gov => (
-                      <option key={gov} value={gov}>{gov}</option>
-                    ))}
+                    <optgroup label="المحافظات المتاحة حالياً">
+                      {dbGovernorates.filter(g => g.status === 'live').map(g => (
+                        <option key={g.id} value={g.name}>🟢 {g.name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="المحافظات المتاحة في قائمة الانتظار">
+                      {dbGovernorates.filter(g => g.status !== 'live').map(g => (
+                        <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
+                          ⚪ {g.name} (قريباً - قائمة الانتظار)
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
 
@@ -2953,7 +2995,7 @@ export default function App() {
                       initialLat={createForm.latitude}
                       initialLng={createForm.longitude}
                       onConfirm={(lat, lng) => {
-                        setCreateForm(prev => ({ ...prev, latitude: lat, longitude: lng }));
+                        setCreateForm(prev => ({ ...prev, latitude: lat, longitude: lng, has_precise_location: true, location_precise: true }));
                         setShowMapPicker(false);
                       }}
                       onClose={() => setShowMapPicker(false)}
@@ -3120,28 +3162,75 @@ export default function App() {
                           />
                         </div>
 
-                        <div style={{ flex: '1 1 120px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>قيمة العمولة (جنيه)</label>
-                          <input 
-                            type="number" 
-                            value={config.commission} 
-                            placeholder={`${config.price_per_person * 0.5}`}
-                            onChange={(e) => updateRoomConfig(index, 'commission', e.target.value ? Number(e.target.value) : '')} 
-                          />
-                          <small style={{ color: 'var(--text-light)', fontSize: '0.65rem' }}>القيمة الافتراضية المقترحة ٥٠٪ شهرياً</small>
+                         <div style={{ flex: '1 1 120px' }}>
+                          <label style={{ fontSize: '0.75rem' }}>نوع العمولة</label>
+                          <select 
+                            value={config.commission_type || 'fixed'} 
+                            onChange={(e) => updateRoomConfig(index, 'commission_type', e.target.value)}
+                          >
+                            <option value="fixed">ثابتة</option>
+                            <option value="range">نطاق قابل للتفاوض</option>
+                          </select>
                         </div>
+
+                        {config.commission_type === 'range' ? (
+                          <div style={{ display: 'flex', gap: '0.25rem', flex: '1 1 160px' }}>
+                            <div>
+                              <label style={{ fontSize: '0.7rem' }}>من (أدنى)</label>
+                              <input 
+                                type="number" 
+                                value={config.commission_min || ''} 
+                                onChange={(e) => updateRoomConfig(index, 'commission_min', e.target.value ? Number(e.target.value) : '')} 
+                                placeholder="300" 
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '0.7rem' }}>إلى (أقصى)</label>
+                              <input 
+                                type="number" 
+                                value={config.commission_max || ''} 
+                                onChange={(e) => updateRoomConfig(index, 'commission_max', e.target.value ? Number(e.target.value) : '')} 
+                                placeholder="600" 
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ flex: '1 1 120px' }}>
+                            <label style={{ fontSize: '0.75rem' }}>قيمة العمولة (جنيه)</label>
+                            <input 
+                              type="number" 
+                              value={config.commission} 
+                              placeholder={`${config.price_per_person * 0.5}`}
+                              onChange={(e) => updateRoomConfig(index, 'commission', e.target.value ? Number(e.target.value) : '')} 
+                            />
+                          </div>
+                        )}
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
-                        <input 
-                          type="checkbox" 
-                          id={`services-${index}`} 
-                          checked={config.services_inclusive}
-                          onChange={(e) => updateRoomConfig(index, 'services_inclusive', e.target.checked)} 
-                        />
-                        <label htmlFor={`services-${index}`} style={{ fontSize: '0.85rem', fontWeight: 500, margin: 0, cursor: 'pointer' }}>
-                          السعر شامل الخدمات (الكهرباء، المياه، الغاز)
-                        </label>
+                      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <input 
+                            type="checkbox" 
+                            id={`services-${index}`} 
+                            checked={config.services_inclusive}
+                            onChange={(e) => updateRoomConfig(index, 'services_inclusive', e.target.checked)} 
+                          />
+                          <label htmlFor={`services-${index}`} style={{ fontSize: '0.85rem', fontWeight: 500, margin: 0, cursor: 'pointer' }}>
+                            السعر شامل الخدمات (الكهرباء، المياه، الغاز)
+                          </label>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <input 
+                            type="checkbox" 
+                            id={`ac-${index}`} 
+                            checked={!!config.has_ac}
+                            onChange={(e) => updateRoomConfig(index, 'has_ac', e.target.checked)} 
+                          />
+                          <label htmlFor={`ac-${index}`} style={{ fontSize: '0.85rem', fontWeight: 500, margin: 0, cursor: 'pointer', color: '#0284c7' }}>
+                            ❄️ تكييف هواء متوفر بالفئة
+                          </label>
+                        </div>
                       </div>
                     </div>
                   ))}

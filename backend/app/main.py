@@ -1449,11 +1449,6 @@ def update_available_beds(listing_id: int, payload: dict):
         if beds is None or beds < 0:
             raise HTTPException(status_code=400, detail="عدد الأسرة غير صحيح")
 
-        configs = safe_json_loads(listing.room_configurations, [])
-        total_beds = sum(c.get('count', 1) * (2 if c.get('room_type') == 'double' else 3 if c.get('room_type') == 'triple' else 1) for c in configs) if configs else beds
-        if beds > total_beds:
-            beds = total_beds
-
         listing.available_beds = beds
         if beds == 0:
             listing.status = "inactive"
@@ -1650,11 +1645,25 @@ def submit_complaint(payload: ComplaintCreate):
         db.close()
 
 
-@app.get('/admin/complaints', response_model=List[ComplaintOut])
-def admin_list_complaints(x_user_id: Optional[int] = None):
+@app.post('/listings/{listing_id}/report-not-vacant')
+def report_listing_not_vacant(listing_id: int):
     db = SessionLocal()
     try:
-        verify_admin_user(db, x_user_id)
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+        listing.not_vacant_reports = (listing.not_vacant_reports or 0) + 1
+        db.commit()
+        return {"id": listing.id, "not_vacant_reports": listing.not_vacant_reports, "message": "تم تسجيل الإبلاغ بنجاح"}
+    finally:
+        db.close()
+
+
+@app.get('/admin/complaints', response_model=List[ComplaintOut])
+def admin_list_complaints(x_user_id: Optional[int] = Query(None), x_user_id_header: Optional[int] = Header(None, alias="x-user-id")):
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id_header if x_user_id_header is not None else x_user_id)
         complaints = db.query(Complaint).order_by(Complaint.created_at.desc()).all()
         return [
             ComplaintOut(
@@ -1685,10 +1694,10 @@ def ban_advertiser_in_db(db, advertiser):
 
 
 @app.post('/admin/complaints/{complaint_id}/warn')
-def warn_complaint(complaint_id: int, x_user_id: Optional[int] = None):
+def warn_complaint(complaint_id: int, x_user_id: Optional[int] = Query(None), x_user_id_header: Optional[int] = Header(None, alias="x-user-id")):
     db = SessionLocal()
     try:
-        verify_admin_user(db, x_user_id)
+        verify_admin_user(db, x_user_id_header if x_user_id_header is not None else x_user_id)
         complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
         if not complaint:
             raise HTTPException(status_code=404, detail="الشكوى غير موجودة")
@@ -1710,10 +1719,10 @@ def warn_complaint(complaint_id: int, x_user_id: Optional[int] = None):
 
 
 @app.post('/admin/complaints/{complaint_id}/ban')
-def ban_complaint(complaint_id: int, x_user_id: Optional[int] = None):
+def ban_complaint(complaint_id: int, x_user_id: Optional[int] = Query(None), x_user_id_header: Optional[int] = Header(None, alias="x-user-id")):
     db = SessionLocal()
     try:
-        verify_admin_user(db, x_user_id)
+        verify_admin_user(db, x_user_id_header if x_user_id_header is not None else x_user_id)
         complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
         if not complaint:
             raise HTTPException(status_code=404, detail="الشكوى غير موجودة")
@@ -1734,10 +1743,10 @@ def ban_complaint(complaint_id: int, x_user_id: Optional[int] = None):
 
 
 @app.post('/admin/complaints/{complaint_id}/dismiss')
-def dismiss_complaint(complaint_id: int, x_user_id: Optional[int] = None):
+def dismiss_complaint(complaint_id: int, x_user_id: Optional[int] = Query(None), x_user_id_header: Optional[int] = Header(None, alias="x-user-id")):
     db = SessionLocal()
     try:
-        verify_admin_user(db, x_user_id)
+        verify_admin_user(db, x_user_id_header if x_user_id_header is not None else x_user_id)
         complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
         if not complaint:
             raise HTTPException(status_code=404, detail="الشكوى غير موجودة")

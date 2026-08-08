@@ -25,6 +25,8 @@ def register_and_verify(phone, name, account_type):
 
 
 def test_admin_can_view_and_update_complaints():
+    admin = register_and_verify('201000000099', 'Admin User', 'admin')
+    headers = {'x-user-id': str(admin['id'])}
     advertiser = register_and_verify('201000000020', 'Advertiser', 'owner')
     listing_response = client.post('/listings', json={
         'title': 'Test Listing',
@@ -47,10 +49,10 @@ def test_admin_can_view_and_update_complaints():
         'description': 'Misleading price',
     })
 
-    complaints = client.get('/admin/complaints')
+    complaints = client.get('/admin/complaints', headers=headers)
     assert complaints.status_code == 200
     assert len(complaints.json()) >= 1
 
-    action_response = client.post(f"/admin/complaints/{complaint_response.json()['id']}/warn")
+    action_response = client.post(f"/admin/complaints/{complaint_response.json()['id']}/warn", headers=headers)
     assert action_response.status_code == 200
     assert action_response.json()['status'] == 'warned'
