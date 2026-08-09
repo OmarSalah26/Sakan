@@ -1,3 +1,4 @@
+import ast
 import html
 import json
 import os
@@ -370,15 +371,50 @@ def safe_json_loads(val, default):
         return default
 
 
+def extract_amenity_name(item) -> str:
+    if not item:
+        return ""
+    if isinstance(item, dict):
+        return str(item.get("name") or item.get("title") or item.get("label") or "").strip()
+    if isinstance(item, str):
+        s = item.strip()
+        if (s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]")):
+            try:
+                obj = ast.literal_eval(s)
+                return extract_amenity_name(obj)
+            except Exception:
+                pass
+        return s
+    return str(item).strip()
+
+
 def parse_amenities_list(val) -> List[str]:
-    parsed = safe_json_loads(val, [])
+    if not val:
+        return []
+    parsed = None
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+        except Exception:
+            try:
+                parsed = ast.literal_eval(val)
+            except Exception:
+                parsed = [x.strip() for x in val.split(",") if x.strip()]
+    elif isinstance(val, (list, dict)):
+        parsed = val
+
+    result = []
     if isinstance(parsed, list):
-        return [str(x) for x in parsed if x]
+        for x in parsed:
+            name = extract_amenity_name(x)
+            if name and name not in result:
+                result.append(name)
     elif isinstance(parsed, dict):
-        return [str(k) for k, v in parsed.items() if v]
-    elif isinstance(parsed, str):
-        return [x.strip() for x in parsed.split(",") if x.strip()]
-    return []
+        name = extract_amenity_name(parsed)
+        if name:
+            result.append(name)
+
+    return result
 
 
 def process_photo_urls(urls: List[str]) -> List[str]:

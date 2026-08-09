@@ -40,6 +40,22 @@ function getTimeAgo(dateStr) {
   return `منذ ${diffDays} يوماً`;
 }
 
+function extractAmenityName(amenity) {
+  if (!amenity) return '';
+  if (typeof amenity === 'object' && amenity !== null) {
+    return amenity.name || amenity.title || amenity.label || '';
+  }
+  if (typeof amenity === 'string') {
+    const trimmed = amenity.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      const match = trimmed.match(/'name':\s*'([^']+)'/) || trimmed.match(/"name":\s*"([^"]+)"/);
+      if (match && match[1]) return match[1];
+    }
+    return trimmed;
+  }
+  return String(amenity);
+}
+
 const INDOOR_AMENITIES = [
   "واي فاي مجاني", "تكييف", "مراوح", "سخان مياه", "ثلاجة", 
   "غسالة", "بوتاجاز / ميكروويف", "فلتر مياه", "سرير إضافي", "مكتب للمذاكرة", "دولاب ملابس"
@@ -699,32 +715,43 @@ export default function ListingDetailPage() {
         </h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-          <div>
-            <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق سكنية داخلية</h4>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-              {listing.amenities?.filter(a => INDOOR_AMENITIES.includes(a)).map(amen => (
-                <span key={amen} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {amen}
-                </span>
-              ))}
-              {listing.amenities?.filter(a => !INDOOR_AMENITIES.includes(a) && !OUTDOOR_AMENITIES.includes(a)).map(amen => (
-                <span key={amen} style={{ background: '#f8fafc', color: '#475569', border: '1px solid var(--border)', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {amen}
-                </span>
-              ))}
-            </div>
-          </div>
+          {(() => {
+            const cleanAmenities = (listing.amenities || []).map(extractAmenityName).filter(Boolean);
+            const indoorList = cleanAmenities.filter(a => INDOOR_AMENITIES.includes(a));
+            const outdoorList = cleanAmenities.filter(a => OUTDOOR_AMENITIES.includes(a));
+            const otherList = cleanAmenities.filter(a => !INDOOR_AMENITIES.includes(a) && !OUTDOOR_AMENITIES.includes(a));
 
-          <div>
-            <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق وخدمات مجاورة</h4>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-              {listing.amenities?.filter(a => OUTDOOR_AMENITIES.includes(a)).map(amen => (
-                <span key={amen} style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {amen}
-                </span>
-              ))}
-            </div>
-          </div>
+            return (
+              <>
+                <div>
+                  <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق سكنية داخلية</h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {indoorList.map((amen, i) => (
+                      <span key={i} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                        {amen}
+                      </span>
+                    ))}
+                    {otherList.map((amen, i) => (
+                      <span key={`oth-${i}`} style={{ background: '#f8fafc', color: '#475569', border: '1px solid var(--border)', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                        {amen}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق وخدمات مجاورة</h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {outdoorList.map((amen, i) => (
+                      <span key={`out-${i}`} style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                        {amen}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
 
