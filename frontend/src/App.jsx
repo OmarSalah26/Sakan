@@ -2791,7 +2791,6 @@ export default function App() {
                         <option value="student">طالب / مستخدم عادي</option>
                         <option value="owner">مالك عقار (بدون عمولة)</option>
                         <option value="broker">سمسار عقاري</option>
-                        <option value="admin">مسؤول المنصة (Admin)</option>
                       </select>
                     </div>
                   )}
