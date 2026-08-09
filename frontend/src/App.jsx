@@ -2429,23 +2429,62 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 4: STUDENT GUIDE */}
+        {/* TAB 4: STUDENT GUIDE ("دليل الطالب") */}
         {tab === 'guide' && (
           <div style={{ maxWidth: '850px', margin: '0 auto', background: 'white', borderRadius: 'var(--r-xl)', padding: '2.5rem', border: '1px solid var(--border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-            <h2 className="details-title" style={{ fontSize: '1.8rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '1.5rem', color: 'var(--text-dark)', fontWeight: 800 }}>
+            <h2 className="details-title" style={{ fontSize: '1.8rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '1.75rem', color: 'var(--text-dark)', fontWeight: 800 }}>
               دليل الطالب للسكن الجامعي
             </h2>
             
-            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '16px', padding: '2.5rem 2rem', textAlign: 'center' }}>
-              <div style={{ background: 'var(--primary)', color: 'white', width: '56px', height: '56px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-                <BookOpen style={{ width: 28, height: 28 }} />
-              </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e3a8a', marginBottom: '0.5rem' }}>
-                دليل الطالب: بانتظار التوريد
-              </h3>
-              <p style={{ color: '#1e40af', fontSize: '0.95rem', margin: 0, fontWeight: 500 }}>
-                محتوى دليل الطالب قيد التحديث وسيتم إتاحة النسخة الشاملة المحدثة قريباً فور التوريد.
-              </p>
+            <div style={{ lineHeight: '1.85', display: 'grid', gap: '1.75rem', color: '#334155' }}>
+              <section>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.65rem', fontWeight: 800, fontSize: '1.2rem' }}>1. المصروفات المتوقعة عند التعاقد</h3>
+                <ul style={{ paddingRight: '1.5rem', display: 'grid', gap: '0.5rem' }}>
+                  <li><strong>الإيجار الشهري:</strong> يُدفع مقدماً في بداية كل شهر.</li>
+                  <li><strong>التأمين:</strong> مبلغ يُدفع مرة واحدة عند التعاقد لضمان سلامة الوحدة ومحتوياتها، ويُسترد بالكامل عند انتهاء العقد في حال عدم وجود أضرار. تأكد من تدوين قيمة التأمين في العقد كتابةً لضمان استرداده.</li>
+                  <li><strong>عمولة الوسيط:</strong> تُدفع مرة واحدة عند التعاقد، وتنطبق فقط إذا كان المعلن وسيطاً وليس مالكاً مباشرة. الوحدات المعروضة من المالك مباشرة لا تتضمن أي عمولة.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.65rem', fontWeight: 800, fontSize: '1.2rem' }}>2. مدة العقد</h3>
+                <p>قبل التوقيع، تأكد من مدة التعاقد المطلوبة، فقد تكون ترماً دراسياً واحداً أو سنة دراسية كاملة حسب شرط المالك. بعض الملاك يشترطون أنه في حال رغبتك بالخروج المبكر قبل نهاية المدة المتفق عليها، عليك إيجاد طالب بديل يكمل باقي مدة العقد بدلاً منك. تأكد من هذا الشرط ووضوحه في العقد قبل التوقيع لتجنب أي التزام غير متوقع لاحقاً.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.65rem', fontWeight: 800, fontSize: '1.2rem' }}>3. الخدمات المشمولة وغير المشمولة</h3>
+                <p>بعض الإعلانات تكون شاملة الخدمات (الكهرباء، الغاز، المياه)، والبعض الآخر لا. تأكد دائماً من المالك أو الوسيط قبل التوقيع عما إذا كان السعر المعلن شاملاً لهذه الخدمات أم سيتطلب دفع فواتير منفصلة، لتجنب أي مفاجآت مالية لاحقة.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.65rem', fontWeight: 800, fontSize: '1.2rem' }}>4. معايير عمولة الوسيط</h3>
+                <p>عمولة الوسيط قائمة على التفاوض، وتتراوح عادة بين 30% و100% من قيمة الإيجار الشهري:</p>
+                <ul style={{ paddingRight: '1.5rem', display: 'grid', gap: '0.4rem', marginTop: '0.5rem' }}>
+                  <li><strong>القيمة العادلة:</strong> حوالي 50% من الإيجار الشهري.</li>
+                  <li><strong>فوق 100%:</strong> تُعتبر مبالغاً فيها نوعاً ما، وفي هذه الحالة يُنصح بمعرفة الأسباب التي يستند إليها الوسيط قبل الموافقة.</li>
+                </ul>
+                <p style={{ marginTop: '0.5rem' }}>أي عمولة تتجاوز النطاق المتعارف عليه بشكل واضح دون تبرير مقنع يمكن الاستفسار عنها أو الإبلاغ عن الوسيط عبر آلية الإبلاغ في المنصة.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.65rem', fontWeight: 800, fontSize: '1.2rem' }}>5. آداب السكن المشترك</h3>
+                <p>السكن الجامعي بيئة مشتركة تتطلب احتراماً متبادلاً. للحفاظ على تجربة مريحة للجميع:</p>
+                <ul style={{ paddingRight: '1.5rem', display: 'grid', gap: '0.4rem', marginTop: '0.5rem' }}>
+                  <li>حافظ على نظافة المساحات المشتركة (المطبخ، الحمام، الصالة).</li>
+                  <li>التزم بأوقات الهدوء، خاصة أثناء الامتحانات والليل.</li>
+                  <li>حافظ على سلامة الأجهزة والمرافق، تجنباً لخصم قيمة الإصلاح من التأمين.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.65rem', fontWeight: 800, fontSize: '1.2rem' }}>6. قبل دفع أي مبلغ أو توقيع عقد</h3>
+                <ul style={{ paddingRight: '1.5rem', display: 'grid', gap: '0.5rem' }}>
+                  <li>لا تحوّل أي مبلغ، بما في ذلك العربون، قبل معاينة الوحدة شخصياً ومقابلة المالك أو الوسيط وجهاً لوجه.</li>
+                  <li>تأكد من مطابقة الوحدة تماماً للصور والوصف المذكور في الإعلان (التكييف، الثلاجة، الغسالة، وحالتها الفعلية).</li>
+                  <li>راجع تقييمات المعلن على المنصة، والبحث عن علامة "موثّق من سكن" كإشارة إضافية للمصداقية.</li>
+                  <li>اقرأ <a href="#/terms" onClick={(e) => { e.preventDefault(); navigateTo('#/terms'); }} style={{ color: 'var(--primary)', textDecoration: 'underline' }}>شروط الخدمة</a> لمعرفة حقوقك والتزاماتك قبل التعاقد.</li>
+                </ul>
+              </section>
             </div>
           </div>
         )}

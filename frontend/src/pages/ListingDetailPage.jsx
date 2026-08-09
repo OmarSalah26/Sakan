@@ -654,6 +654,39 @@ export default function ListingDetailPage() {
               </a>
             </div>
 
+            {/* Short Student Tips: قبل ما تتواصل */}
+            <details style={{ marginTop: '1rem', background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '12px', padding: '0.75rem 1rem' }}>
+              <summary style={{ fontWeight: 800, color: 'var(--primary)', cursor: 'pointer', fontSize: '0.875rem' }}>
+                قبل ما تتواصل
+              </summary>
+              <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: '#334155', lineHeight: 1.65, display: 'grid', gap: '0.6rem' }}>
+                <div>
+                  <strong style={{ display: 'block', color: 'var(--text-dark)' }}>1. المصروفات المتوقعة</strong>
+                  <ul style={{ paddingRight: '1rem', margin: '0.25rem 0 0' }}>
+                    <li>الإيجار بيُدفع مقدماً كل شهر.</li>
+                    <li>التأمين بيُسترد بالكامل آخر العقد لو مفيش أضرار. اتأكد إنه مكتوب في العقد.</li>
+                    <li>عمولة الوسيط بتُدفع مرة واحدة فقط، ومش بتتطبق لو المعلن مالك مباشر.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <strong style={{ display: 'block', color: 'var(--text-dark)' }}>2. عمولة الوسيط العادلة</strong>
+                  <p style={{ margin: '0.25rem 0 0' }}>العمولة عادة بين 30% و100% من الإيجار الشهري، والقيمة العادلة حوالي <strong>50%</strong>. لو حد طلب أكتر من 100% اسأل عن السبب، ولو تعدت الحد بشكل واضح بلاغ عبر آلية الإبلاغ في المنصة.</p>
+                </div>
+
+                <div>
+                  <strong style={{ display: 'block', color: 'var(--text-dark)' }}>3. قبل ما تحوّل أي فلوس</strong>
+                  <p style={{ margin: '0.25rem 0 0' }}>متحولش أي مبلغ، ولا حتى عربون، قبل ما تعاين الوحدة بنفسك وتقابل المالك أو الوسيط وجهاً لوجه. راجع تقييمات المعلن وابحث عن علامة "موثّق من سكن".</p>
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
+                  <a href="#/guide" onClick={(e) => { e.preventDefault(); navigateTo('#/guide'); }} style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                    الدليل الكامل للسكن الجامعي ←
+                  </a>
+                </div>
+              </div>
+            </details>
+
           </div>
         </div>
 
