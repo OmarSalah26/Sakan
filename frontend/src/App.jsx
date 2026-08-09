@@ -10,7 +10,8 @@ import {
   AlertTriangle, Ban, Trash2, StopCircle, Star, Info, Megaphone, 
   User, Home, Briefcase, MessageSquare, Phone, Camera, Send, 
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
-  Bed, Check, Clock, Award, Sparkles, Upload, Menu, X
+  Bed, Check, Clock, Award, Sparkles, Upload, Menu, X, Smartphone,
+  Navigation, Wind
 } from 'lucide-react';
 
 
@@ -2430,61 +2431,21 @@ export default function App() {
 
         {/* TAB 4: STUDENT GUIDE */}
         {tab === 'guide' && (
-          <div style={{ maxWidth: '800px', margin: '0 auto', background: 'white', borderRadius: 'var(--radius-lg)', padding: '2rem', border: '1px solid var(--border-color)' }}>
-            <h2 className="details-title" style={{ fontSize: '1.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1.5rem', color: 'var(--primary-dark)' }}>
-              <span>دليل الطالب للسكن الجامعي</span>
+          <div style={{ maxWidth: '850px', margin: '0 auto', background: 'white', borderRadius: 'var(--r-xl)', padding: '2.5rem', border: '1px solid var(--border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+            <h2 className="details-title" style={{ fontSize: '1.8rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '1.5rem', color: 'var(--text-dark)', fontWeight: 800 }}>
+              دليل الطالب للسكن الجامعي
             </h2>
             
-            <div style={{ display: 'grid', gap: '1.5rem', lineHeight: '1.8' }}>
-              <section>
-                <h3 style={{ color: 'var(--primary)' }}>1. المصروفات المتوقعة وتكاليف التعاقد</h3>
-                <p>عند التعاقد على سكن، ستواجه بعض المصروفات الأساسية التي يجب أن تكون مستعداً لها:</p>
-                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
-                  <li><strong>الإيجار الشهري:</strong> يُدفع مقدماً كل شهر.</li>
-                  <li><strong>التأمين:</strong> مبلغ يُدفع لمرة واحدة عند التعاقد لضمان جدية الحجز وسلامة الممتلكات، ويُسترد عند انتهاء العقد إذا لم يكن هناك تلفيات (تأكد من إثباته في العقد).</li>
-                  <li><strong>عمولة السمسار:</strong> تُدفع لمرة واحدة عند التعاقد إذا كان المعلن سمساراً وليس مالكاً.</li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 style={{ color: 'var(--primary)' }}>2. الخدمات المشمولة وغير المشمولة</h3>
-                <p>بعض الإعلانات تكون شاملة الخدمات (مثل الكهرباء، المياه، الغاز، الإنترنت، والغاز)، والبعض الآخر لا. دائماً قم بالتأكد من المالك قبل التوقيع عما إذا كان السعر المعلن شاملاً لهذه الخدمات أم سيتطلب دفع فواتير شهرية منفصلة لتجنب أي مفاجآت.</p>
-              </section>
-
-              <section>
-                <h3 style={{ color: 'var(--primary)' }}>3. معايير العمولات العادلة (للوسطاء)</h3>
-                <p>في منصة سكن، نلزم الوسطاء بتحديد قيمة العمولة بوضوح لتجنب الاستغلال. المعايير المتعارف عليها:</p>
-                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
-                  <li><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#22c55e', marginLeft: '0.4rem' }}></span> <strong>العمولة العادلة:</strong> تعادل نصف شهر إيجار (تُدفع مرة واحدة).</li>
-                  <li><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#eab308', marginLeft: '0.4rem' }}></span> <strong>العمولة المرتفعة (غير معتادة):</strong> تعادل شهر إيجار كامل.</li>
-                  <li><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#ef4444', marginLeft: '0.4rem' }}></span> <strong>الاستغلال (يُرجى الإبلاغ):</strong> طلب عمولة تعادل شهرين إيجار أو أكثر.</li>
-                </ul>
-                <div style={{ background: '#fff7ed', border: '1px solid #ffedd5', padding: '0.75rem', borderRadius: 'var(--radius-sm)', color: '#c2410c', fontSize: '0.85rem', fontWeight: 600, marginTop: '0.5rem' }}>
-                  <Megaphone style={{ width: 16, height: 16, display: 'inline', marginLeft: '0.4rem' }} /> تنبيه: تلزم "سكن" السماسرة بالإفصاح عن عمولاتهم في الإعلان. أي محاولة لطلب عمولة أعلى من المذكورة بالإعلان يجب الإبلاغ عنها فوراً لحظر الحساب.
-                </div>
-              </section>
-
-              <section>
-                <h3 style={{ color: 'var(--primary)' }}>4. آداب السكن الجامعي</h3>
-                <p>تذكر أنك تتشارك مكاناً مع زملاء آخرين. التزم بالقواعد التالية لتجربة سكن مريحة للجميع:</p>
-                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
-                  <li>حافظ على نظافة المساحات المشتركة (المطبخ، الحمام، والصالة).</li>
-                  <li>احترم أوقات الراحة والهدوء، خاصة في فترات الامتحانات والليل.</li>
-                  <li>حافظ على سلامة الأجهزة الكهربائية والمرافق لتجنب خصم التأمين.</li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  5. القواعد الذهبية قبل دفع أي مبالغ مالية <AlertTriangle style={{ width: 18, height: 18, color: '#f59e0b' }} />
-                </h3>
-                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
-                  <li><strong>لا تقم بتحويل أي مبالغ مالية (مثل عربون) قبل معاينة الشقة بنفسك ومقابلة المالك/السمسار شخصياً.</strong></li>
-                  <li>تأكد من تطابق الشقة مع الصور والوصف المذكور في الإعلان (وجود تكييف، ثلاجة، غسالة تعمل، إلخ).</li>
-                  <li>استخدم نظام التقييمات وقراءة شكاوى الطلاب الآخرين لتجنب التجارب السيئة.</li>
-                  <li>اقرأ <a href="#/terms" onClick={(e) => { e.preventDefault(); navigateTo('#/terms'); }} style={{ color: 'var(--primary)', textDecoration: 'underline' }}>شروط الخدمة</a> لمعرفة حقوقك وواجباتك.</li>
-                </ul>
-              </section>
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '16px', padding: '2.5rem 2rem', textAlign: 'center' }}>
+              <div style={{ background: 'var(--primary)', color: 'white', width: '56px', height: '56px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                <BookOpen style={{ width: 28, height: 28 }} />
+              </div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e3a8a', marginBottom: '0.5rem' }}>
+                دليل الطالب: بانتظار التوريد
+              </h3>
+              <p style={{ color: '#1e40af', fontSize: '0.95rem', margin: 0, fontWeight: 500 }}>
+                محتوى دليل الطالب قيد التحديث وسيتم إتاحة النسخة الشاملة المحدثة قريباً فور التوريد.
+              </p>
             </div>
           </div>
         )}
@@ -2493,7 +2454,7 @@ export default function App() {
         {tab === 'about' && (
           <div style={{ maxWidth: '850px', margin: '0 auto', background: 'white', borderRadius: 'var(--r-xl)', padding: '2.5rem', border: '1px solid var(--border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
             <h2 className="details-title" style={{ fontSize: '1.8rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '1.75rem', color: 'var(--text-dark)', fontWeight: 800 }}>
-              من نحن — قصة منصة سكن
+              من نحن: قصة منصة سكن
             </h2>
             <div style={{ lineHeight: '1.85', display: 'grid', gap: '1.75rem', color: '#334155' }}>
               <section>
@@ -2525,10 +2486,10 @@ export default function App() {
               {/* Mobile app coming soon banner */}
               <div style={{ marginTop: '1rem', background: 'linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%)', border: '1px solid #c7d2fe', borderRadius: '16px', padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
                 <div style={{ background: 'var(--primary)', color: 'white', padding: '0.85rem', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Zap style={{ width: 28, height: 28 }} />
+                  <Smartphone style={{ width: 28, height: 28 }} />
                 </div>
                 <div>
-                  <h4 style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem', color: '#1e1b4b' }}>التطبيق على الجوال قريباً! 📱</h4>
+                  <h4 style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem', color: '#1e1b4b' }}>التطبيق على الجوال قريباً</h4>
                   <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: '#3730a3', fontWeight: 500 }}>
                     نعمل حالياً على إطلاق تطبيق سكن للهواتف الذكية (iOS & Android) لتجربة حجز وتواصل أسرع للطلاب والوسطاء.
                   </p>
@@ -2542,7 +2503,7 @@ export default function App() {
         {tab === 'terms' && (
           <div style={{ maxWidth: '850px', margin: '0 auto', background: 'white', borderRadius: 'var(--r-xl)', padding: '2.5rem', border: '1px solid var(--border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
             <h2 className="details-title" style={{ fontSize: '1.8rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '0.5rem', color: 'var(--text-dark)', fontWeight: 800 }}>
-              الشروط والأحكام — منصة سكن
+              الشروط والأحكام: منصة سكن
             </h2>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.75rem', fontWeight: 600 }}>تاريخ السريان: 10 أغسطس 2026</p>
 
@@ -2591,7 +2552,50 @@ export default function App() {
               <section>
                 <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>رابعاً: أحكام خاصة بالوسيط</h3>
                 <p>يلتزم الوسيط بعرض قيمة العمولة المتفق عليها بوضوح على صفحة الإعلان قبل أي تواصل مع الطالب. تُعد هذه القيمة بنداً تعاقدياً ملزماً، ولا يجوز للوسيط طلب أي مبلغ يتجاوزها من الطالب تحت أي مسمى، سواء بشكل مباشر أو من خلال أطراف أخرى.</p>
-                <p style={{ marginTop: '0.5rem' }}>في حال ثبوت مخالفة موثقة للقيمة المعلنة أو تحصيل مبالغ إضافية غير معلنة بناءً على بلاغ من الطالب، تحتفظ منصة سكن بحق تعليق إعلانات الوسيط المخالف وتطبيق إجراءات الحظر وحذف حسابه لحماية شفافية المنصة.</p>
+                <p style={{ marginTop: '0.5rem' }}>في حال ثبوت مخالفة موثقة للقيمة المعلنة، بناءً على بلاغ من الطالب، تحتفظ سكن بحق حذف جميع إعلانات الوسيط المخالف وحظره نهائياً من المنصة بشكل فوري ودون إشعار مسبق، دون الحاجة لأي إجراء تحقق إضافي يتجاوز مراجعة البلاغ.</p>
+                <p style={{ marginTop: '0.5rem' }}>يُحظر على الوسيط تكرار نشر الإعلان الخاص بالوحدة ذاتها أكثر من مرة بهدف زيادة ظهورها في نتائج البحث، وتحتفظ سكن بحق حذف الإعلانات المكررة دون إشعار مسبق.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>خامساً: أحكام خاصة بالطالب</h3>
+                <p>يلتزم الطالب بعدم استخدام بيانات التواصل الخاصة بالمالك أو الوسيط التي يحصل عليها عبر المنصة في أي غرض تجاري أو خارج نطاق الاستفسار عن الوحدة السكنية محل الإعلان.</p>
+                <p style={{ marginTop: '0.5rem' }}>يتحمل الطالب وحده مسؤولية التحقق من الوحدة السكنية ومعاينتها شخصياً أو من خلال شخص يثق فيه قبل دفع أي عربون أو مبلغ مالي، ولا تتحمل سكن أي مسؤولية عن خسارة مادية ناتجة عن تعامل مباشر بين الطالب والمالك أو الوسيط دون معاينة فعلية.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>سادساً: التقييمات والتوثيق</h3>
+                <p>يتيح سكن للطالب تقييم المعلن بعد التواصل أو التعامل معه بخصوص وحدة سكنية معروضة على المنصة.</p>
+                <p style={{ marginTop: '0.5rem' }}>تحتفظ سكن بالحق التقديري في مراجعة أو حذف أي تقييم يثبت أنه غير دقيق أو مسيء أو غير مرتبط بتعامل فعلي، وذلك إلى حين اعتماد المنصة لآلية محددة للتحقق من واقعة السكن الفعلي، دون أن يشكل عدم توفر هذه الآلية حالياً التزاماً على سكن بإجراء تحقق مسبق لكل تقييم.</p>
+                <p style={{ marginTop: '0.5rem' }}>يُحظر على أي مستخدم نشر تقييمات وهمية، أو تقييم نفسه، أو الاستعانة بأطراف أخرى لنشر تقييمات لا تعكس تعاملاً حقيقياً مع المعلن.</p>
+                <p style={{ marginTop: '0.5rem' }}>يخضع منح أو سحب علامة التوثيق لأي معلن لتقدير سكن وحدها، ولا يشكل هذا التوثيق ضماناً أو تزكية مطلقة من سكن لسلوك المعلن أو مصداقيته.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>سابعاً: آلية الإبلاغ والحظر</h3>
+                <p>توفر سكن قناة إبلاغ مباشرة وسريعة تتيح للطالب الإبلاغ عن أي مخالفة، سواء كانت طلب عمولة تتجاوز القيمة المعلنة أو سلوكاً غير لائق أو معلومات غير مطابقة للواقع. تلتزم سكن بمراجعة البلاغات واتخاذ إجراء فوري عند ثبوت المخالفة، ويشمل ذلك الحظر النهائي دون إشعار مسبق للطرف المخالف.</p>
+                <p style={{ marginTop: '0.5rem' }}>لا يُعد وجود آلية الإبلاغ والحظر ضماناً من سكن لنزاهة أي وسيط أو مالك، وإنما وسيلة فلترة وحماية تحسن من جودة المنصة تدريجياً، وتبقى مسؤولية الحذر الأولي قائمة على عاتق كل طرف قبل إتمام أي تعامل مالي.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>ثامناً: إنهاء الحساب</h3>
+                <p>تحتفظ سكن بالحق في تعليق أو إنهاء حساب أي مستخدم، طالباً كان أو مالكاً أو وسيطاً، في حال ثبوت استخدامه للمنصة بشكل احتيالي أو مسيء أو مخالف لهذه الشروط، دون الحاجة لإشعار مسبق في حالات المخالفات الجسيمة.</p>
+                <p style={{ marginTop: '0.5rem' }}>لا يعفي إنهاء الحساب المستخدم من أي التزامات مالية أو قانونية مستحقة قبل تاريخ الإنهاء.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>تاسعاً: الملكية الفكرية للمنصة</h3>
+                <p>جميع الحقوق المتعلقة بالعلامة التجارية سكن، وتصميم المنصة وواجهاتها ومحتواها البرمجي، مملوكة لسكن حصراً، ولا يجوز نسخها أو إعادة استخدامها دون إذن كتابي مسبق منها.</p>
+                <p style={{ marginTop: '0.5rem' }}>لا يمتد هذا الحق إلى المحتوى الذي ينشره المستخدمون من صور ووصف للوحدات، والذي يظل خاضعاً لأحكام ملكية المحتوى المنصوص عليها في القسم الثاني من هذه الشروط.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>عاشراً: تسوية النزاعات والقانون الحاكم</h3>
+                <p>تخضع هذه الشروط والأحكام لأحكام القانون المصري، وأي نزاع ينشأ عن استخدام المنصة يتم حله ابتداءً عبر التواصل المباشر بين الأطراف المعنية، وتقتصر سكن على دورها كوسيط في تسهيل هذا التواصل دون إلزام قانوني بالفصل في النزاع. في حال تعذر الحل الودي، ينعقد الاختصاص القضائي للمحاكم المصرية المختصة.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>حادي عشر: إخلاء المسؤولية العام</h3>
+                <p>لا تتحمل سكن أي مسؤولية عن أي خسارة مادية أو معنوية أو نزاع ينشأ عن تعامل مباشر بين الطالب والمالك أو الوسيط، بما في ذلك على سبيل المثال لا الحصر النزاعات المتعلقة بالعمولة أو حالة الوحدة السكنية أو صحة البيانات المنشورة. يقر جميع مستخدمي المنصة، بمجرد استخدامهم لها، بأنهم يتحملون هذه المسؤولية بشكل كامل ومنفرد.</p>
               </section>
             </div>
           </div>
