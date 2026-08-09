@@ -1,5 +1,6 @@
 import html
 import json
+import os
 import shutil
 import uuid
 from datetime import datetime
@@ -27,7 +28,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
-DATABASE_URL = "sqlite:///./sakan.db"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DB_FILE = BASE_DIR / "sakan.db"
+DATABASE_URL = os.environ.get("DATABASE_URL") or f"sqlite:///{DB_FILE}"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -1290,9 +1293,9 @@ def list_listings(
 
             # 8. Total beds range filter
             total_beds = sum(
-                c.get('count', 1) * (2 if c.get('room_type') == 'double' else 3 if c.get('room_type') == 'triple' else 4 if c.get('room_type') in ['quadruple', 'triple+'] else 1)
+                (int(c.get('count')) if str(c.get('count', '')).isdigit() else 1) * (2 if c.get('room_type') == 'double' else 3 if c.get('room_type') == 'triple' else 4 if c.get('room_type') in ['quadruple', 'triple+'] else 1)
                 for c in configs
-            ) if configs else item.available_beds
+            ) if configs else (item.available_beds or 1)
 
             if min_total_beds is not None and total_beds < min_total_beds:
                 continue
@@ -1329,7 +1332,7 @@ def list_listings(
                     advertiser_id=item.advertiser_id,
                     created_at=item.created_at,
                     view_count=item.view_count or 0,
-                    min_lease_months=item.min_lease_months,
+                    min_lease_months=int(item.min_lease_months) if str(item.min_lease_months or '').isdigit() else None,
                     contact_phone=item.contact_phone,
                     whatsapp_phone=item.whatsapp_phone,
                     advertiser_name=adv.name if adv else None,
@@ -1400,7 +1403,7 @@ def get_listing_detail(listing_id: int):
                 advertiser_id=listing.advertiser_id,
                 created_at=listing.created_at,
                 view_count=listing.view_count or 0,
-                min_lease_months=listing.min_lease_months,
+                min_lease_months=int(listing.min_lease_months) if str(listing.min_lease_months or '').isdigit() else None,
                 contact_phone=listing.contact_phone,
                 whatsapp_phone=listing.whatsapp_phone
             ),
