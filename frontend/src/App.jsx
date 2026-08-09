@@ -2491,71 +2491,107 @@ export default function App() {
 
         {/* TAB 5: ABOUT US ("من نحن") */}
         {tab === 'about' && (
-          <div style={{ maxWidth: '800px', margin: '0 auto', background: 'white', borderRadius: 'var(--radius-lg)', padding: '2rem', border: '1px solid var(--border-color)' }}>
-            <h2 className="details-title" style={{ fontSize: '1.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1.5rem', color: 'var(--primary-dark)' }}>
+          <div style={{ maxWidth: '850px', margin: '0 auto', background: 'white', borderRadius: 'var(--r-xl)', padding: '2.5rem', border: '1px solid var(--border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+            <h2 className="details-title" style={{ fontSize: '1.8rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '1.75rem', color: 'var(--text-dark)', fontWeight: 800 }}>
               من نحن — قصة منصة سكن
             </h2>
-            <div style={{ lineHeight: '1.8', display: 'grid', gap: '1.5rem' }}>
+            <div style={{ lineHeight: '1.85', display: 'grid', gap: '1.75rem', color: '#334155' }}>
               <section>
-                <h3 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>القصة</h3>
-                <p>كل سبتمبر بيتكرر نفس المشهد: عشرات الآلاف من الطلاب بيدوروا على سكن في مدينة مش مدينتهم، وسط جروبات فيسبوك وتيليجرام مليانة spam، إعلانات ناقصة، وهويات مجهولة. مش إن الأدوات دي فاشلة، لكنها فوضى، وكل طرف فيها، الطالب والمالك والسمسار، بيدفع التمن وقت ومجهود.</p>
-                <p style={{ marginTop: '0.5rem' }}>بدأنا من هنا. مش من فكرة جاهزة، لكن من قرار إننا نستغل الإجازة ونحل مشكلة حقيقية بدل ما نضيف فكرة جديدة لقائمة المحاولات. قدامنا كان اختياران، وسكن كسبت لأنها الأقرب للتنفيذ بالإمكانيات اللي عندنا.</p>
-                <p style={{ marginTop: '0.5rem' }}>قبل ما نكتب سطر كود، قعدنا نسمع. كلمنا طلاب مغتربين، سماسرة، وملاك، عشان نفهم الأبعاد الحقيقية للمشكلة والحل المطلوب.</p>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.65rem', fontWeight: 800, fontSize: '1.2rem' }}>القصة</h3>
+                <p>قبل كل سنة دراسية جديدة، يواجه عشرات الآلاف من الطلاب المصريين نفس المشكلة المتكررة: البحث عن سكن مناسب في مدينة غير مدينتهم. الأدوات المتاحة حالياً، مجموعات فيسبوك وتيليجرام، عشوائية وغير منظمة، فهي بطبيعتها لا تؤدي هذا الغرض بأعلى كفاءة: إعلانات بلا تفاصيل كافية، معلن يخفي هويته أحياناً، وطالب يحتاج ينتظر رد الوسيط الذي قد يتأخر، ليجمع في النهاية معلومات كان يجب أن تكون مكتوبة في الإعلان من البداية. لكن الخسارة هنا مش على الطالب بس؛ الوسيط كمان مش بيعرف يوصل للطلاب الجادين في إطار زمني ضيق، وبيخصص وقت كبير للرد على استفسارات كتير كان ممكن تتجنب لو الأداة صح.</p>
+                <p style={{ marginTop: '0.75rem' }}>بدأت سكن كمحاولة لحل هذه المشكلة من جذورها، لصالح الأطراف الثلاثة معاً. قبل بناء أي شيء، تحدثنا مباشرة مع طلاب مغتربين ووسطاء وملاك لفهم المشكلة من كل زاوية، ثم بنينا نموذج عمل يوفر على كل طرف الوقت والمجهود اللي كان بيضيع في الطرق التقليدية.</p>
               </section>
 
               <section>
-                <h3 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>مهمتنا</h3>
-                <p>توفير بيئة آمنة وشفافة للطلاب المغتربين للبحث عن السكن الجامعي المناسب بدون استغلال أو معلومات مضللة، مع تمكين الملاك والوسطاء الملتزمين من التواصل المباشر والسريع.</p>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.65rem', fontWeight: 800, fontSize: '1.2rem' }}>مهمتنا</h3>
+                <p>بالنسبة للطالب، توفير بيئة آمنة وشفافة تمكّنه من الوصول إلى سكن مناسب دون استغلال أو معلومات مضللة. وبالنسبة للملاك والوسطاء، توفير قناة توصلهم بعملاء جادين ومؤهلين مسبقاً، بشكل أسرع وأكفأ من الطرق العشوائية المعتادة.</p>
               </section>
 
               <section>
-                <h3 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>قيمنا الأساسية</h3>
-                <ul style={{ paddingRight: '1.5rem' }}>
-                  <li><strong>الشفافية الكاملة:</strong> إفصاح شامل عن الأسعار والعمولات والخدمات المشمولة.</li>
-                  <li><strong>الأمان والتوثيق:</strong> نظام توثيق هويات المعلنين "موثق من سكن" والتحقق من التقييمات.</li>
-                  <li><strong>سهولة التجربة:</strong> معاينة سريعة، خرائط تفاعلية، وتصفح سلس بدون تعقيد.</li>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.65rem', fontWeight: 800, fontSize: '1.2rem' }}>قيمنا</h3>
+                <ul style={{ paddingRight: '1.5rem', display: 'grid', gap: '0.5rem' }}>
+                  <li><strong>الشفافية:</strong> أسعار وعمولات وتفاصيل واضحة من البداية، بلا بنود مخفية، لصالح الطالب والوسيط معاً.</li>
+                  <li><strong>الأمان والتوثيق:</strong> هوية موثقة لكل معلن، وآلية لمراجعة مصداقية التقييمات، بما يبني سمعة حقيقية للوسطاء والملاك الملتزمين.</li>
+                  <li><strong>الكفاءة:</strong> عملاء مؤهلون تصل إليهم مباشرة، بدل ضياع الوقت في تواصل غير جاد.</li>
+                  <li><strong>الأولوية للطالب عند التعارض:</strong> في حالات القرار الصعب، تُقاس السياسة أولاً بمصلحة الطالب، لأن ثقته هي أساس استمرار المنظومة كلها لصالح باقي الأطراف.</li>
                 </ul>
               </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', marginBottom: '0.65rem', fontWeight: 800, fontSize: '1.2rem' }}>رؤيتنا</h3>
+                <p>حل مشكلة السكن الطلابي في مصر بشكل نهائي، مع نمو قائم على التوسع الجغرافي في محافظات جديدة بدلاً من التوسع في مجالات أخرى.</p>
+              </section>
+
+              {/* Mobile app coming soon banner */}
+              <div style={{ marginTop: '1rem', background: 'linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%)', border: '1px solid #c7d2fe', borderRadius: '16px', padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+                <div style={{ background: 'var(--primary)', color: 'white', padding: '0.85rem', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Zap style={{ width: 28, height: 28 }} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem', color: '#1e1b4b' }}>التطبيق على الجوال قريباً! 📱</h4>
+                  <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: '#3730a3', fontWeight: 500 }}>
+                    نعمل حالياً على إطلاق تطبيق سكن للهواتف الذكية (iOS & Android) لتجربة حجز وتواصل أسرع للطلاب والوسطاء.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {/* TAB 6: TERMS OF SERVICE ("الشروط والأحكام") */}
         {tab === 'terms' && (
-          <div style={{ maxWidth: '800px', margin: '0 auto', background: 'white', borderRadius: 'var(--radius-lg)', padding: '2rem', border: '1px solid var(--border-color)' }}>
-            <h2 className="details-title" style={{ fontSize: '1.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--primary-dark)' }}>
-              الشروط والأحكام — منصة سكن للإسكان الطلابي
+          <div style={{ maxWidth: '850px', margin: '0 auto', background: 'white', borderRadius: 'var(--r-xl)', padding: '2.5rem', border: '1px solid var(--border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+            <h2 className="details-title" style={{ fontSize: '1.8rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '0.5rem', color: 'var(--text-dark)', fontWeight: 800 }}>
+              الشروط والأحكام — منصة سكن
             </h2>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-light)', marginBottom: '1.5rem' }}>مسودة عمل داخلية تجميع البنود الأساسية للمشروع.</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.75rem', fontWeight: 600 }}>تاريخ السريان: 10 أغسطس 2026</p>
 
-            <div style={{ lineHeight: '1.8', display: 'grid', gap: '1.5rem' }}>
+            <div style={{ lineHeight: '1.85', display: 'grid', gap: '1.75rem', color: '#334155' }}>
               <section>
-                <h3 style={{ color: 'var(--primary)' }}>مقدمة</h3>
-                <p>سكن منصة إلكترونية تعمل كوسيط يربط بين الطلاب الباحثين عن سكن وملاك العقارات والسماسرة، بهدف تسهيل الوصول إلى وحدات سكنية مناسبة داخل النطاق الجغرافي الذي تغطيه المنصة. يشكل استخدام المنصة بأي صفة موافقة كاملة على الشروط والأحكام الواردة في هذا المستند.</p>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>مقدمة</h3>
+                <p>سكن منصة إلكترونية تعمل كوسيط يربط بين الطلاب الباحثين عن سكن وملاك العقارات والوسطاء، بهدف تسهيل الوصول إلى وحدات سكنية مناسبة داخل النطاق الجغرافي الذي تغطيه المنصة. يشكل استخدام المنصة بأي صفة، سواء كطالب أو مالك أو وسيط، موافقة كاملة على الشروط والأحكام الواردة في هذا المستند.</p>
+                <p style={{ marginTop: '0.5rem' }}>تنطبق هذه الشروط على الأطراف الثلاثة المستخدمة للمنصة، الطالب والمالك والوسيط، ويوضح كل قسم منها الحقوق والالتزامات الخاصة بكل طرف، إلى جانب الأحكام العامة التي تسري على الجميع دون استثناء.</p>
               </section>
 
               <section>
-                <h3 style={{ color: 'var(--primary)' }}>1. التزامات معلني السكن (الملاك والوسطاء)</h3>
-                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
-                  <li>التأكد من صحة ودقة جميع البيانات والصور والمعلومات المدرجة في الإعلان.</li>
-                  <li>الإفصاح الشفاف عن قيمة الإيجار الشهري، مبالغ التأمين، وقيمة العمولة دون أي رسوم خفية.</li>
-                  <li>التعهد بعدم طلب أي مبالغ مالية قبل المعاينة الفعلية للشقة.</li>
-                  <li>يحظر حظراً تاماً نشر إعلانات وهمية أو مضللة، ويحق للمنصة حظر أي حساب يخالف ذلك فوراً.</li>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>تعريفات</h3>
+                <ul style={{ paddingRight: '1.5rem', display: 'grid', gap: '0.4rem' }}>
+                  <li><strong>المنصة:</strong> يُقصد بها منصة سكن الإلكترونية بجميع صورها، بما في ذلك الموقع الإلكتروني والتطبيق وأي واجهة إلكترونية تابعة لها.</li>
+                  <li><strong>المستخدم:</strong> أي شخص يستخدم المنصة بأي صفة، سواء كطالب أو مالك أو وسيط.</li>
+                  <li><strong>الإعلان:</strong> أي بيان يُنشر على المنصة لعرض وحدة سكنية للإيجار.</li>
+                  <li><strong>الوحدة:</strong> العقار أو الجزء منه المعروض للإيجار عبر الإعلان.</li>
+                  <li><strong>المعلن:</strong> المالك أو الوسيط الذي ينشر الإعلان.</li>
+                  <li><strong>التقييم:</strong> أي تقييم أو تعليق ينشره الطالب عن تجربته مع معلن معين عبر المنصة.</li>
                 </ul>
               </section>
 
               <section>
-                <h3 style={{ color: 'var(--primary)' }}>2. حقوق والتزامات الطلاب</h3>
-                <ul style={{ paddingRight: '1.5rem', marginTop: '0.5rem' }}>
-                  <li>معاينة السكن شخصياً وقراءة العقد جيداً قبل توقيعه أو تحويل مبالغ مالية.</li>
-                  <li>الالتزام بشروط التعاقد وآداب السكن المحددة من قبل المالك.</li>
-                  <li>تقديم تقييمات وملاحظات صادقة وموضوعية تعكس التجربة الفعلية.</li>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>أولاً: طبيعة العلاقة القانونية للمنصة</h3>
+                <p>سكن منصة وسيطة تتيح النشر والتواصل، ولا تملك أي علاقة تعاقدية أو رقابية على الوسطاء أو الملاك المسجلين لديها، ولا تتحمل مسؤولية تصرفاتهم خارج النطاق الذي تتحكم فيه المنصة مباشرة. كل تعامل يتم بين الطالب والوسيط أو المالك، سواء كان تفاوضاً أو دفعاً لمبالغ مالية أو معاينة لوحدة سكنية، هو مسؤولية الطرفين المعنيين بالكامل، ولا تُعد سكن طرفاً فيه ولا ضامناً لنتائجه.</p>
+                <p style={{ marginTop: '0.5rem' }}>وجود أي مالك أو وسيط على المنصة يعني التزامه بالشروط المعلنة وقت التسجيل والنشر، ولا يمثل تزكية شخصية من سكن لسلوكه أو مصداقيته.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>ثانياً: أحكام عامة تسري على جميع الأطراف</h3>
+                <ul style={{ paddingRight: '1.5rem', display: 'grid', gap: '0.6rem' }}>
+                  <li><strong>١. الدفع مقابل النشر:</strong> يخضع نشر الإعلانات على المنصة لنظام رسوم محدد تعلنه سكن من وقت لآخر، ويُستثنى من ذلك فترة الإطلاق التي تحددها المنصة كنافذة نشر مجاني للسماح ببناء قاعدة العرض الأولية. لا تُسترد الرسوم المدفوعة في حال حذف الإعلان بسبب مخالفة صاحبه لهذه الشروط.</li>
+                  <li><strong>٢. ملكية الصور والمحتوى:</strong> يقر كل من ينشر إعلاناً على المنصة بأن الصور والبيانات المرفقة به دقيقة ومطابقة للوحدة الفعلية، وبأنه يملك الحق في نشرها. تحتفظ سكن بحق استخدام الصور والمحتوى المنشور لأغراض تسويقية متعلقة بالمنصة، دون أن يخل ذلك بملكية صاحب المحتوى الأصلية له.</li>
+                  <li><strong>٣. مدة الإعلان وتجديده:</strong> يبقى الإعلان فعالاً على المنصة لمدة محددة تعلنها سكن، وبعدها يصبح غير ظاهر للبحث ما لم يقم صاحبه بتجديده. تحتفظ سكن بحق إزالة أي إعلان منتهي الصلاحية أو غير مطابق للواقع دون إشعار مسبق.</li>
+                  <li><strong>٤. الخصوصية وبيانات الاتصال:</strong> تلتزم سكن بحماية بيانات المستخدمين وعدم مشاركة أرقام التواصل أو البيانات الشخصية مع أي طرف ثالث خارج غرض الوساطة الذي أُنشئت من أجله المنصة، وذلك وفقاً لأحكام قانون حماية البيانات الشخصية المصري. يتحمل كل طرف مسؤولية عدم استخدام بيانات الأطراف الأخرى التي يحصل عليها عبر المنصة في أي غرض خارج نطاق التواصل بشأن الوحدة السكنية محل الإعلان.</li>
+                  <li><strong>٥. حق المنصة في التعديل:</strong> تحتفظ سكن بحق تعديل هذه الشروط والأحكام في أي وقت، وتلتزم بإخطار المستخدمين بأي تعديل جوهري عبر الوسائل المتاحة على المنصة قبل سريانه. يُعد استمرار استخدام المنصة بعد الإخطار موافقة ضمنية على التعديل.</li>
                 </ul>
               </section>
 
               <section>
-                <h3 style={{ color: 'var(--primary)' }}>3. سياسة التوثيق والتحقق</h3>
-                <p>شارة "موثق من سكن" تُمنح للمعلنين الذين تم التحقق من هويتهم وسجلهم، وتسمح إدارة المنصة بمراجعة وتقييم الشكاوى بانتظام لاتخاذ الإجراءات المناسبة ضد المخالفين.</p>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>ثالثاً: أحكام خاصة بالمالك</h3>
+                <p>يقر المالك عند نشر أي إعلان بأنه المالك الفعلي للوحدة السكنية أو مفوض رسمياً من قبل المالك للتصرف فيها، ويتحمل وحده كامل المسؤولية القانونية في حال ثبت خلاف ذلك. يقتصر دور سكن في هذا الشأن على تسجيل هذا الإقرار وقت النشر، ولا يشمل أي تحقق فعلي من سند الملكية أو التوكيل.</p>
+                <p style={{ marginTop: '0.5rem' }}>يلتزم المالك بأن تكون الوحدة المعروضة مطابقة تماماً للصور والوصف المنشور على الإعلان من حيث المساحة والحالة والموقع والمرافق، بالإضافة إلى دقة كل بيان يتعلق بسعر التأمين، وما إذا كان السعر شاملاً للخدمات من عدمه، والحد الأدنى لمدة التعاقد إن وُجد. وتحتفظ سكن بحق حذف أي إعلان يثبت عدم مطابقته للواقع بناءً على بلاغ موثق من طالب.</p>
+              </section>
+
+              <section>
+                <h3 style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '1.15rem' }}>رابعاً: أحكام خاصة بالوسيط</h3>
+                <p>يلتزم الوسيط بعرض قيمة العمولة المتفق عليها بوضوح على صفحة الإعلان قبل أي تواصل مع الطالب. تُعد هذه القيمة بنداً تعاقدياً ملزماً، ولا يجوز للوسيط طلب أي مبلغ يتجاوزها من الطالب تحت أي مسمى، سواء بشكل مباشر أو من خلال أطراف أخرى.</p>
+                <p style={{ marginTop: '0.5rem' }}>في حال ثبوت مخالفة موثقة للقيمة المعلنة أو تحصيل مبالغ إضافية غير معلنة بناءً على بلاغ من الطالب، تحتفظ منصة سكن بحق تعليق إعلانات الوسيط المخالف وتطبيق إجراءات الحظر وحذف حسابه لحماية شفافية المنصة.</p>
               </section>
             </div>
           </div>
@@ -3288,9 +3324,33 @@ export default function App() {
               {createStep === 4 && (
                 <div>
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>المرافق والخدمات المتوفرة</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>قم بتحديد الخدمات المتواجدة داخل الوحدة السكنية وخارجها لتسهيل وصول الباحثين إليها.</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>قم بتحديد الخدمات المتواجدة داخل الوحدة السكنية وخارجها لتسهيل وصول الباحثين إليها.</p>
 
-                  <h5 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem' }}>مرافق سكنية داخلية (Indoor)</h5>
+                  {/* Services Clarification Banner */}
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.75rem 1rem', borderRadius: '10px', marginBottom: '1.25rem', fontSize: '0.85rem', color: '#166534', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Info style={{ width: 18, height: 18, flexShrink: 0 }} />
+                    <span>الغاز، المياه، والكهرباء خدمات أساسية مفترضة في جميع الإعلانات. الإنترنت غير شامل إلا إذا تم تحديده صراحة.</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <h5 style={{ fontWeight: 700, color: 'var(--primary)', margin: 0 }}>مرافق سكنية داخلية (Indoor)</h5>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <input 
+                        type="checkbox"
+                        checked={INDOOR_AMENITIES.map(a => a.name).every(name => createForm.amenities.includes(name))}
+                        onChange={() => {
+                          const allNames = INDOOR_AMENITIES.map(a => a.name);
+                          const allSelected = allNames.every(name => createForm.amenities.includes(name));
+                          setCreateForm(prev => {
+                            const withoutIndoor = prev.amenities.filter(a => !allNames.includes(a));
+                            return { ...prev, amenities: allSelected ? withoutIndoor : [...withoutIndoor, ...allNames] };
+                          });
+                        }}
+                      />
+                      تحديد الكل
+                    </label>
+                  </div>
+                  
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.25rem' }}>
                     {INDOOR_AMENITIES.map(amenity => {
                       const isChecked = createForm.amenities.includes(amenity.name);
@@ -3358,8 +3418,30 @@ export default function App() {
                     {createForm.photo_urls.length > 0 && (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
                         {createForm.photo_urls.map((url, idx) => (
-                          <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-muted)' }}>
+                          <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-muted)', border: idx === 0 ? '2px solid var(--primary)' : '1px solid var(--border)' }}>
                             <img src={formatImageUrl(url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            
+                            {idx === 0 ? (
+                              <span style={{ position: 'absolute', bottom: '4px', right: '4px', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: 700 }}>
+                                الغلاف 🌟
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCreateForm(prev => {
+                                    const urls = [...prev.photo_urls];
+                                    const [selected] = urls.splice(idx, 1);
+                                    urls.unshift(selected);
+                                    return { ...prev, photo_urls: urls };
+                                  });
+                                }}
+                                style={{ position: 'absolute', bottom: '4px', right: '4px', background: 'rgba(0,0,0,0.7)', color: '#fff', border: 'none', fontSize: '0.65rem', padding: '0.2rem 0.4rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                              >
+                                تعيين كغلاف
+                              </button>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => setCreateForm(prev => ({ ...prev, photo_urls: prev.photo_urls.filter((_, i) => i !== idx) }))}

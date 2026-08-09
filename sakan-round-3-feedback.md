@@ -1,4 +1,4 @@
-# Round 3: Sakan — Implementation Plan
+ Round 3: Sakan — Implementation Plan
 
 All decisions locked in with the user. Building group-by-group with user review after each group.
 
@@ -9,12 +9,12 @@ All decisions locked in with the user. Building group-by-group with user review 
 | Group | Status |
 |---|---|
 | **Group 1: Account & Governorate Foundation** | **Completed & Verified** |
-| **Group 2: Map Picker & Location Logic** | **Completed & Verified** |
-| **Group 3: Listing Flow Fields** | **Completed & Verified** |
-| **Group 4: Ad Details Page Additions** | **Completed & Verified** |
-| **Group 5: Filters UI** | **Completed & Verified** |
-| **Group 6: Role-Based Visibility** | **Completed & Verified** |
-| **Group 7: Content & Copy** | **Completed & Verified** |
+| **Group 2: Map Picker & Location Logic** | Pending User Approval of G1 |
+| **Group 3: Listing Flow Fields** | Pending |
+| **Group 4: Ad Details Page Additions** | Pending |
+| **Group 5: Filters UI** | Pending |
+| **Group 6: Role-Based Visibility** | Pending |
+| **Group 7: Content & Copy** | Pending |
 
 ---
 

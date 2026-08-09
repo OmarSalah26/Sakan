@@ -542,8 +542,8 @@ export default function ListingDetailPage() {
               </button>
             </div>
 
-            {/* Embedded Google Map (only rendered if coordinates exist) */}
-            {hasCoords && (() => {
+            {/* Embedded Google Map (only rendered if precise coordinates exist) */}
+            {hasCoords && (listing.location_precise || listing.location_precise === undefined) && (() => {
               const { latitude, longitude } = listing;
               const gmSrc = `https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`;
               const osmSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${longitude-0.006},${latitude-0.004},${longitude+0.006},${latitude+0.004}&layer=mapnik&marker=${latitude},${longitude}`;
@@ -630,6 +630,11 @@ export default function ListingDetailPage() {
               <User style={{ width: 14, height: 14 }} /> عرض الملف الشخصي للمعلن
             </Link>
 
+            {/* WhatsApp Note */}
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '0.4rem', marginTop: '0.75rem' }}>
+              يرجى إبقاء رسالة سكن الآلية للإيضاح للمعلن أي سكن تقصد.
+            </p>
+
             {/* CTAs */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <a 
@@ -643,7 +648,7 @@ export default function ListingDetailPage() {
 
               <a 
                 href={`tel:${listing.contact_phone || advertiser.phone}`}
-                style={{ background: 'var(--bg-muted)', color: 'var(--text-dark)', border: '1px solid var(--border)', textDecoration: 'none', padding: '0.75rem', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.95rem' }}
+                style={{ background: 'var(--bg-muted)', color: '#334155', border: '1px solid var(--border)', textDecoration: 'none', padding: '0.75rem', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.95rem' }}
               >
                 <Phone style={{ width: 18, height: 18 }} /> اتصال هاتفي ({listing.contact_phone || advertiser.phone})
               </a>
