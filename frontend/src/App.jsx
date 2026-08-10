@@ -562,6 +562,19 @@ export default function App() {
 
   const handleOpenEditFlow = (item) => {
     setEditingListing(item);
+    const parseArr = (v) => {
+      if (Array.isArray(v)) return v;
+      if (typeof v === 'string' && v.trim().startsWith('[')) {
+        try { return JSON.parse(v); } catch {}
+      }
+      return [];
+    };
+
+    const roomConfigs = parseArr(item.room_configurations);
+    const amenitiesList = parseArr(item.amenities);
+    const photoUrlsList = parseArr(item.photo_urls);
+    const videoUrlsList = parseArr(item.video_urls);
+
     setCreateForm({
       title: item.title || '',
       governorate: item.governorate || '',
@@ -575,10 +588,10 @@ export default function App() {
       longitude: item.longitude || null,
       gender: item.gender || 'female',
       available_beds: item.available_beds || 1,
-      room_configurations: item.room_configurations && item.room_configurations.length > 0 ? item.room_configurations : [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
-      amenities: item.amenities || [],
-      photo_urls: item.photo_urls || [],
-      video_urls: item.video_urls || [],
+      room_configurations: roomConfigs.length > 0 ? roomConfigs : [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
+      amenities: amenitiesList,
+      photo_urls: photoUrlsList,
+      video_urls: videoUrlsList,
       description: item.description || '',
       tier: item.tier || 'regular',
       min_lease_months: item.min_lease_months || null,
@@ -665,16 +678,41 @@ export default function App() {
   }, [filters]);
 
   useEffect(() => {
-    if (user) loadBookmarks();
-    else setBookmarkedIds([]);
+    if (user) {
+      loadBookmarks();
+      if (user.account_type === 'admin') {
+        loadAdminData();
+      }
+    } else {
+      setBookmarkedIds([]);
+    }
   }, [user]);
 
-  // Auth Query Parameter Handler
+  useEffect(() => {
+    if (tab === 'admin' && user && user.account_type === 'admin') {
+      loadAdminData();
+    }
+  }, [tab, user]);
+
+  // Query Parameter Handler (Auth & Edit)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const authParam = params.get('auth');
     if (authParam === 'login' || authParam === 'register') {
       handleStartAuth(authParam);
+      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    }
+    const editId = params.get('edit');
+    if (editId) {
+      fetch(`${API_BASE}/listings/${editId}`)
+        .then(r => r.json())
+        .then(data => {
+          const item = data.listing || data;
+          if (item && item.id) {
+            handleOpenEditFlow(item);
+          }
+        })
+        .catch(() => {});
       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
     }
   }, []);
@@ -683,7 +721,21 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
-      if (hash.startsWith('#/profile/')) {
+      if (hash.includes('edit=')) {
+        const match = hash.match(/edit=(\d+)/);
+        if (match && match[1]) {
+          const editId = match[1];
+          fetch(`${API_BASE}/listings/${editId}`)
+            .then(r => r.json())
+            .then(data => {
+              const item = data.listing || data;
+              if (item && item.id) {
+                handleOpenEditFlow(item);
+              }
+            })
+            .catch(() => {});
+        }
+      } else if (hash.startsWith('#/profile/')) {
         const uid = hash.replace('#/profile/', '');
         setProfileUserId(uid);
         setTab('profile');
@@ -789,13 +841,15 @@ export default function App() {
 
   const handleOtpVerify = async (e) => {
     e.preventDefault();
+    const cleanPhone = (authForm.phone || '').trim();
+    const cleanOtp = (authForm.otp || '').trim();
     try {
       const res = await fetch(`${API_BASE}/auth/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: authForm.phone,
-          otp_code: authForm.otp
+          phone: cleanPhone,
+          otp_code: cleanOtp
         })
       });
       const data = await res.json();
@@ -1009,10 +1063,14 @@ export default function App() {
         showToast(isEditing ? "تم حفظ التعديلات بنجاح!" : "تم نشر العقار بنجاح وتفعيله على المنصة!");
         setIsCreateOpen(false);
         setEditingListing(null);
-        setTab('browse');
+        if (isEditing && publishedData?.id) {
+          openListingDetail(publishedData.id);
+        } else {
+          setTab('browse');
+        }
         loadListings();
 
-        if (publishedData) {
+        if (!isEditing && publishedData) {
           setPostPublishListing(publishedData);
           setIsPostPublishModalOpen(true);
         }
@@ -1232,16 +1290,32 @@ export default function App() {
 
   // --- Admin Moderation panels fetches ---
   const loadAdminData = async () => {
-    if (!user || user.account_type !== 'admin') return;
+    let activeUser = user;
+    if (!activeUser) {
+      try {
+        const saved = localStorage.getItem('sakan_user');
+        if (saved) activeUser = JSON.parse(saved);
+      } catch {}
+    }
+    if (!activeUser || activeUser.account_type !== 'admin') return;
+
+    const authHeaders = {
+      'x-user-id': String(activeUser.id),
+      'x_user_id': String(activeUser.id)
+    };
+
     try {
-      const resC = await fetch(`${API_BASE}/admin/complaints?x_user_id=${user.id}`);
+      const resC = await fetch(`${API_BASE}/admin/complaints?x_user_id=${activeUser.id}`, { headers: authHeaders });
       if (resC.ok) setAdminComplaints(await resC.json());
 
-      const resU = await fetch(`${API_BASE}/admin/users?x_user_id=${user.id}`);
+      const resU = await fetch(`${API_BASE}/admin/users?x_user_id=${activeUser.id}`, { headers: authHeaders });
       if (resU.ok) setAdminUsers(await resU.json());
 
-      const resL = await fetch(`${API_BASE}/admin/listings?x_user_id=${user.id}`);
-      if (resL.ok) setAdminListings(await resL.json());
+      const resL = await fetch(`${API_BASE}/admin/listings?x_user_id=${activeUser.id}`, { headers: authHeaders });
+      if (resL.ok) {
+        const dataL = await resL.json();
+        setAdminListings(Array.isArray(dataL) ? dataL : []);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -1414,8 +1488,8 @@ export default function App() {
             </button>
           )}
 
-          {/* Bulk import button accessible ONLY for Brokers, Owners, and Admins */}
-          {(isBroker || isAdmin) && (
+          {/* Bulk import button accessible ONLY for Admins */}
+          {isAdmin && (
             <button 
               className="btn-outline nav-action-btn" 
               onClick={() => { setIsBulkModalOpen(true); setBulkImportResult(null); setMobileMenuOpen(false); }}
@@ -1894,7 +1968,7 @@ export default function App() {
               <button className={adminTab === 'complaints' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('complaints')}>طابور الشكاوى ({adminComplaints.length})</button>
               <button className={adminTab === 'users' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('users')}>إدارة المعلنين ({adminUsers.length})</button>
               <button className={adminTab === 'listings' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('listings')}>جميع الوحدات ({adminListings.length})</button>
-              <button className={adminTab === 'admin_listings' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('admin_listings')}>إعلانات الإدارة والإستيراد ({adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.advertiser_id === user?.id).length})</button>
+              <button className={adminTab === 'admin_listings' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('admin_listings')}>إعلانات الإدارة والإستيراد ({adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.source === 'api' || l.source === 'manual' || (l.source && l.source !== 'normal') || l.advertiser_id === user?.id).length})</button>
               <button className={adminTab === 'ratings' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('ratings'); loadAdminRatings(); }}>التقييمات</button>
               <button className={adminTab === 'leaderboard' ? 'active-tab' : 'inactive-tab'} onClick={() => setAdminTab('leaderboard')}>الأعلى تقييماً</button>
               <button className={adminTab === 'governorates' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('governorates'); loadAdminGovernorates(); loadAdminWaitlist(); }}>إدارة المحافظات والانتظار</button>
@@ -2026,7 +2100,12 @@ export default function App() {
               <div>
                 <h3>إدارة إعلانات السكن النشطة وغير النشطة</h3>
                 <div style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
-                  {adminListings.map(l => (
+                  {adminListings.length === 0 ? (
+                    <div style={{ padding: '2rem', textAlign: 'center', background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)' }}>
+                      لا توجد وحدات سكنية مضافة حالياً.
+                    </div>
+                  ) : (
+                    adminListings.map(l => (
                     <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'white', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                       <div>
                         <strong>{l.title}</strong>
@@ -2048,7 +2127,7 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                  ))}
+                  )))}
                 </div>
 
                 {/* WhatsApp Outreach Edit Link Modal */}
@@ -2095,18 +2174,18 @@ export default function App() {
                 </p>
 
                 <div style={{ display: 'grid', gap: '1rem' }}>
-                  {adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.advertiser_id === user?.id).length === 0 ? (
+                  {adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.source === 'api' || l.source === 'manual' || (l.source && l.source !== 'normal') || l.advertiser_id === user?.id).length === 0 ? (
                     <div style={{ padding: '2rem', textAlign: 'center', background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)' }}>
                       لا توجد إعلانات خاصة بالإدارة أو مستوردة بالجملة حالياً.
                     </div>
                   ) : (
-                    adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.advertiser_id === user?.id).map(l => (
+                    adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.source === 'api' || l.source === 'manual' || (l.source && l.source !== 'normal') || l.advertiser_id === user?.id).map(l => (
                       <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'white', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <strong style={{ fontSize: '1rem' }}>{l.title}</strong>
-                            <span style={{ fontSize: '0.7rem', background: l.source === 'bulk' ? '#e0e7ff' : l.source === 'scraped' ? '#fef3c7' : '#dcfce7', color: l.source === 'bulk' ? '#3730a3' : l.source === 'scraped' ? '#b45309' : '#166534', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
-                              {l.source === 'bulk' ? 'استيراد بالجملة' : l.source === 'scraped' ? 'مكشوط' : 'إضافة يدوية'}
+                            <span style={{ fontSize: '0.7rem', background: l.source === 'bulk' ? '#e0e7ff' : (l.source === 'scraped' || l.source === 'api') ? '#fef3c7' : '#dcfce7', color: l.source === 'bulk' ? '#3730a3' : (l.source === 'scraped' || l.source === 'api') ? '#b45309' : '#166534', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
+                              {l.source === 'bulk' ? 'استيراد بالجملة' : (l.source === 'scraped' || l.source === 'api') ? 'مكشوط' : 'إضافة يدوية'}
                             </span>
                             <span style={{ fontSize: '0.7rem', background: l.full_edit_available ? '#dbeafe' : '#f1f5f9', color: l.full_edit_available ? '#1e40af' : '#64748b', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
                               {l.full_edit_available ? '✓ متاح للتعديل الكامل' : 'مقفل (تعديل محدود)'}
@@ -3996,7 +4075,7 @@ export default function App() {
       )}
 
       {/* --- BULK ADD LISTINGS MODAL --- */}
-      {isBulkModalOpen && (
+      {isBulkModalOpen && isAdmin && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '680px' }}>
             <div className="modal-header">

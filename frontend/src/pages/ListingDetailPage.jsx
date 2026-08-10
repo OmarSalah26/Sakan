@@ -344,7 +344,7 @@ export default function ListingDetailPage() {
           {((user && (user.id === listing.advertiser_id || user.account_type === 'admin')) || listing.full_edit_available || listing.edit_token) && (
             <button 
               onClick={() => {
-                navigate('/?edit=' + listing.id);
+                window.location.href = `/#/?edit=${listing.id}`;
               }}
               className="btn-primary"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem' }}
