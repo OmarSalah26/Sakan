@@ -920,11 +920,38 @@ def login_user(payload: RegisterRequest):
         db.close()
 
 
+MAX_VIDEO_FILE_SIZE = 150 * 1024 * 1024  # 150 MB
+
+@app.post('/upload/listing-video')
+def upload_listing_video(file: UploadFile = File(...)):
+    """Upload a video for a listing. Returns the URL to include in video_urls."""
+    ext = Path(file.filename).suffix.lower()
+    if ext not in [".mp4", ".mov", ".avi", ".webm", ".mkv"]:
+        raise HTTPException(status_code=400, detail="نوع فيديو غير مدعوم. يُسمح فقط بـ MP4, MOV, AVI, WEBM, MKV.")
+    contents = file.file.read()
+    if len(contents) > MAX_VIDEO_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="حجم الفيديو كبير جداً. الحد الأقصى 150 ميجابايت.")
+    filename = f"{uuid.uuid4().hex}{ext or '.mp4'}"
+    dest = LISTING_DIR / filename
+    dest.write_bytes(contents)
+    file.file.close()
+    return {"url": f"/static/uploads/listings/{filename}"}
+
+
 @app.post('/listings', response_model=ListingOut)
 def create_listing(payload: ListingCreate):
     db = SessionLocal()
     try:
         advertiser = db.query(User).filter(User.id == payload.advertiser_id).first()
+        if not advertiser and payload.contact_phone:
+            advertiser = db.query(User).filter(User.phone == payload.contact_phone).first()
+            if advertiser:
+                payload.advertiser_id = advertiser.id
+        if not advertiser:
+            admin_user = db.query(User).filter(User.account_type == "admin").first()
+            if admin_user:
+                advertiser = admin_user
+                payload.advertiser_id = admin_user.id
         if not advertiser:
             raise HTTPException(status_code=404, detail="المعلن غير موجود")
         if advertiser.is_banned:

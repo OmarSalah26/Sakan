@@ -11,7 +11,7 @@ import {
   User, Home, Briefcase, MessageSquare, Phone, Camera, Send, 
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
   Bed, Check, Clock, Award, Sparkles, Upload, Menu, X, Smartphone,
-  Navigation, Wind
+  Navigation, Wind, Video
 } from 'lucide-react';
 
 
@@ -1086,7 +1086,24 @@ export default function App() {
   const addRoomConfig = () => {
     setCreateForm(prev => ({
       ...prev,
-      room_configurations: [...prev.room_configurations, { room_type: 'double', price_per_person: 800, commission: 400, count: 1, insurance_price: '', services_inclusive: false }]
+      room_configurations: [
+        ...prev.room_configurations,
+        {
+          room_type: 'double',
+          price_per_person: 800,
+          commission_pct: 50,
+          commission: 400,
+          commission_type: 'fixed',
+          commission_min_pct: 30,
+          commission_max_pct: 100,
+          commission_min: 240,
+          commission_max: 800,
+          count: 1,
+          insurance_price: '',
+          services_inclusive: false,
+          has_ac: false
+        }
+      ]
     }));
   };
 
@@ -1100,11 +1117,43 @@ export default function App() {
   const updateRoomConfig = (index, field, val) => {
     setCreateForm(prev => {
       const updated = [...prev.room_configurations];
-      updated[index] = { ...updated[index], [field]: val };
-      // Auto-fill commission as 50% of price when price changes
+      const item = { ...updated[index], [field]: val };
+      
+      const price = Number(item.price_per_person) || 0;
+      
       if (field === 'price_per_person') {
-        updated[index].commission = Math.round(val * 0.5);
+        const pct = item.commission_pct ?? 50;
+        item.commission = Math.round(price * (pct / 100));
+        
+        const minPct = item.commission_min_pct ?? 30;
+        const maxPct = item.commission_max_pct ?? 100;
+        item.commission_min = Math.round(price * (minPct / 100));
+        item.commission_max = Math.round(price * (maxPct / 100));
+      } else if (field === 'commission_pct') {
+        const pct = Math.max(0, Math.min(200, Number(val) || 0));
+        item.commission_pct = pct;
+        item.commission = Math.round(price * (pct / 100));
+      } else if (field === 'commission_min_pct') {
+        const minPct = Math.max(0, Math.min(200, Number(val) || 0));
+        item.commission_min_pct = minPct;
+        item.commission_min = Math.round(price * (minPct / 100));
+      } else if (field === 'commission_max_pct') {
+        const maxPct = Math.max(0, Math.min(200, Number(val) || 0));
+        item.commission_max_pct = maxPct;
+        item.commission_max = Math.round(price * (maxPct / 100));
+      } else if (field === 'commission_type') {
+        if (val === 'range') {
+          item.commission_min_pct = item.commission_min_pct ?? 30;
+          item.commission_max_pct = item.commission_max_pct ?? 100;
+          item.commission_min = Math.round(price * (item.commission_min_pct / 100));
+          item.commission_max = Math.round(price * (item.commission_max_pct / 100));
+        } else {
+          item.commission_pct = item.commission_pct ?? 50;
+          item.commission = Math.round(price * (item.commission_pct / 100));
+        }
       }
+
+      updated[index] = item;
       return { ...prev, room_configurations: updated };
     });
   };
@@ -3031,14 +3080,14 @@ export default function App() {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '600px' }}>
             <div className="modal-header">
-              <h3>إضافة إعلان سكن طلابي جديد ({createStep} من 7)</h3>
+              <h3>إضافة إعلان سكن طلابي جديد ({createStep} من 5)</h3>
               <button className="modal-close" onClick={() => setIsCreateOpen(false)}>×</button>
             </div>
             
             <div className="modal-body">
               <div className="wizard-progress">
-                <div className="progress-bar-fill" style={{ width: `${(createStep - 1) * 16.66}%` }} />
-                {[1, 2, 3, 4, 5, 6, 7].map(num => (
+                <div className="progress-bar-fill" style={{ width: `${(createStep - 1) * 25}%` }} />
+                {[1, 2, 3, 4, 5].map(num => (
                   <span 
                     key={num} 
                     className={`wizard-step-node ${createStep === num ? 'active' : createStep > num ? 'completed' : ''}`}
@@ -3276,14 +3325,14 @@ export default function App() {
                 </div>
               )}
 
-              {/* STEP 3: ROOM CONFIGURATION */}
+              {/* STEP 3: ROOM CONFIGURATION, PRICING & COMMISSION */}
               {createStep === 3 && (
                 <div>
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>تهيئة الغرف والأسعار والعمولة</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>يمكنك إدراج نوع واحد أو أكثر للغرف المتوفرة في الشقة. السعر المطلوب للسرير الفردي فقط.</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>قم بإضافة فئات الغرف المتوفرة، تحديد الأسعار، والعمولة بشكل منظم.</p>
                   
-                  {/* Minimum lease duration option moved to the TOP */}
-                  <div style={{ background: '#EFF6FF', border: '1px solid #bfdbfe', borderRadius: 'var(--r-md)', padding: '1rem', marginBottom: '1.25rem' }}>
+                  {/* Minimum lease duration option */}
+                  <div style={{ background: '#EFF6FF', border: '1px solid #60a5fa', borderRadius: 'var(--r-md)', padding: '1rem', marginBottom: '1.25rem' }}>
                     <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <input 
                         type="checkbox" 
@@ -3293,164 +3342,310 @@ export default function App() {
                       تحديد حد أدنى لمدة الإيجار (شرط تعاقد)
                     </label>
                     {createForm.min_lease_months && (
-                      <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'white', padding: '0.5rem 0.75rem', borderRadius: 'var(--r-sm)', border: '1px solid #93c5fd' }}>
-                        <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>الحد الأدنى بالشهور:</label>
-                        <input 
-                          type="number" 
-                          min="1" 
-                          max="36" 
-                          value={createForm.min_lease_months} 
-                          onChange={(e) => setCreateForm(prev => ({ ...prev, min_lease_months: Number(e.target.value) || null }))}
-                          style={{ width: '90px', padding: '0.25rem 0.5rem', borderRadius: 'var(--r-sm)' }}
-                        />
+                      <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'white', padding: '0.5rem 0.75rem', borderRadius: 'var(--r-sm)', border: '1.5px solid #3b82f6' }}>
+                        <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>الحد الأدنى (بالأشهر):</label>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
+                            onClick={() => setCreateForm(prev => ({ ...prev, min_lease_months: Math.max(1, (prev.min_lease_months || 1) - 1) }))}
+                          >-</button>
+                          <input 
+                            type="number" 
+                            inputMode="numeric"
+                            min="1" 
+                            max="36" 
+                            value={createForm.min_lease_months} 
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => setCreateForm(prev => ({ ...prev, min_lease_months: Math.max(1, Number(e.target.value) || 1) }))}
+                            style={{ width: '60px', textAlign: 'center', padding: '0.35rem', borderRadius: 'var(--r-sm)', background: '#ffffff', border: '1.5px solid #94a3b8', fontWeight: 700 }}
+                          />
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
+                            onClick={() => setCreateForm(prev => ({ ...prev, min_lease_months: (prev.min_lease_months || 1) + 1 }))}
+                          >+</button>
+                        </div>
                         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>أشهر</span>
                       </div>
                     )}
                   </div>
 
-                  {createForm.room_configurations.map((config, index) => (
-                    <div key={index} style={{ background: '#f8fafc', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem', display: 'grid', gap: '0.75rem' }}>
-                      <div style={{ display: 'flex', justifySelf: 'space-between', alignItems: 'center' }}>
-                        <strong>تهيئة فئة #{index + 1}</strong>
-                        {createForm.room_configurations.length > 1 && (
-                          <button className="btn-danger" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => removeRoomConfig(index)}>حذف</button>
-                        )}
-                      </div>
-                      
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <div style={{ flex: '1 1 120px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>نوع الغرفة</label>
-                          <select value={config.room_type} onChange={(e) => updateRoomConfig(index, 'room_type', e.target.value)}>
-                            <option value="single">فردية (Single)</option>
-                            <option value="double">ثنائية (Double)</option>
-                            <option value="triple">ثلاثية (Triple)</option>
-                            <option value="quadruple">رباعية (Quadruple)</option>
-                          </select>
+                  {createForm.room_configurations.map((config, index) => {
+                    const price = Number(config.price_per_person) || 0;
+                    const isRange = config.commission_type === 'range';
+                    
+                    return (
+                      <div key={index} style={{ background: '#ffffff', border: '2px solid #cbd5e1', padding: '1.25rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem', display: 'grid', gap: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1.5px dashed #cbd5e1', paddingBottom: '0.5rem' }}>
+                          <strong style={{ color: 'var(--primary)', fontSize: '0.95rem' }}>فئة غرفة #{index + 1}</strong>
+                          {createForm.room_configurations.length > 1 && (
+                            <button className="btn-danger" style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }} onClick={() => removeRoomConfig(index)}>حذف الفئة</button>
+                          )}
                         </div>
                         
-                        <div style={{ flex: '1 1 100px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>عدد الغرف المتاحة</label>
-                          <input 
-                            type="number" 
-                            value={config.count} 
-                            onChange={(e) => updateRoomConfig(index, 'count', Number(e.target.value))} 
-                            min="1" 
-                          />
-                        </div>
+                        {/* Section A: Room Type & Count Stepper */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>نوع الغرفة</label>
+                            <select 
+                              value={config.room_type} 
+                              onChange={(e) => updateRoomConfig(index, 'room_type', e.target.value)}
+                              style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem', fontWeight: 600, width: '100%' }}
+                            >
+                              <option value="single">فردية (Single)</option>
+                              <option value="double">ثنائية (Double)</option>
+                              <option value="triple">ثلاثية (Triple)</option>
+                              <option value="quadruple">رباعية (Quadruple)</option>
+                            </select>
+                          </div>
 
-                        <div style={{ flex: '1 1 120px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>السعر الشهري للفرد (جنيه)</label>
-                          <input 
-                            type="number" 
-                            value={config.price_per_person} 
-                            onChange={(e) => updateRoomConfig(index, 'price_per_person', Number(e.target.value))} 
-                            min="0" 
-                            step="50"
-                          />
-                        </div>
-
-                        <div style={{ flex: '1 1 120px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>مبلغ التأمين (اختياري)</label>
-                          <input 
-                            type="number" 
-                            value={config.insurance_price} 
-                            placeholder={`${config.price_per_person}`}
-                            onChange={(e) => updateRoomConfig(index, 'insurance_price', e.target.value ? Number(e.target.value) : '')} 
-                          />
-                        </div>
-
-                         <div style={{ flex: '1 1 120px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>نوع العمولة</label>
-                          <select 
-                            value={config.commission_type || 'fixed'} 
-                            onChange={(e) => updateRoomConfig(index, 'commission_type', e.target.value)}
-                          >
-                            <option value="fixed">ثابتة</option>
-                            <option value="range">نطاق قابل للتفاوض</option>
-                          </select>
-                        </div>
-
-                        {config.commission_type === 'range' ? (
-                          <div style={{ display: 'flex', gap: '0.25rem', flex: '1 1 160px' }}>
-                            <div>
-                              <label style={{ fontSize: '0.7rem' }}>من (أدنى)</label>
+                          <div>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>عدد الغرف المتاحة</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '0.35rem 0.75rem', fontWeight: 800 }}
+                                onClick={() => updateRoomConfig(index, 'count', Math.max(1, (config.count || 1) - 1))}
+                              >-</button>
                               <input 
                                 type="number" 
-                                value={config.commission_min || ''} 
-                                onChange={(e) => updateRoomConfig(index, 'commission_min', e.target.value ? Number(e.target.value) : '')} 
-                                placeholder="300" 
+                                inputMode="numeric"
+                                value={config.count} 
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => updateRoomConfig(index, 'count', Math.max(1, Number(e.target.value) || 1))} 
+                                style={{ textAlign: 'center', fontWeight: 700, background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem' }}
+                                min="1" 
                               />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: '0.7rem' }}>إلى (أقصى)</label>
-                              <input 
-                                type="number" 
-                                value={config.commission_max || ''} 
-                                onChange={(e) => updateRoomConfig(index, 'commission_max', e.target.value ? Number(e.target.value) : '')} 
-                                placeholder="600" 
-                              />
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '0.35rem 0.75rem', fontWeight: 800 }}
+                                onClick={() => updateRoomConfig(index, 'count', (config.count || 1) + 1)}
+                              >+</button>
                             </div>
                           </div>
-                        ) : (
-                          <div style={{ flex: '1 1 120px' }}>
-                            <label style={{ fontSize: '0.75rem' }}>قيمة العمولة (جنيه)</label>
+                        </div>
+
+                        {/* Section B: Pricing & Insurance */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>الإيجار الشهري للفرد (جنيه)</label>
                             <input 
                               type="number" 
-                              value={config.commission} 
-                              placeholder={`${config.price_per_person * 0.5}`}
-                              onChange={(e) => updateRoomConfig(index, 'commission', e.target.value ? Number(e.target.value) : '')} 
+                              inputMode="numeric"
+                              value={config.price_per_person || ''} 
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => updateRoomConfig(index, 'price_per_person', e.target.value ? Number(e.target.value) : '')} 
+                              placeholder="مثال: 1200"
+                              style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem 0.65rem', fontWeight: 700, width: '100%' }}
+                              min="0" 
+                              step="50"
+                            />
+                            {(!config.price_per_person || config.price_per_person <= 0) && (
+                              <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 600, display: 'block', marginTop: '0.2rem' }}>يرجى إدخال السعر المطلوب</span>
+                            )}
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>مبلغ التأمين (اختياري)</label>
+                            <input 
+                              type="number" 
+                              inputMode="numeric"
+                              value={config.insurance_price || ''} 
+                              onFocus={(e) => e.target.select()}
+                              placeholder="مثال: 500"
+                              style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem 0.65rem', fontWeight: 600, width: '100%' }}
+                              onChange={(e) => updateRoomConfig(index, 'insurance_price', e.target.value ? Number(e.target.value) : '')} 
                             />
                           </div>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <input 
-                            type="checkbox" 
-                            id={`services-${index}`} 
-                            checked={config.services_inclusive}
-                            onChange={(e) => updateRoomConfig(index, 'services_inclusive', e.target.checked)} 
-                          />
-                          <label htmlFor={`services-${index}`} style={{ fontSize: '0.85rem', fontWeight: 500, margin: 0, cursor: 'pointer' }}>
-                            السعر شامل الخدمات (الكهرباء، المياه، الغاز)
-                          </label>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <input 
-                            type="checkbox" 
-                            id={`ac-${index}`} 
-                            checked={!!config.has_ac}
-                            onChange={(e) => updateRoomConfig(index, 'has_ac', e.target.checked)} 
-                          />
-                          <label htmlFor={`ac-${index}`} style={{ fontSize: '0.85rem', fontWeight: 500, margin: 0, cursor: 'pointer', color: '#0284c7' }}>
-                            ❄️ تكييف هواء متوفر بالفئة
+                        {/* Section C: Commission Setup (Percentage based) */}
+                        <div style={{ background: '#f8fafc', border: '1.5px solid #cbd5e1', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-dark)' }}>عمولة الوسيط المعنية بهذه الفئة</label>
+                            
+                            {/* Checkbox for Fixed vs Range */}
+                            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <input 
+                                type="checkbox"
+                                checked={isRange}
+                                onChange={(e) => updateRoomConfig(index, 'commission_type', e.target.checked ? 'range' : 'fixed')}
+                              />
+                              عمولة غير ثابتة/عمولة تقريبية
+                            </label>
+                          </div>
+
+                          {!isRange ? (
+                            /* Fixed Percentage Stepper */
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>نسبة العمولة من الإيجار الشهري:</span>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
+                                    onClick={() => updateRoomConfig(index, 'commission_pct', Math.max(0, (config.commission_pct ?? 50) - 5))}
+                                  >-</button>
+                                  <input 
+                                    type="number" 
+                                    inputMode="numeric"
+                                    value={config.commission_pct ?? 50} 
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => updateRoomConfig(index, 'commission_pct', e.target.value ? Number(e.target.value) : 0)} 
+                                    style={{ width: '65px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.35rem', fontWeight: 700 }}
+                                    min="0"
+                                    max="200"
+                                    step="5"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
+                                    onClick={() => updateRoomConfig(index, 'commission_pct', Math.min(200, (config.commission_pct ?? 50) + 5))}
+                                  >+</button>
+                                </div>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)' }}>%</span>
+                              </div>
+                              
+                              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#15803d', marginTop: '0.35rem' }}>
+                                💡 قيمة العمولة التلقائية: {config.commission ?? Math.round(price * 0.5)} جنيه {price > 0 && `(من إيجار ${price} جنيه)`}
+                              </div>
+                            </div>
+                          ) : (
+                            /* Range Percentage Steppers */
+                            <div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.35rem' }}>
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.25rem' }}>نسبة الحد الأدنى (%):</label>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <button
+                                      type="button"
+                                      className="btn-secondary"
+                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
+                                      onClick={() => updateRoomConfig(index, 'commission_min_pct', Math.max(0, (config.commission_min_pct ?? 30) - 5))}
+                                    >-</button>
+                                    <input 
+                                      type="number" 
+                                      inputMode="numeric"
+                                      value={config.commission_min_pct ?? 30} 
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => updateRoomConfig(index, 'commission_min_pct', e.target.value ? Number(e.target.value) : 0)} 
+                                      style={{ width: '55px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.3rem', fontWeight: 700 }}
+                                      min="0"
+                                      max="200"
+                                      step="5"
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn-secondary"
+                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
+                                      onClick={() => updateRoomConfig(index, 'commission_min_pct', Math.min(200, (config.commission_min_pct ?? 30) + 5))}
+                                    >+</button>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>%</span>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.25rem' }}>نسبة الحد الأقصى (%):</label>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <button
+                                      type="button"
+                                      className="btn-secondary"
+                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
+                                      onClick={() => updateRoomConfig(index, 'commission_max_pct', Math.max(0, (config.commission_max_pct ?? 100) - 5))}
+                                    >-</button>
+                                    <input 
+                                      type="number" 
+                                      inputMode="numeric"
+                                      value={config.commission_max_pct ?? 100} 
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => updateRoomConfig(index, 'commission_max_pct', e.target.value ? Number(e.target.value) : 0)} 
+                                      style={{ width: '55px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.3rem', fontWeight: 700 }}
+                                      min="0"
+                                      max="200"
+                                      step="5"
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn-secondary"
+                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
+                                      onClick={() => updateRoomConfig(index, 'commission_max_pct', Math.min(200, (config.commission_max_pct ?? 100) + 5))}
+                                    >+</button>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>%</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0284c7', marginTop: '0.35rem' }}>
+                                💡 نطاق العمولة التلقائي: {config.commission_min ?? Math.round(price * 0.3)} إلى {config.commission_max ?? price} جنيه (قابل للتفاوض)
+                              </div>
+                            </div>
+                          )}
+
+                          <small style={{ color: 'var(--text-light)', fontSize: '0.72rem', display: 'block', marginTop: '0.4rem' }}>
+                            نسبة العمولة من الإيجار الشهري. يتم حساب وتوليد المبالغ بالجنيه تلقائياً لعرضها على الكروت وسطح الإعلان.
+                          </small>
+                        </div>
+
+                        {/* Inclusive Options */}
+                        <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                          <label style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={!!config.services_inclusive}
+                              onChange={(e) => updateRoomConfig(index, 'services_inclusive', e.target.checked)} 
+                            />
+                            السعر شامل الفواتير (كهرباء، مياه، غاز)
+                          </label>
+
+                          <label style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#0284c7' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={!!config.has_ac}
+                              onChange={(e) => updateRoomConfig(index, 'has_ac', e.target.checked)} 
+                            />
+                            ❄️ مكيفة
                           </label>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
-                  <button className="btn-outline" onClick={addRoomConfig} style={{ width: '100%', marginBottom: '1.25rem' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><Plus style={{ width: 16, height: 16 }} /> إضافة فئة غرفة أخرى</span></button>
+                  <button className="btn-outline" onClick={addRoomConfig} style={{ width: '100%', marginBottom: '1.25rem' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><Plus style={{ width: 16, height: 16 }} /> إضافة فئة غرفة أخرى</span>
+                  </button>
 
-                  <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(2)}>السابق</button>
                     <button className="btn-primary" onClick={() => setCreateStep(4)}>التالي</button>
                   </div>
                 </div>
               )}
 
-              {/* STEP 4: AMENITIES */}
+              {/* STEP 4: AMENITIES & BED COUNT */}
               {createStep === 4 && (
                 <div>
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>المرافق والخدمات المتوفرة</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>قم بتحديد الخدمات المتواجدة داخل الوحدة السكنية وخارجها لتسهيل وصول الباحثين إليها.</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>حدد الخدمات المتواجدة داخل الوحدة السكنية وخارجها لتسهيل وصول الباحثين إليها.</p>
 
-                  {/* Services Clarification Banner */}
-                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.75rem 1rem', borderRadius: '10px', marginBottom: '1.25rem', fontSize: '0.85rem', color: '#166534', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Info style={{ width: 18, height: 18, flexShrink: 0 }} />
-                    <span>الغاز، المياه، والكهرباء خدمات أساسية مفترضة في جميع الإعلانات. الإنترنت غير شامل إلا إذا تم تحديده صراحة.</span>
+                  <div className="form-group" style={{ background: '#ffffff', padding: '0.85rem 1rem', border: '1.5px solid #94a3b8', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem' }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--primary)', marginBottom: '0.35rem', display: 'block' }}>إجمالي عدد الأسرة الشاغرة المتاحة حالياً</label>
+                    <input 
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      value={createForm.available_beds === 0 ? '' : createForm.available_beds}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setCreateForm({ ...createForm, available_beds: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)) })}
+                      placeholder="عدد الأسرة المتاحة"
+                      style={{ fontWeight: 700, fontSize: '1rem', background: '#ffffff', border: '1.5px solid #94a3b8' }}
+                    />
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -3482,7 +3677,7 @@ export default function App() {
                             checked={isChecked}
                             onChange={() => toggleAmenity(amenity.name)}
                           />
-                          {amenity.name} {amenity.prechecked && <span style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>(موصى به)</span>}
+                          {amenity.name}
                         </label>
                       );
                     })}
@@ -3512,24 +3707,25 @@ export default function App() {
                         type="text" 
                         placeholder="مثال: غسالة أطباق، اشتراك بين سبورت" 
                         value={customAmenity}
+                        style={{ background: '#ffffff', border: '1.5px solid #94a3b8' }}
                         onChange={(e) => setCustomAmenity(e.target.value)}
                       />
                       <button type="button" className="btn-secondary" onClick={handleAddCustomAmenity}>إضافة</button>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%', marginTop: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '1rem' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(3)}>السابق</button>
                     <button className="btn-primary" onClick={() => setCreateStep(5)}>التالي</button>
                   </div>
                 </div>
               )}
 
-              {/* STEP 5: MEDIA */}
+              {/* STEP 5: MEDIA & DIRECT PUBLISH */}
               {createStep === 5 && (
                 <div>
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>الوسائط المرئية (صور + فيديو)</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>تتطلب المنصة رفع ٥ صور على الأقل وفيديو واحد للوحدة.</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>قم برفع الصور والفيديو الخاص بالوحدة لإكمال نشر الإعلان.</p>
 
                   {/* Photo Upload */}
                   <div className="form-group">
@@ -3544,7 +3740,7 @@ export default function App() {
                             
                             {idx === 0 ? (
                               <span style={{ position: 'absolute', bottom: '4px', right: '4px', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: 700 }}>
-                                الغلاف 🌟
+                                الغلاف
                               </span>
                             ) : (
                               <button
@@ -3584,18 +3780,18 @@ export default function App() {
                       htmlFor="listing-photo-input"
                       style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        justifyContent: 'center', border: '2px dashed var(--border)',
-                        borderRadius: '12px', padding: '2rem 1rem', cursor: 'pointer',
-                        background: 'var(--bg-muted)', color: 'var(--text-muted)',
+                        justifyContent: 'center', border: '2px dashed #94a3b8',
+                        borderRadius: '12px', padding: '1.5rem 1rem', cursor: 'pointer',
+                        background: '#ffffff', color: 'var(--text-muted)',
                         fontSize: '0.875rem', gap: '0.4rem', transition: 'border-color 0.2s',
                       }}
                       onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = '#94a3b8'}
                       onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = 'var(--primary)'; }}
-                      onDragLeave={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = 'var(--border)'; }}
+                      onDragLeave={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = '#94a3b8'; }}
                       onDrop={async e => {
                         e.preventDefault(); e.stopPropagation();
-                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.borderColor = '#94a3b8';
                         const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
                         if (!files.length) return;
                         const remaining = 30 - createForm.photo_urls.length;
@@ -3617,8 +3813,8 @@ export default function App() {
                         if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح`);
                       }}
                     >
-                      <span style={{ fontSize: '2rem' }}><Camera style={{ width: 32, height: 32, color: 'var(--text-muted)' }} /></span>
-                      <span style={{ fontWeight: 600 }}>اضغط لرفع صور</span>
+                      <Camera style={{ width: 28, height: 28, color: 'var(--text-muted)' }} />
+                      <span style={{ fontWeight: 600 }}>اضغط لرفع صور الوحدة السكنية</span>
                       <span style={{ fontSize: '0.75rem' }}>JPG, PNG, WEBP — حد أقصى 10 ميجابايت لكل صورة</span>
                       <input
                         id="listing-photo-input"
@@ -3645,64 +3841,86 @@ export default function App() {
                             } catch {}
                           }
                           setCreateForm(prev => ({ ...prev, photo_urls: [...prev.photo_urls, ...newUrls] }));
-                          if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح <CheckCircle style={{ width: 16, height: 16, display: 'inline', color: '#16a34a' }} />`);
+                          if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح`);
                           e.target.value = '';
                         }}
                       />
                     </label>
-                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>يمكنك اختيار عدة صور في نفس الوقت.</small>
                   </div>
 
-                  {/* Video URL */}
-                  <div className="form-group">
-                    <label>رابط الفيديو (فيديو واحد كحد أدنى — YouTube أو Google Drive)</label>
-                    <textarea
-                      rows="2"
-                      placeholder="ضع رابط فيديو واحد في كل سطر..."
-                      value={createForm.video_urls.join('\n')}
-                      onChange={(e) => setCreateForm({ ...createForm, video_urls: e.target.value.split('\n').filter(Boolean) })}
-                    />
-                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>عدد الفيديوهات المرفقة: {createForm.video_urls.length}</small>
+                  {/* Device Storage Video Upload */}
+                  <div className="form-group" style={{ marginTop: '1.25rem' }}>
+                    <label style={{ fontWeight: 600 }}>فيديو المعاينة المرئية للوحدة السكنية</label>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>قم برفع فيديو من جهازك بمساحة حتى 150 ميجابايت (MP4, MOV, AVI, WEBM, MKV).</p>
+                    
+                    {createForm.video_urls.length > 0 && (
+                      <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {createForm.video_urls.map((vurl, vidx) => (
+                          <div key={vidx} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#e0f2fe', color: '#0369a1', padding: '0.35rem 0.75rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600 }}>
+                            <Video style={{ width: 14, height: 14 }} />
+                            <span>فيديو #{vidx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => setCreateForm(prev => ({ ...prev, video_urls: prev.video_urls.filter((_, i) => i !== vidx) }))}
+                              style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', fontWeight: 800, marginLeft: '0.25rem' }}
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <label
+                      htmlFor="listing-video-input"
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                        border: '1.5px dashed #0284c7', borderRadius: '10px', padding: '0.85rem 1rem',
+                        cursor: 'pointer', background: '#f0f9ff', color: '#0369a1', fontSize: '0.85rem', fontWeight: 600
+                      }}
+                    >
+                      <Video style={{ width: 18, height: 18 }} />
+                      <span>اختر ملف فيديو من جهازك لرفعه</span>
+                      <input
+                        id="listing-video-input"
+                        type="file"
+                        accept="video/mp4,video/quicktime,video/x-msvideo,video/webm,video/x-matroska"
+                        style={{ display: 'none' }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 150 * 1024 * 1024) {
+                            showToast('حجم الفيديو كبير جداً. الحد الأقصى 150 ميجابايت.');
+                            return;
+                          }
+                          showToast('جاري رفع الفيديو...');
+                          try {
+                            const fd = new FormData();
+                            fd.append('file', file);
+                            const res = await fetch(`${API_BASE}/upload/listing-video`, { method: 'POST', body: fd });
+                            if (res.ok) {
+                              const data = await res.json();
+                              setCreateForm(prev => ({ ...prev, video_urls: [...prev.video_urls, formatImageUrl(data.url)] }));
+                              showToast('تم رفع الفيديو بنجاح!');
+                            } else {
+                              const err = await res.json();
+                              showToast(err.detail || 'فشل رفع الفيديو');
+                            }
+                          } catch {
+                            showToast('خطأ أثناء رفع الفيديو');
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '1.5rem' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(4)}>السابق</button>
                     <button
                       className="btn-primary"
-                      disabled={createForm.photo_urls.length < 5 || createForm.video_urls.length < 1}
-                      onClick={() => setCreateStep(6)}
+                      onClick={handleCreateSubmit}
                     >
-                      التالي
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>نشر الإعلان مباشرة <Send style={{ width: 16, height: 16 }} /></span>
                     </button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 6: CHOOSE TIER & SUBMIT */}
-              {createStep === 6 && (
-                <div>
-                  <h4 style={{ fontWeight: 700, marginBottom: '1.25rem' }}>اختر باقة الإعلان وانشر عقارك</h4>
-                  <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
-                    <label style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: createForm.tier === 'regular' ? '#f0fdf4' : 'white', borderColor: createForm.tier === 'regular' ? 'var(--primary)' : 'var(--border-color)' }}>
-                      <input type="radio" name="tier" checked={createForm.tier === 'regular'} onChange={() => setCreateForm({ ...createForm, tier: 'regular' })} />
-                      <div>
-                        <strong>إعلان عادي (Regular Listing) - ١٠٠ جنيه مصري / شهر</strong>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>نشر قياسي للإعلان في ذيل القائمة حسب تاريخ النشر.</p>
-                      </div>
-                    </label>
-
-                    <label style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: createForm.tier === 'premium' ? '#fffbeb' : 'white', borderColor: createForm.tier === 'premium' ? 'var(--premium-gold)' : 'var(--border-color)' }}>
-                      <input type="radio" name="tier" checked={createForm.tier === 'premium'} onChange={() => setCreateForm({ ...createForm, tier: 'premium' })} />
-                      <div>
-                        <strong><Star style={{ width: 14, height: 14, display: 'inline', color: '#f59e0b' }} /> إعلان مميز (Premium Listing) - ١٥٠ جنيه مصري / شهر</strong>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>أولوية ظهور الإعلان في أعلى نتائج البحث ووضع شارة عقار مميز ملفتة للانتباه.</p>
-                      </div>
-                    </label>
-                  </div>
-
-                  <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%' }}>
-                    <button className="btn-secondary" onClick={() => setCreateStep(5)}>السابق</button>
-                    <button className="btn-primary" onClick={handleCreateSubmit}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>نشر الإعلان <Send style={{ width: 16, height: 16 }} /></span></button>
                   </div>
                 </div>
               )}
