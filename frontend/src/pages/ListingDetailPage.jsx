@@ -514,11 +514,22 @@ export default function ListingDetailPage() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                    {c.commission != null && (
+                    {(c.commission_type === 'range' || (c.commission_min && c.commission_max)) ? (
+                      <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 700 }}>
+                        عمولة: {c.commission_min} - {c.commission_max} ج.م (تفاوضي)
+                      </span>
+                    ) : c.commission != null ? (
                       <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
                         عمولة: {c.commission} ج.م
                       </span>
+                    ) : null}
+
+                    {c.has_ac && (
+                      <span style={{ background: '#e0f2fe', color: '#0284c7', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <Wind style={{ width: 13, height: 13 }} /> ❄️ مكيفة
+                      </span>
                     )}
+
                     {c.insurance_price ? (
                       <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
                         <Shield style={{ width: 13, height: 13 }} /> تأمين: {c.insurance_price} ج.م
@@ -717,9 +728,13 @@ export default function ListingDetailPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
           {(() => {
             const cleanAmenities = (listing.amenities || []).map(extractAmenityName).filter(Boolean);
-            const indoorList = cleanAmenities.filter(a => INDOOR_AMENITIES.includes(a));
+            const hasAcRoom = listing.room_configurations?.some(c => c.has_ac);
+            if (hasAcRoom && !cleanAmenities.some(a => a.includes('تكييف') || a.includes('مكيفة'))) {
+              cleanAmenities.push('❄️ مكيفة');
+            }
+            const indoorList = cleanAmenities.filter(a => INDOOR_AMENITIES.includes(a) || a.includes('مكيفة'));
             const outdoorList = cleanAmenities.filter(a => OUTDOOR_AMENITIES.includes(a));
-            const otherList = cleanAmenities.filter(a => !INDOOR_AMENITIES.includes(a) && !OUTDOOR_AMENITIES.includes(a));
+            const otherList = cleanAmenities.filter(a => !INDOOR_AMENITIES.includes(a) && !OUTDOOR_AMENITIES.includes(a) && !a.includes('مكيفة'));
 
             return (
               <>

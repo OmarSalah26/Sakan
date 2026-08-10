@@ -430,6 +430,9 @@ export default function App() {
     max_total_beds: ''
   });
 
+  const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'oldest' | 'price_asc' | 'price_desc'
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+
   // Create listing wizard state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createStep, setCreateStep] = useState(1);
@@ -671,6 +674,14 @@ export default function App() {
       console.error(err);
     }
   };
+
+  const sortedListings = [...listings].sort((a, b) => {
+    if (sortBy === 'newest') return (b.id || 0) - (a.id || 0);
+    if (sortBy === 'oldest') return (a.id || 0) - (b.id || 0);
+    if (sortBy === 'price_asc') return (a.price_per_person || 0) - (b.price_per_person || 0);
+    if (sortBy === 'price_desc') return (b.price_per_person || 0) - (a.price_per_person || 0);
+    return 0;
+  });
 
   useEffect(() => {
     loadListings();
@@ -1637,13 +1648,58 @@ export default function App() {
                   />
                 </div>
 
+                {/* Gender Horizontal Toggle Chips */}
                 <div className="form-group">
-                  <label>النوع (سكن طلاب / طالبات)</label>
-                  <select value={filters.gender} onChange={(e) => setFilters({ ...filters, gender: e.target.value })}>
-                    <option value="">الكل</option>
-                    <option value="male">طلاب (شباب)</option>
-                    <option value="female">طالبات (بنات)</option>
-                  </select>
+                  <label style={{ fontWeight: 700, fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>النوع المسموح بالسكن</label>
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    {[
+                      { id: '', label: 'الكل' },
+                      { id: 'male', label: 'طلاب' },
+                      { id: 'female', label: 'طالبات' }
+                    ].map(chip => (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => setFilters({ ...filters, gender: chip.id })}
+                        style={{
+                          flex: 1, padding: '0.4rem 0.5rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700,
+                          border: filters.gender === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                          background: filters.gender === chip.id ? 'var(--primary-light)' : '#ffffff',
+                          color: filters.gender === chip.id ? 'var(--primary-dark)' : '#475569',
+                          cursor: 'pointer', transition: 'all 0.15s'
+                        }}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Advertiser Type Horizontal Toggle Chips */}
+                <div className="form-group">
+                  <label style={{ fontWeight: 700, fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>صفة المعلن</label>
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    {[
+                      { id: '', label: 'الكل' },
+                      { id: 'owner', label: 'مالك مباشر' },
+                      { id: 'broker', label: 'وسيط' }
+                    ].map(chip => (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => setFilters({ ...filters, advertiser_type: chip.id })}
+                        style={{
+                          flex: 1, padding: '0.4rem 0.5rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700,
+                          border: filters.advertiser_type === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                          background: filters.advertiser_type === chip.id ? 'var(--primary-light)' : '#ffffff',
+                          color: filters.advertiser_type === chip.id ? 'var(--primary-dark)' : '#475569',
+                          cursor: 'pointer', transition: 'all 0.15s'
+                        }}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -1734,23 +1790,6 @@ export default function App() {
                     />
                     يتطلب دفع تأمين
                   </label>
-                  <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', color: '#166534', background: '#dcfce7', padding: '0.3rem 0.6rem', borderRadius: 'var(--r-sm)', border: '1px solid #bbf7d0', marginTop: '0.5rem', display: 'inline-flex' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={filters.fully_vacant}
-                      onChange={(e) => setFilters({ ...filters, fully_vacant: e.target.checked })}
-                    />
-                    شاغر بالكامل فقط 🏠
-                  </label>
-                </div>
-
-                <div className="form-group">
-                  <label>المعلن</label>
-                  <select value={filters.advertiser_type} onChange={(e) => setFilters({ ...filters, advertiser_type: e.target.value })}>
-                    <option value="">الكل</option>
-                    <option value="owner">مالك مباشر</option>
-                    <option value="broker">سمسار عقاري</option>
-                  </select>
                 </div>
 
                 <div className="form-group" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
@@ -1779,11 +1818,27 @@ export default function App() {
 
               {/* Listings feed */}
               <section style={{ flexGrow: 1 }}>
-                <div className="section-header">
-                  <span className="section-count">العقارات المتاحة: {listings.length} إعلان</span>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="section-count" style={{ fontWeight: 700, fontSize: '0.95rem' }}>العقارات المتاحة: {sortedListings.length} إعلان</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>ترتيب حسب:</span>
+                    <select 
+                      value={sortBy} 
+                      onChange={(e) => setSortBy(e.target.value)}
+                      style={{ padding: '0.35rem 0.75rem', borderRadius: 'var(--r-md)', border: '1.5px solid #cbd5e1', fontSize: '0.85rem', fontWeight: 700, background: '#ffffff', color: 'var(--text-dark)', cursor: 'pointer' }}
+                    >
+                      <option value="newest">الأحدث نُشراً</option>
+                      <option value="oldest">الأقدم نُشراً</option>
+                      <option value="price_asc">السعر: من الأقل للأعلى</option>
+                      <option value="price_desc">السعر: من الأعلى للأقل</option>
+                    </select>
+                  </div>
                 </div>
 
-                {listings.length === 0 ? (
+                {sortedListings.length === 0 ? (
                   <div className="empty-state">
                     <div className="empty-icon"><Search style={{ width: 48, height: 48, color: 'var(--text-muted)' }} /></div>
                     <h3 className="empty-title">لم نجد أي نتائج تطابق بحثك</h3>
@@ -1791,7 +1846,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="listings-grid">
-                    {listings.map((item) => {
+                    {sortedListings.map((item) => {
                       const coverImage = item.photo_urls && item.photo_urls.length > 0
                         ? formatImageUrl(item.photo_urls[0])
                         : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
@@ -1802,11 +1857,9 @@ export default function App() {
                         item.room_configurations.forEach(c => {
                           let bedsPerRoom = 1;
                           let name = 'فردية';
-                          let icon = <Bed style={{ width: 16, height: 16 }} />;
-                          if (c.room_type === 'double') { bedsPerRoom = 2; name = 'ثنائية'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; }
-                          else if (c.room_type === 'triple') { bedsPerRoom = 3; name = 'ثلاثية'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; }
-                          else if (c.room_type === 'quadruple') { bedsPerRoom = 4; name = 'رباعية'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; }
-                          else if (c.room_type === 'triple+') { bedsPerRoom = 4; name = 'مشتركة ٤+'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; } // legacy
+                          if (c.room_type === 'double') { bedsPerRoom = 2; name = 'ثنائية'; }
+                          else if (c.room_type === 'triple') { bedsPerRoom = 3; name = 'ثلاثية'; }
+                          else if (c.room_type === 'quadruple' || c.room_type === 'triple+') { bedsPerRoom = 4; name = 'رباعية'; }
                           
                           const count = c.count || 1;
                           totalBeds += (bedsPerRoom * count);
@@ -1816,13 +1869,47 @@ export default function App() {
                         totalBeds = item.available_beds;
                       }
 
+                      const configs = item.room_configurations || [];
+                      let minPrice = item.price_per_person;
+                      if (configs.length > 0) {
+                        const prices = configs.map(c => c.price_per_person).filter(p => p > 0);
+                        if (prices.length > 0) minPrice = Math.min(...prices);
+                      }
+
+                      const servicesInclusive = configs.some(c => c.services_inclusive);
+                      const hasAc = configs.some(c => c.has_ac);
+                      const hasInsurance = configs.some(c => c.insurance_price && c.insurance_price > 0);
+
+                      // Calculate total monthly rent price of the entire unit
+                      let totalUnitRent = 0;
+                      if (configs.length > 0) {
+                        configs.forEach(c => {
+                          const roomType = c.room_type || 'single';
+                          const bedsPerRoom = roomType === 'single' ? 1 : roomType === 'double' ? 2 : roomType === 'triple' ? 3 : 4;
+                          const roomCount = c.count || 1;
+                          const pricePerPerson = c.price_per_person || 0;
+                          totalUnitRent += (roomCount * bedsPerRoom * pricePerPerson);
+                        });
+                      } else {
+                        totalUnitRent = (item.price_per_person || 0) * (item.available_beds || 1);
+                      }
+
                       return (
                         <article 
                           key={item.id} 
                           className="listing-card"
+                          style={{
+                            background: '#ffffff',
+                            borderRadius: '16px',
+                            border: '1px solid #e2e8f0',
+                            overflow: 'hidden',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                            transition: 'transform 0.2s, box-shadow 0.2s',
+                            cursor: 'pointer'
+                          }}
                           onClick={() => navigate(`/listings/${item.id}`)}
                         >
-                          <div className="card-img-wrapper">
+                          <div className="card-img-wrapper" style={{ position: 'relative' }}>
                             <img className="card-img" src={coverImage} alt={item.title} />
                             
                             <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 2, display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
@@ -1831,7 +1918,7 @@ export default function App() {
                               </span>
                               
                               {item.tier === 'premium' && (
-                                <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#eff6ff', color: '#0d63ea', border: '1px solid #bfdbfe', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#eff6ff', color: '#0d63ea', border: '1px solid #bfdbfe', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
                                   <Star style={{ width: 12, height: 12, color: '#f59e0b' }} /> مميز
                                 </span>
                               )}
@@ -1854,74 +1941,122 @@ export default function App() {
                             </button>
                           </div>
 
-                          <div className="card-content">
-                            <div className="card-location" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '14px', height: '14px', color: 'var(--primary)' }}><path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 3.69 2.944l.036.024.01.006.004.002ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" /></svg>
-                              {item.governorate}، {item.city}
+                          <div className="card-content" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                            {/* Header: Title + Location & Top-Left Total Capacity Badge */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.65rem' }}>
+                              <div>
+                                <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', margin: '0 0 0.25rem 0', lineHeight: 1.35 }}>
+                                  {item.title}
+                                </h2>
+                                <div style={{ fontSize: '0.82rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 500 }}>
+                                  <MapPin style={{ width: 14, height: 14, color: '#94a3b8' }} />
+                                  {item.governorate}، {item.city}{item.neighborhood ? `، ${item.neighborhood}` : ''}
+                                </div>
+                              </div>
+
+                              {/* Total Capacity Badge (Top-Left of Card Body) */}
+                              <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '0.35rem 0.65rem', textAlign: 'center', flexShrink: 0 }}>
+                                <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>السعة الإجمالية</div>
+                                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem', marginTop: '0.1rem' }}>
+                                  <Bed style={{ width: 14, height: 14, color: 'var(--primary)' }} /> {totalBeds} أسرة
+                                </div>
+                              </div>
                             </div>
-                            <h2 className="card-title">{item.title}</h2>
-                            <div className="card-room-types" style={{ fontSize: '0.85rem' }}>{breakdown.join(' + ')}</div>
-                            <div className="card-beds" style={{ fontWeight: 600 }}>إجمالي السعة: {totalBeds} سرير</div>
-                            
-                            <div className="card-price-list">
-                              {item.room_configurations && item.room_configurations.length > 0 ? (
-                                item.room_configurations.map((config, idx) => {
-                                  let icon = <Bed style={{ width: 16, height: 16 }} />;
-                                  if (config.room_type === 'double') icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>;
-                                  else if (config.room_type === 'triple') icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>;
-                                  else if (config.room_type === 'quadruple' || config.room_type === 'triple+') icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>;
-                                  
+
+                            {/* Focal Point 1: Hero Price Summary (Total Unit Rent as Hero) */}
+                            <div style={{ background: '#f8fafc', padding: '0.75rem 0.85rem', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
+                                <span style={{ fontSize: '1.55rem', fontWeight: 900, color: 'var(--primary-dark)', letterSpacing: '-0.02em' }}>
+                                  {totalUnitRent ? totalUnitRent.toLocaleString() : (minPrice ? minPrice.toLocaleString() : '---')} ج.م
+                                </span>
+                                <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>
+                                  / شهرياً (إيجار الشقة بالكامل)
+                                </span>
+                              </div>
+
+                              {/* Inline Inclusive Services Badge */}
+                              {servicesInclusive && (
+                                <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', padding: '0.2rem 0.55rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <Zap style={{ width: 12, height: 12 }} /> شامل الخدمات
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Grouped Per-Room Configurations (Room Type + AC + Price + Commission) */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.1rem' }}>
+                              {configs && configs.length > 0 ? (
+                                configs.map((config, idx) => {
+                                  let typeLabel = config.room_type === 'single' ? 'غرفة فردية' : config.room_type === 'double' ? 'غرفة ثنائية' : config.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية';
+                                  const isRange = config.commission_type === 'range' || (config.commission_min && config.commission_max);
+
                                   return (
-                                    <div key={idx} className="price-item" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '0.5rem', background: 'var(--bg-muted)', borderRadius: 'var(--r-sm)' }}>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                        <span className="room-lbl" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>{icon} ({config.count || 1})</span>
-                                        <span className="room-val">{config.price_per_person} ج.م/فرد</span>
-                                      </div>
-                                      {config.commission && (
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginTop: '0.25rem' }}>
-                                          عمولة: {config.commission} ج.م
+                                    <div key={idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.55rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                          <Bed style={{ width: 14, height: 14, color: 'var(--primary)' }} />
+                                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
+                                            ({config.count || 1}) {typeLabel}
+                                          </span>
+                                          
+                                          {/* AC Badge tied directly to THIS room */}
+                                          {config.has_ac && (
+                                            <span style={{ fontSize: '0.68rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', padding: '0.05rem 0.4rem', borderRadius: '999px', fontWeight: 700 }}>
+                                              ❄️ مكيفة
+                                            </span>
+                                          )}
                                         </div>
-                                      )}
+
+                                        {/* Room Rent Price */}
+                                        <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary-dark)' }}>
+                                          {config.price_per_person ? config.price_per_person.toLocaleString() : '---'} ج.م/فرد
+                                        </span>
+                                      </div>
+
+                                      {/* Room Commission */}
+                                      {isRange ? (
+                                        <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                          <Briefcase style={{ width: 12, height: 12 }} />
+                                          <span>عمولة: {config.commission_min} - {config.commission_max} ج.م (تفاوضي)</span>
+                                        </div>
+                                      ) : config.commission ? (
+                                        <div style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                          <Briefcase style={{ width: 12, height: 12 }} />
+                                          <span>عمولة: {config.commission} ج.م</span>
+                                        </div>
+                                      ) : null}
                                     </div>
                                   );
                                 })
                               ) : (
-                                <div className="price-item">
-                                  <span className="room-lbl">سعر السرير:</span>
-                                  <span className="room-val">{item.price_per_person} ج.م</span>
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.55rem 0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>سعر السرير</span>
+                                  <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary-dark)' }}>{item.price_per_person} ج.م/فرد</span>
                                 </div>
                               )}
                             </div>
-                          </div>
 
-                          <div className="card-footer" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px', color: 'var(--text-light)' }}><path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" /></svg>
-                              <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.advertiser_name || 'معلن مسجل'}</span>
-                              <span style={{ fontSize: '0.7rem', background: item.advertiser_type === 'owner' ? '#dcfce7' : '#e0e7ff', color: item.advertiser_type === 'owner' ? '#166534' : '#3730a3', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: 600 }}>
-                                {item.advertiser_type === 'owner' ? 'مالك مباشر' : item.advertiser_type === 'broker' ? 'وسيط' : 'معلن'}
+                            {/* Tertiary Tier: Unit-Level Badges Row */}
+                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center', paddingTop: '0.15rem' }}>
+                              {/* Advertiser Chip */}
+                              <span style={{ fontSize: '0.72rem', background: item.advertiser_type === 'owner' ? '#dcfce7' : '#f1f5f9', color: item.advertiser_type === 'owner' ? '#166534' : '#334155', border: `1px solid ${item.advertiser_type === 'owner' ? '#bbf7d0' : '#cbd5e1'}`, padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <User style={{ width: 12, height: 12 }} />
+                                {item.advertiser_type === 'owner' ? 'مالك مباشر (بدون عمولة)' : 'وسيط'}
                               </span>
+
+                              {/* Verified Chip */}
                               {item.advertiser_verified && (
-                                <span style={{ fontSize: '0.7rem', background: '#dbeafe', color: '#1e40af', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '12px', height: '12px' }}><path fillRule="evenodd" d="M8.603 3.799A4.49 4.49 0 0 1 12 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 0 1 3.498 1.307 4.491 4.491 0 0 1 1.307 3.497A4.49 4.49 0 0 1 21.75 12a4.49 4.49 0 0 1-1.549 3.397 4.491 4.491 0 0 1-1.307 3.497 4.491 4.491 0 0 1-3.497 1.307A4.49 4.49 0 0 1 12 21.75a4.49 4.49 0 0 1-3.397-1.549 4.49 4.49 0 0 1-3.498-1.306 4.491 4.491 0 0 1-1.307-3.498A4.49 4.49 0 0 1 2.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 0 1 1.307-3.497 4.49 4.49 0 0 1 3.497-1.307Zm7.007 6.387a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clipRule="evenodd" /></svg>
-                                  موثق من سكن
+                                <span style={{ fontSize: '0.72rem', background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                  <ShieldCheck style={{ width: 12, height: 12 }} /> موثق من سكن
+                                </span>
+                              )}
+
+                              {/* Insurance Chip */}
+                              {hasInsurance && (
+                                <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                  <Shield style={{ width: 12, height: 12 }} /> يوجد تأمين
                                 </span>
                               )}
                             </div>
-                            {item.advertiser_type === 'owner' && (
-                              <span style={{ fontSize: '0.75rem', background: '#fef3c7', color: '#92400e', padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-sm)', fontWeight: 700, display: 'inline-block', width: 'fit-content' }}>بدون عمولة</span>
-                            )}
-                            {(() => {
-                              const configs = item.room_configurations || [];
-                              const hasInsurance = configs.some(c => c.insurance_price && c.insurance_price > 0);
-                              const servicesInc = configs.some(c => c.services_inclusive);
-                              return (hasInsurance || servicesInc) ? (
-                                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                                  {servicesInc && <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 500 }}>شامل الخدمات</span>}
-                                  {hasInsurance && <span style={{ fontSize: '0.7rem', color: '#b45309', fontWeight: 500 }}>يوجد تأمين</span>}
-                                </div>
-                              ) : null;
-                            })()}
                           </div>
                         </article>
                       );
@@ -4444,6 +4579,168 @@ export default function App() {
                 }}
               >
                 <Share2 style={{ width: 18, height: 18 }} /> انسخ الإعلان
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* --- FLOATING MOBILE FILTER FAB --- */}
+      {tab === 'browse' && (
+        <button 
+          className="mobile-filter-fab"
+          style={{
+            position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 900,
+            background: 'var(--primary)', color: '#ffffff', border: 'none', borderRadius: '999px',
+            padding: '0.65rem 1.4rem', fontWeight: 800, fontSize: '0.9rem', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+            display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer'
+          }}
+          onClick={() => setIsMobileFilterOpen(true)}
+        >
+          <Search style={{ width: 18, height: 18 }} /> تصفية النتائج ({sortedListings.length})
+        </button>
+      )}
+
+      {/* --- MOBILE FILTER DRAWER MODAL --- */}
+      {isMobileFilterOpen && (
+        <div className="modal-overlay" style={{ zIndex: 99999 }}>
+          <div className="modal-content" style={{ maxWidth: '500px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0 }}>
+            <div className="modal-header" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontWeight: 800, margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Search style={{ width: 20, height: 20, color: 'var(--primary)' }} /> تصفية نتائج البحث
+              </h3>
+              <button className="modal-close" onClick={() => setIsMobileFilterOpen(false)}>×</button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '1.25rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="form-group">
+                <label style={{ fontWeight: 700 }}>المحافظة</label>
+                <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })} style={{ padding: '0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)' }}>
+                  <option value="">جميع المحافظات</option>
+                  <optgroup label="المحافظات المتاحة حالياً">
+                    {dbGovernorates.filter(g => g.status === 'live').map(g => (
+                      <option key={g.id} value={g.name}>🟢 {g.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="المحافظات المتاحة في قائمة الانتظار">
+                    {dbGovernorates.filter(g => g.status !== 'live').map(g => (
+                      <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
+                        ⚪ {g.name} (قريباً - قائمة الانتظار)
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontWeight: 700 }}>المدينة / الحي</label>
+                <input 
+                  type="text" 
+                  placeholder="مثال: مدينة نصر، الدقي..." 
+                  value={filters.neighborhood} 
+                  onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value })}
+                  style={{ padding: '0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)' }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontWeight: 700, fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>النوع المسموح بالسكن</label>
+                <div style={{ display: 'flex', gap: '0.35rem' }}>
+                  {[
+                    { id: '', label: 'الكل' },
+                    { id: 'male', label: 'طلاب' },
+                    { id: 'female', label: 'طالبات' }
+                  ].map(chip => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setFilters({ ...filters, gender: chip.id })}
+                      style={{
+                        flex: 1, padding: '0.4rem 0.5rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700,
+                        border: filters.gender === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                        background: filters.gender === chip.id ? 'var(--primary-light)' : '#ffffff',
+                        color: filters.gender === chip.id ? 'var(--primary-dark)' : '#475569',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontWeight: 700, fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>صفة المعلن</label>
+                <div style={{ display: 'flex', gap: '0.35rem' }}>
+                  {[
+                    { id: '', label: 'الكل' },
+                    { id: 'owner', label: 'مالك مباشر' },
+                    { id: 'broker', label: 'وسيط' }
+                  ].map(chip => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setFilters({ ...filters, advertiser_type: chip.id })}
+                      style={{
+                        flex: 1, padding: '0.4rem 0.5rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700,
+                        border: filters.advertiser_type === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                        background: filters.advertiser_type === chip.id ? 'var(--primary-light)' : '#ffffff',
+                        color: filters.advertiser_type === chip.id ? 'var(--primary-dark)' : '#475569',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontWeight: 700 }}>نطاق السعر الشهري (جنيه مصري)</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input 
+                    type="number" 
+                    placeholder="الأدنى" 
+                    value={filters.min_price} 
+                    onChange={(e) => setFilters({ ...filters, min_price: e.target.value })} 
+                    style={{ padding: '0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)' }}
+                  />
+                  <input 
+                    type="number" 
+                    placeholder="الأقصى" 
+                    value={filters.max_price} 
+                    onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
+                    style={{ padding: '0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)' }}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontWeight: 700 }}>ترتيب النتائج حسب</label>
+                <select 
+                  value={sortBy} 
+                  onChange={(e) => setSortBy(e.target.value)}
+                  style={{ padding: '0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontWeight: 700 }}
+                >
+                  <option value="newest">الأحدث نُشراً</option>
+                  <option value="oldest">الأقدم نُشراً</option>
+                  <option value="price_asc">السعر: من الأقل للأعلى</option>
+                  <option value="price_desc">السعر: من الأعلى للأقل</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid var(--border-color)', background: '#f8fafc', display: 'flex', gap: '0.75rem' }}>
+              <button 
+                className="btn-outline" 
+                style={{ flex: 1, padding: '0.65rem' }}
+                onClick={() => {
+                  setFilters({ governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', max_commission: '', services_inclusive: false, has_insurance: false, min_total_beds: '', max_total_beds: '' });
+                }}
+              >
+                مسح الكل
+              </button>
+              <button className="btn-primary" style={{ flex: 2, padding: '0.65rem', fontWeight: 800 }} onClick={() => setIsMobileFilterOpen(false)}>
+                عرض النتائج ({sortedListings.length})
               </button>
             </div>
           </div>

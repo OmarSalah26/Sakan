@@ -1446,9 +1446,14 @@ def get_listing_detail(listing_id: int):
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
 
-        advertiser = db.query(User).filter(User.id == listing.advertiser_id).first()
+        advertiser = db.query(User).filter(User.id == listing.advertiser_id).first() if listing.advertiser_id else None
         if not advertiser or advertiser.is_banned:
-            raise HTTPException(status_code=404, detail="المعلن غير متاح")
+            # Fallback for admin-added / imported / legacy listings missing an explicit advertiser user record
+            admin_user = db.query(User).filter(User.account_type == "admin").first()
+            if admin_user:
+                advertiser = admin_user
+            else:
+                advertiser = User(id=0, name="إدارة سكن", phone="01062400034", account_type="admin", verified_by_sakan=True, is_banned=False)
 
         # Calculate advertiser rating
         ratings = db.query(Rating).join(Listing, Rating.listing_id == Listing.id).filter(
