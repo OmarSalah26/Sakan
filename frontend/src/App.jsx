@@ -1489,13 +1489,27 @@ export default function App() {
           <a href="#/browse" className="logo" onClick={(e) => { e.preventDefault(); navigateTo('#/browse'); setMobileMenuOpen(false); }}>
             سكن <span>Sakan</span>
           </a>
-          <button 
-            className="mobile-menu-toggle"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="القائمة"
-          >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {/* Directly Visible Mobile Header "أضف إعلانك" CTA Button */}
+            {(!user || isBroker || isAdmin) && (
+              <button 
+                className="btn-primary mobile-nav-cta" 
+                onClick={() => { handleOpenCreateFlow(); setMobileMenuOpen(false); }}
+                style={{ fontWeight: 800, padding: '0.4rem 0.85rem', fontSize: '0.82rem', borderRadius: '999px', alignItems: 'center', gap: '0.3rem' }}
+              >
+                أضف إعلانك <Plus style={{ width: 16, height: 16 }} />
+              </button>
+            )}
+
+            <button 
+              className="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="القائمة"
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
         </div>
 
         <div className={`nav-links ${mobileMenuOpen ? 'mobile-open' : ''}`}>
@@ -1540,7 +1554,7 @@ export default function App() {
           {/* Create listing button accessible for Brokers, Admins, or guests */}
           {(!user || isBroker || isAdmin) && (
             <button 
-              className="btn-primary nav-action-btn" 
+              className="btn-primary nav-action-btn nav-action-btn-desktop" 
               onClick={() => { handleOpenCreateFlow(); setMobileMenuOpen(false); }}
               style={{ fontWeight: 700 }}
             >
@@ -1625,13 +1639,13 @@ export default function App() {
                     <option value="">جميع المحافظات</option>
                     <optgroup label="المحافظات المتاحة حالياً">
                       {dbGovernorates.filter(g => g.status === 'live').map(g => (
-                        <option key={g.id} value={g.name}>🟢 {g.name}</option>
+                        <option key={g.id} value={g.name}>{g.name}</option>
                       ))}
                     </optgroup>
                     <optgroup label="المحافظات المتاحة في قائمة الانتظار">
                       {dbGovernorates.filter(g => g.status !== 'live').map(g => (
                         <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
-                          ⚪ {g.name} (قريباً - قائمة الانتظار)
+                          {g.name} (قريباً - قائمة الانتظار)
                         </option>
                       ))}
                     </optgroup>
@@ -2420,11 +2434,16 @@ export default function App() {
                           <td style={{ padding: '0.75rem', fontWeight: 600 }}>{g.name}</td>
                           <td style={{ padding: '0.75rem' }}>
                             <span style={{
-                              padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700,
+                              padding: '0.25rem 0.65rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700,
                               background: g.status === 'live' ? '#dcfce7' : '#fef3c7',
-                              color: g.status === 'live' ? '#15803d' : '#b45309'
+                              color: g.status === 'live' ? '#15803d' : '#b45309',
+                              display: 'inline-flex', alignItems: 'center', gap: '0.3rem'
                             }}>
-                              {g.status === 'live' ? '🟢 مفعلة (Live)' : '🟡 قائمة انتظار (Waitlist Open)'}
+                              {g.status === 'live' ? (
+                                <><CheckCircle style={{ width: 14, height: 14 }} /> مفعلة (Live)</>
+                              ) : (
+                                <><Clock style={{ width: 14, height: 14 }} /> قائمة انتظار (Waitlist Open)</>
+                              )}
                             </span>
                           </td>
                           <td style={{ padding: '0.75rem', fontWeight: 700 }}>{g.waitlist_count || 0} معلن</td>
@@ -3021,7 +3040,11 @@ export default function App() {
           </div>
           <div>
             <h4 style={{ color: '#fff', marginBottom: '0.75rem', fontSize: '1rem' }}>الدعم والتواصل</h4>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>إذا واجهت أي استفسار أو مشكلة، يسعدنا تواصلك معنا مباشرة عبر المنصة أو البريد الإلكتروني.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', color: '#cbd5e1' }}>
+              <span>الدعم الفني: <a href="mailto:support@sakan-egy.com" style={{ color: 'var(--primary)', textDecoration: 'none' }}>support@sakan-egy.com</a></span>
+              <span>واتساب الخدمة: <a href="https://wa.me/201062400034" target="_blank" rel="noreferrer" style={{ color: '#22c55e', textDecoration: 'none', fontWeight: 600 }}>01062400034</a></span>
+              <span>الشراكات والأعمال: <a href="mailto:business@sakan-egy.com" style={{ color: '#cbd5e1', textDecoration: 'none' }}>business@sakan-egy.com</a></span>
+            </div>
           </div>
         </div>
         <div style={{ borderTop: '1px solid #334155', paddingTop: '1rem', textAlign: 'center', fontSize: '0.8rem', color: '#64748b' }}>
@@ -4618,13 +4641,13 @@ export default function App() {
                   <option value="">جميع المحافظات</option>
                   <optgroup label="المحافظات المتاحة حالياً">
                     {dbGovernorates.filter(g => g.status === 'live').map(g => (
-                      <option key={g.id} value={g.name}>🟢 {g.name}</option>
+                      <option key={g.id} value={g.name}>{g.name}</option>
                     ))}
                   </optgroup>
                   <optgroup label="المحافظات المتاحة في قائمة الانتظار">
                     {dbGovernorates.filter(g => g.status !== 'live').map(g => (
                       <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
-                        ⚪ {g.name} (قريباً - قائمة الانتظار)
+                        {g.name} (قريباً - قائمة الانتظار)
                       </option>
                     ))}
                   </optgroup>
