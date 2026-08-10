@@ -622,7 +622,7 @@ export default function ListingDetailPage() {
                 <h4 style={{ fontWeight: 700, fontSize: '1.05rem', margin: '0 0 0.25rem' }}>{advertiser.name}</h4>
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.75rem', background: '#f1f5f9', color: '#334155', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
-                    {advertiser.account_type === 'broker' ? 'سمسار عقاري' : 'مالك مباشر'}
+                    {advertiser.account_type === 'broker' ? 'وسيط عقاري' : 'مالك مباشر'}
                   </span>
                   {advertiser.verified_by_sakan && (
                     <span style={{ fontSize: '0.75rem', background: '#dbeafe', color: '#1e40af', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>

@@ -108,7 +108,7 @@ export default function AdvertiserProfilePage() {
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ background: '#f1f5f9', color: '#334155', padding: '0.25rem 0.75rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
                 {advUser.account_type === 'broker' ? (
-                  <><Briefcase style={{ width: 14, height: 14 }} /> سمسار عقاري</>
+                  <><Briefcase style={{ width: 14, height: 14 }} /> وسيط عقاري</>
                 ) : (
                   <><Home style={{ width: 14, height: 14 }} /> مالك مباشر (بدون عمولة)</>
                 )}

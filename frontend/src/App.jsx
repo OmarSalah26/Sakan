@@ -1574,7 +1574,7 @@ export default function App() {
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{user.name}</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>
-                  {isAdmin ? 'مشرف المنصة' : isBroker ? 'سمسار عقاري' : 'مستخدم عادي'}
+                  {isAdmin ? 'مشرف المنصة' : isBroker ? 'وسيط عقاري' : 'مستخدم عادي'}
                 </div>
               </div>
               <button style={{ background: '#ef4444', color: 'white', border: 'none', padding: '0.4rem 1rem', borderRadius: 'var(--r-md)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }} onClick={() => { setUser(null); showToast("تم تسجيل الخروج"); setTab('browse'); setMobileMenuOpen(false); }}>تسجيل الخروج</button>
@@ -1899,7 +1899,7 @@ export default function App() {
                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px', color: 'var(--text-light)' }}><path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" /></svg>
                               <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.advertiser_name || 'معلن مسجل'}</span>
                               <span style={{ fontSize: '0.7rem', background: item.advertiser_type === 'owner' ? '#dcfce7' : '#e0e7ff', color: item.advertiser_type === 'owner' ? '#166534' : '#3730a3', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: 600 }}>
-                                {item.advertiser_type === 'owner' ? 'مالك مباشر' : item.advertiser_type === 'broker' ? 'سمسار' : 'معلن'}
+                                {item.advertiser_type === 'owner' ? 'مالك مباشر' : item.advertiser_type === 'broker' ? 'وسيط' : 'معلن'}
                               </span>
                               {item.advertiser_verified && (
                                 <span style={{ fontSize: '0.7rem', background: '#dbeafe', color: '#1e40af', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
@@ -2099,7 +2099,7 @@ export default function App() {
                         <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                           <td style={{ padding: '0.75rem' }}>{u.name}</td>
                           <td style={{ padding: '0.75rem' }}>{u.phone}</td>
-                          <td style={{ padding: '0.75rem' }}>{u.account_type === 'broker' ? 'سمسار' : u.account_type === 'owner' ? 'مالك' : u.account_type === 'admin' ? 'مسؤول' : 'طالب'}</td>
+                          <td style={{ padding: '0.75rem' }}>{u.account_type === 'broker' ? 'وسيط' : u.account_type === 'owner' ? 'مالك' : u.account_type === 'admin' ? 'مسؤول' : 'طالب'}</td>
                           <td style={{ padding: '0.75rem', fontWeight: 'bold', color: u.offense_count > 0 ? 'red' : 'inherit' }}>{u.offense_count}</td>
                           <td style={{ padding: '0.75rem', color: u.is_banned ? 'red' : 'green', fontWeight: 'bold' }}>{u.is_banned ? 'محظور' : 'نشط'}</td>
                           <td style={{ padding: '0.75rem' }}>
@@ -2423,7 +2423,7 @@ export default function App() {
                         .map(u => (
                           <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                             <td style={{ padding: '0.75rem', fontWeight: 600 }}>{u.name}</td>
-                            <td style={{ padding: '0.75rem' }}>{u.account_type === 'owner' ? 'مالك مباشر' : 'سمسار'}</td>
+                            <td style={{ padding: '0.75rem' }}>{u.account_type === 'owner' ? 'مالك مباشر' : 'وسيط'}</td>
                             <td style={{ padding: '0.75rem' }}>
                               <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>★ {u.avg_rating ? u.avg_rating.toFixed(1) : 'جديد'}</span>
                             </td>
@@ -2796,7 +2796,7 @@ export default function App() {
                       {profileData.user.account_type === 'owner' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Home style={{ width: 14, height: 14 }} /> مالك عقار مباشر (بدون عمولة)</span>
                       ) : profileData.user.account_type === 'broker' ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Briefcase style={{ width: 14, height: 14 }} /> سمسار عقاري</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Briefcase style={{ width: 14, height: 14 }} /> وسيط عقاري</span>
                       ) : (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><User style={{ width: 14, height: 14 }} /> طالب / مستخدم</span>
                       )}
