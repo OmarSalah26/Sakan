@@ -3504,50 +3504,16 @@ export default function App() {
                   ? 'تعيين كلمة مرور جديدة'
                   : authMode === 'register' 
                     ? (authStep === 'phone' ? 'إنشاء حساب جديد' : authStep === 'otp' ? 'رمز تحقق الحساب' : 'بيانات الحساب الإضافية')
-                    : (authStep === 'phone' ? (authLoginMethod === 'password' ? 'تسجيل الدخول بكلمة المرور' : 'تسجيل الدخول بالهاتف') : 'تأكيد الرمز والدخول')
+                    : 'تسجيل الدخول'
                 }
               </h3>
               <button className="modal-close" onClick={() => setIsAuthOpen(false)}>×</button>
             </div>
             <div className="modal-body">
 
-              {/* Login Method Selector Tabs (Password vs OTP) */}
-              {authMode === 'login' && authStep === 'phone' && (
-                <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.25rem', background: '#f1f5f9', padding: '4px', borderRadius: '12px' }}>
-                  <button 
-                    type="button"
-                    onClick={() => setAuthLoginMethod('password')}
-                    style={{
-                      flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', cursor: 'pointer',
-                      fontWeight: authLoginMethod === 'password' ? 700 : 500,
-                      background: authLoginMethod === 'password' ? '#ffffff' : 'transparent',
-                      color: authLoginMethod === 'password' ? 'var(--primary)' : 'var(--text-muted)',
-                      boxShadow: authLoginMethod === 'password' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                      fontSize: '0.85rem'
-                    }}
-                  >
-                    كلمة المرور
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setAuthLoginMethod('otp')}
-                    style={{
-                      flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', cursor: 'pointer',
-                      fontWeight: authLoginMethod === 'otp' ? 700 : 500,
-                      background: authLoginMethod === 'otp' ? '#ffffff' : 'transparent',
-                      color: authLoginMethod === 'otp' ? 'var(--primary)' : 'var(--text-muted)',
-                      boxShadow: authLoginMethod === 'otp' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                      fontSize: '0.85rem'
-                    }}
-                  >
-                    رمز التحقق (OTP)
-                  </button>
-                </div>
-              )}
-
               {/* Step 1: Input Phone / Password */}
               {authStep === 'phone' && (
-                authMode === 'login' && authLoginMethod === 'password' ? (
+                authMode === 'login' ? (
                   <form onSubmit={handlePasswordLoginSubmit}>
                     <div className="form-group">
                       <label>رقم الهاتف المحمول</label>
@@ -3572,7 +3538,7 @@ export default function App() {
                     </div>
 
                     <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>تسجيل الدخول بكلمة المرور</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>تسجيل الدخول</span>
                     </button>
 
                     <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
@@ -3583,29 +3549,25 @@ export default function App() {
                   </form>
                 ) : (
                   <form onSubmit={handlePhoneSubmit}>
-                    {authMode === 'register' && (
-                      <>
-                        <div className="form-group">
-                          <label>الاسم بالكامل (مطلوب)</label>
-                          <input 
-                            type="text" 
-                            placeholder="أدخل اسمك بالكامل" 
-                            required 
-                            value={authForm.name || ''}
-                            onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })}
-                          />
-                        </div>
+                    <div className="form-group">
+                      <label>الاسم بالكامل (مطلوب)</label>
+                      <input 
+                        type="text" 
+                        placeholder="أدخل اسمك بالكامل" 
+                        required 
+                        value={authForm.name || ''}
+                        onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })}
+                      />
+                    </div>
 
-                        <div className="form-group">
-                          <label>نوع حسابك</label>
-                          <select value={authForm.account_type} onChange={(e) => setAuthForm({ ...authForm, account_type: e.target.value })}>
-                            <option value="student">طالب / مستخدم عادي</option>
-                            <option value="owner">مالك عقار (بدون عمولة)</option>
-                            <option value="broker">سمسار عقاري</option>
-                          </select>
-                        </div>
-                      </>
-                    )}
+                    <div className="form-group">
+                      <label>نوع حسابك</label>
+                      <select value={authForm.account_type} onChange={(e) => setAuthForm({ ...authForm, account_type: e.target.value })}>
+                        <option value="student">طالب / مستخدم عادي</option>
+                        <option value="owner">مالك عقار (بدون عمولة)</option>
+                        <option value="broker">سمسار عقاري</option>
+                      </select>
+                    </div>
                     
                     <div className="form-group">
                       <label>رقم الهاتف المحمول</label>
@@ -3618,23 +3580,13 @@ export default function App() {
                       />
                     </div>
                     <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
-                      {authMode === 'register' ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الحساب <MessageSquare style={{ width: 16, height: 16 }} /></span>
-                      ) : (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الدخول</span>
-                      )}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الحساب <MessageSquare style={{ width: 16, height: 16 }} /></span>
                     </button>
 
                     <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
-                      {authMode === 'register' ? (
-                        <span style={{ color: 'var(--text-light)' }}>
-                          لديك حساب بالفعل؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('login'); }}>تسجيل الدخول</a>
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--text-light)' }}>
-                          ليس لديك حساب؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('register'); }}>إنشاء حساب جديد</a>
-                        </span>
-                      )}
+                      <span style={{ color: 'var(--text-light)' }}>
+                        لديك حساب بالفعل؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('login'); }}>تسجيل الدخول</a>
+                      </span>
                     </div>
                   </form>
                 )
