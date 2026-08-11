@@ -4,7 +4,7 @@ import {
   MapPin, Bed, FileText, Shield, Zap, Plug, Share2, 
   User, Briefcase, Home, Star, MessageSquare, Phone, 
   Calendar, PenTool, Send, AlertTriangle, ArrowRight, Check, CheckCircle, Copy,
-  ChevronLeft, ChevronRight, Play, ShieldCheck
+  ChevronLeft, ChevronRight, Play, ShieldCheck, Wind
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 

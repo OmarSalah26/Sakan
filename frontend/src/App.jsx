@@ -1625,47 +1625,51 @@ export default function App() {
 
             <div className="main-layout">
               {/* Sidebar Filters */}
-              <aside className="filter-sidebar">
-                <h3>
+              <aside className="filter-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                <h3 style={{ margin: 0, paddingBottom: '0.25rem' }}>
                   <span>تصفية النتائج</span>
-                  <button className="btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setFilters({
+                  <button className="btn-secondary" style={{ padding: '0.15rem 0.45rem', fontSize: '0.72rem' }} onClick={() => setFilters({
                     governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', max_commission: '', services_inclusive: false, has_insurance: false, fully_vacant: false, min_total_beds: '', max_total_beds: ''
                   })}>مسح الكل</button>
                 </h3>
                 
-                <div className="form-group">
-                  <label>المحافظة</label>
-                  <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })}>
-                    <option value="">جميع المحافظات</option>
-                    <optgroup label="المحافظات المتاحة حالياً">
-                      {dbGovernorates.filter(g => g.status === 'live').map(g => (
-                        <option key={g.id} value={g.name}>{g.name}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="المحافظات المتاحة في قائمة الانتظار">
-                      {dbGovernorates.filter(g => g.status !== 'live').map(g => (
-                        <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
-                          {g.name} (قريباً - قائمة الانتظار)
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
+                {/* 1. Governorates + City/Neighborhood (2-column paired row) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المحافظة</label>
+                    <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })} style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}>
+                      <option value="">جميع المحافظات</option>
+                      <optgroup label="المتاحة حالياً">
+                        {dbGovernorates.filter(g => g.status === 'live').map(g => (
+                          <option key={g.id} value={g.name}>{g.name}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="قائمة الانتظار">
+                        {dbGovernorates.filter(g => g.status !== 'live').map(g => (
+                          <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
+                            {g.name} (قريباً)
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المدينة / الحي</label>
+                    <input 
+                      type="text" 
+                      placeholder="مدينة نصر، الدقي..." 
+                      value={filters.neighborhood} 
+                      onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value })}
+                      style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
+                    />
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label>المدينة / الحي</label>
-                  <input 
-                    type="text" 
-                    placeholder="مثال: مدينة نصر، الدقي..." 
-                    value={filters.neighborhood} 
-                    onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value })}
-                  />
-                </div>
-
-                {/* Gender Horizontal Toggle Chips */}
-                <div className="form-group">
-                  <label style={{ fontWeight: 700, fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>النوع المسموح بالسكن</label>
-                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                {/* 2. Gender Horizontal Toggle Chips */}
+                <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>النوع المسموح بالسكن</label>
+                  <div style={{ display: 'flex', gap: '0.3rem' }}>
                     {[
                       { id: '', label: 'الكل' },
                       { id: 'male', label: 'طلاب' },
@@ -1676,7 +1680,7 @@ export default function App() {
                         type="button"
                         onClick={() => setFilters({ ...filters, gender: chip.id })}
                         style={{
-                          flex: 1, padding: '0.4rem 0.5rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700,
+                          flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
                           border: filters.gender === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
                           background: filters.gender === chip.id ? 'var(--primary-light)' : '#ffffff',
                           color: filters.gender === chip.id ? 'var(--primary-dark)' : '#475569',
@@ -1689,10 +1693,10 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Advertiser Type Horizontal Toggle Chips */}
-                <div className="form-group">
-                  <label style={{ fontWeight: 700, fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>صفة المعلن</label>
-                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                {/* 3. Advertiser Type Horizontal Toggle Chips */}
+                <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>صفة المعلن</label>
+                  <div style={{ display: 'flex', gap: '0.3rem' }}>
                     {[
                       { id: '', label: 'الكل' },
                       { id: 'owner', label: 'مالك مباشر' },
@@ -1703,7 +1707,7 @@ export default function App() {
                         type="button"
                         onClick={() => setFilters({ ...filters, advertiser_type: chip.id })}
                         style={{
-                          flex: 1, padding: '0.4rem 0.5rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700,
+                          flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
                           border: filters.advertiser_type === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
                           background: filters.advertiser_type === chip.id ? 'var(--primary-light)' : '#ffffff',
                           color: filters.advertiser_type === chip.id ? 'var(--primary-dark)' : '#475569',
@@ -1716,118 +1720,213 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label>نطاق السعر الشهري (جنيه مصري)</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input 
-                      type="number" 
-                      placeholder="الأدنى" 
-                      value={filters.min_price} 
-                      onChange={(e) => setFilters({ ...filters, min_price: e.target.value })} 
-                    />
-                    <input 
-                      type="number" 
-                      placeholder="الأقصى" 
-                      value={filters.max_price} 
-                      onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
-                    />
+                {/* 4. Monthly Price Range (2 columns with +/- steppers: +100 EGP / -50 EGP) */}
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>نطاق السعر الشهري (ج.م)</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+                    
+                    {/* Min Price Stepper (-50 / +100) */}
+                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(filters.min_price) || 0;
+                          const next = Math.max(0, cur - 50);
+                          setFilters({ ...filters, min_price: next === 0 ? '' : String(next) });
+                        }}
+                        style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                        title="-50 ج.م"
+                      >
+                        -
+                      </button>
+                      <input 
+                        type="number" 
+                        placeholder="الأدنى" 
+                        value={filters.min_price} 
+                        onChange={(e) => setFilters({ ...filters, min_price: e.target.value })} 
+                        style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(filters.min_price) || 0;
+                          const next = cur + 100;
+                          setFilters({ ...filters, min_price: String(next) });
+                        }}
+                        style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                        title="+100 ج.م"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Max Price Stepper (-50 / +100) */}
+                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(filters.max_price) || 0;
+                          const next = Math.max(0, cur - 50);
+                          setFilters({ ...filters, max_price: next === 0 ? '' : String(next) });
+                        }}
+                        style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                        title="-50 ج.م"
+                      >
+                        -
+                      </button>
+                      <input 
+                        type="number" 
+                        placeholder="الأقصى" 
+                        value={filters.max_price} 
+                        onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
+                        style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(filters.max_price) || 0;
+                          const next = cur + 100;
+                          setFilters({ ...filters, max_price: String(next) });
+                        }}
+                        style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                        title="+100 ج.م"
+                      >
+                        +
+                      </button>
+                    </div>
+
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label>عدد الأسرة الكلي (بالشقة)</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {/* 5. Total Bed Capacity Range (2 columns) */}
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>عدد الأسرة الكلي بالشقة</label>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
                     <input 
                       type="number" 
-                      placeholder="الأدنى (مثال: 1)" 
+                      placeholder="الأدنى (1)" 
                       min="1"
                       value={filters.min_total_beds} 
                       onChange={(e) => setFilters({ ...filters, min_total_beds: e.target.value })} 
+                      style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
                     />
                     <input 
                       type="number" 
-                      placeholder="الأقصى (مثال: 10)" 
+                      placeholder="الأقصى (10)" 
                       min="1"
                       value={filters.max_total_beds} 
                       onChange={(e) => setFilters({ ...filters, max_total_beds: e.target.value })} 
+                      style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
                     />
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label>نوع الغرفة</label>
-                  {['single', 'double', 'triple', 'quadruple'].map(type => {
-                    const labelText = type === 'single' ? 'فردية (Single)' : type === 'double' ? 'ثنائية (Double)' : type === 'triple' ? 'ثلاثية (Triple)' : 'رباعية (Quadruple)';
-                    const isChecked = filters.room_types.includes(type);
-                    return (
-                      <label key={type} className="checkbox-label" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={isChecked}
-                          onChange={() => {
-                            const updated = isChecked 
-                              ? filters.room_types.filter(t => t !== type)
-                              : [...filters.room_types, type];
+                {/* 6. Room Type Horizontal Chips (Converting checkboxes to 4 chips in one row) */}
+                <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>نوع الغرفة</label>
+                  <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                    {[
+                      { id: 'single', label: 'فردية' },
+                      { id: 'double', label: 'ثنائية' },
+                      { id: 'triple', label: 'ثلاثية' },
+                      { id: 'quadruple', label: 'رباعية' }
+                    ].map(chip => {
+                      const isSelected = filters.room_types.includes(chip.id);
+                      return (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          onClick={() => {
+                            const updated = isSelected 
+                              ? filters.room_types.filter(t => t !== chip.id)
+                              : [...filters.room_types, chip.id];
                             setFilters({ ...filters, room_types: updated });
                           }}
-                        />
-                        {labelText}
-                      </label>
-                    );
-                  })}
+                          style={{
+                            flex: '1 1 22%', padding: '0.35rem 0.3rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                            border: isSelected ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                            background: isSelected ? 'var(--primary-light)' : '#ffffff',
+                            color: isSelected ? 'var(--primary-dark)' : '#475569',
+                            cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center'
+                          }}
+                        >
+                          {chip.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label>الحد الأقصى للعمولة (جنيه)</label>
-                  <input 
-                    type="number" 
-                    placeholder="مثال: 1000" 
-                    value={filters.max_commission} 
-                    onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={filters.services_inclusive}
-                      onChange={(e) => setFilters({ ...filters, services_inclusive: e.target.checked })}
-                    />
-                    شامل الخدمات (الكهرباء، المياه، إلخ)
-                  </label>
-                  <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', marginTop: '0.5rem' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={filters.has_insurance}
-                      onChange={(e) => setFilters({ ...filters, has_insurance: e.target.checked })}
-                    />
-                    يتطلب دفع تأمين
-                  </label>
-                </div>
-
-                <div className="form-group" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label>الخدمات والمرافق المتوفرة</label>
-                    <button 
-                      className="btn-outline" 
-                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
-                      onClick={() => setShowAmenitiesModal(true)}
+                {/* 7. Trailing Lease Conditions (Converting stacked checkboxes to horizontal chips in one row) */}
+                <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>شروط ومزايا الإيجار</label>
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setFilters({ ...filters, services_inclusive: !filters.services_inclusive })}
+                      style={{
+                        flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                        border: filters.services_inclusive ? '2px solid #16a34a' : '1px solid #cbd5e1',
+                        background: filters.services_inclusive ? '#dcfce7' : '#ffffff',
+                        color: filters.services_inclusive ? '#15803d' : '#475569',
+                        cursor: 'pointer', transition: 'all 0.15s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
+                      }}
                     >
-                      اختر المرافق
+                      <Zap style={{ width: 13, height: 13 }} /> شامل الخدمات
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFilters({ ...filters, has_insurance: !filters.has_insurance })}
+                      style={{
+                        flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                        border: filters.has_insurance ? '2px solid #d97706' : '1px solid #cbd5e1',
+                        background: filters.has_insurance ? '#fef3c7' : '#ffffff',
+                        color: filters.has_insurance ? '#b45309' : '#475569',
+                        cursor: 'pointer', transition: 'all 0.15s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
+                      }}
+                    >
+                      <Shield style={{ width: 13, height: 13 }} /> يتطلب تأمين
                     </button>
                   </div>
-                  {filters.amenities.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.5rem' }}>
-                      {filters.amenities.map(a => (
-                        <span key={a} style={{ fontSize: '0.7rem', background: 'var(--primary-light)', color: 'var(--primary-dark)', padding: '0.15rem 0.4rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                          {a}
-                          <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => setFilters(prev => ({ ...prev, amenities: prev.amenities.filter(x => x !== a) }))}>×</span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
+
+                {/* 8. Max Commission + Amenities Modal Button (2-column paired row) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem', borderTop: '1px solid #dbeafe', paddingTop: '0.45rem' }}>
+                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>أقصى عمولة (ج.م)</label>
+                    <input 
+                      type="number" 
+                      placeholder="1000" 
+                      value={filters.max_commission} 
+                      onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
+                      style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المرافق والخدمات</label>
+                    <button 
+                      type="button"
+                      className="btn-outline" 
+                      style={{ padding: '0.4rem 0.4rem', fontSize: '0.76rem', fontWeight: 700, width: '100%', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
+                      onClick={() => setShowAmenitiesModal(true)}
+                    >
+                      {filters.amenities.length > 0 ? `المرافق (${filters.amenities.length})` : 'اختر المرافق'}
+                    </button>
+                  </div>
+                </div>
+
+                {filters.amenities.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.1rem' }}>
+                    {filters.amenities.map(a => (
+                      <span key={a} style={{ fontSize: '0.7rem', background: 'var(--primary-light)', color: 'var(--primary-dark)', padding: '0.12rem 0.4rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.2rem', border: '1px solid #bfdbfe' }}>
+                        {a}
+                        <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => setFilters(prev => ({ ...prev, amenities: prev.amenities.filter(x => x !== a) }))}>×</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </aside>
 
               {/* Listings feed */}
@@ -4634,40 +4733,44 @@ export default function App() {
               <button className="modal-close" onClick={() => setIsMobileFilterOpen(false)}>×</button>
             </div>
 
-            <div className="modal-body" style={{ padding: '1.25rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="form-group">
-                <label style={{ fontWeight: 700 }}>المحافظة</label>
-                <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })} style={{ padding: '0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)' }}>
-                  <option value="">جميع المحافظات</option>
-                  <optgroup label="المحافظات المتاحة حالياً">
-                    {dbGovernorates.filter(g => g.status === 'live').map(g => (
-                      <option key={g.id} value={g.name}>{g.name}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="المحافظات المتاحة في قائمة الانتظار">
-                    {dbGovernorates.filter(g => g.status !== 'live').map(g => (
-                      <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
-                        {g.name} (قريباً - قائمة الانتظار)
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+            <div className="modal-body" style={{ padding: '1rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {/* 1. Governorates + City/Neighborhood (2-column paired row) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المحافظة</label>
+                  <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })} style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}>
+                    <option value="">جميع المحافظات</option>
+                    <optgroup label="المحافظات المتاحة حالياً">
+                      {dbGovernorates.filter(g => g.status === 'live').map(g => (
+                        <option key={g.id} value={g.name}>{g.name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="المحافظات المتاحة في قائمة الانتظار">
+                      {dbGovernorates.filter(g => g.status !== 'live').map(g => (
+                        <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
+                          {g.name} (قريباً)
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المدينة / الحي</label>
+                  <input 
+                    type="text" 
+                    placeholder="مدينة نصر، الدقي..." 
+                    value={filters.neighborhood} 
+                    onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value })}
+                    style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
+                  />
+                </div>
               </div>
 
-              <div className="form-group">
-                <label style={{ fontWeight: 700 }}>المدينة / الحي</label>
-                <input 
-                  type="text" 
-                  placeholder="مثال: مدينة نصر، الدقي..." 
-                  value={filters.neighborhood} 
-                  onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value })}
-                  style={{ padding: '0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)' }}
-                />
-              </div>
-
-              <div className="form-group">
-                <label style={{ fontWeight: 700, fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>النوع المسموح بالسكن</label>
-                <div style={{ display: 'flex', gap: '0.35rem' }}>
+              {/* 2. Gender Horizontal Toggle Chips */}
+              <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>النوع المسموح بالسكن</label>
+                <div style={{ display: 'flex', gap: '0.3rem' }}>
                   {[
                     { id: '', label: 'الكل' },
                     { id: 'male', label: 'طلاب' },
@@ -4678,7 +4781,7 @@ export default function App() {
                       type="button"
                       onClick={() => setFilters({ ...filters, gender: chip.id })}
                       style={{
-                        flex: 1, padding: '0.4rem 0.5rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700,
+                        flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
                         border: filters.gender === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
                         background: filters.gender === chip.id ? 'var(--primary-light)' : '#ffffff',
                         color: filters.gender === chip.id ? 'var(--primary-dark)' : '#475569',
@@ -4691,9 +4794,10 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="form-group">
-                <label style={{ fontWeight: 700, fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>صفة المعلن</label>
-                <div style={{ display: 'flex', gap: '0.35rem' }}>
+              {/* 3. Advertiser Type Horizontal Toggle Chips */}
+              <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>صفة المعلن</label>
+                <div style={{ display: 'flex', gap: '0.3rem' }}>
                   {[
                     { id: '', label: 'الكل' },
                     { id: 'owner', label: 'مالك مباشر' },
@@ -4704,7 +4808,7 @@ export default function App() {
                       type="button"
                       onClick={() => setFilters({ ...filters, advertiser_type: chip.id })}
                       style={{
-                        flex: 1, padding: '0.4rem 0.5rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700,
+                        flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
                         border: filters.advertiser_type === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
                         background: filters.advertiser_type === chip.id ? 'var(--primary-light)' : '#ffffff',
                         color: filters.advertiser_type === chip.id ? 'var(--primary-dark)' : '#475569',
@@ -4717,32 +4821,210 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="form-group">
-                <label style={{ fontWeight: 700 }}>نطاق السعر الشهري (جنيه مصري)</label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {/* 4. Monthly Price Range (2 columns with +/- steppers: +100 EGP / -50 EGP) */}
+              <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>نطاق السعر الشهري (ج.م)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+                  
+                  {/* Min Price Stepper (-50 / +100) */}
+                  <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', overflow: 'hidden', background: '#ffffff' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(filters.min_price) || 0;
+                        const next = Math.max(0, cur - 50);
+                        setFilters({ ...filters, min_price: next === 0 ? '' : String(next) });
+                      }}
+                      style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                      title="-50 ج.م"
+                    >
+                      -
+                    </button>
+                    <input 
+                      type="number" 
+                      placeholder="الأدنى" 
+                      value={filters.min_price} 
+                      onChange={(e) => setFilters({ ...filters, min_price: e.target.value })} 
+                      style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none', background: 'transparent' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(filters.min_price) || 0;
+                        const next = cur + 100;
+                        setFilters({ ...filters, min_price: String(next) });
+                      }}
+                      style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                      title="+100 ج.م"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Max Price Stepper (-50 / +100) */}
+                  <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', overflow: 'hidden', background: '#ffffff' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(filters.max_price) || 0;
+                        const next = Math.max(0, cur - 50);
+                        setFilters({ ...filters, max_price: next === 0 ? '' : String(next) });
+                      }}
+                      style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                      title="-50 ج.م"
+                    >
+                      -
+                    </button>
+                    <input 
+                      type="number" 
+                      placeholder="الأقصى" 
+                      value={filters.max_price} 
+                      onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
+                      style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none', background: 'transparent' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(filters.max_price) || 0;
+                        const next = cur + 100;
+                        setFilters({ ...filters, max_price: String(next) });
+                      }}
+                      style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                      title="+100 ج.م"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* 5. Total Bed Capacity Range (2 columns) */}
+              <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>عدد الأسرة الكلي بالشقة</label>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
                   <input 
                     type="number" 
-                    placeholder="الأدنى" 
-                    value={filters.min_price} 
-                    onChange={(e) => setFilters({ ...filters, min_price: e.target.value })} 
-                    style={{ padding: '0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)' }}
+                    placeholder="الأدنى (1)" 
+                    min="1"
+                    value={filters.min_total_beds} 
+                    onChange={(e) => setFilters({ ...filters, min_total_beds: e.target.value })} 
+                    style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
                   />
                   <input 
                     type="number" 
-                    placeholder="الأقصى" 
-                    value={filters.max_price} 
-                    onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
-                    style={{ padding: '0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)' }}
+                    placeholder="الأقصى (10)" 
+                    min="1"
+                    value={filters.max_total_beds} 
+                    onChange={(e) => setFilters({ ...filters, max_total_beds: e.target.value })} 
+                    style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
                   />
                 </div>
               </div>
 
-              <div className="form-group">
-                <label style={{ fontWeight: 700 }}>ترتيب النتائج حسب</label>
+              {/* 6. Room Type Horizontal Chips */}
+              <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>نوع الغرفة</label>
+                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'single', label: 'فردية' },
+                    { id: 'double', label: 'ثنائية' },
+                    { id: 'triple', label: 'ثلاثية' },
+                    { id: 'quadruple', label: 'رباعية' }
+                  ].map(chip => {
+                    const isSelected = filters.room_types.includes(chip.id);
+                    return (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => {
+                          const updated = isSelected 
+                            ? filters.room_types.filter(t => t !== chip.id)
+                            : [...filters.room_types, chip.id];
+                          setFilters({ ...filters, room_types: updated });
+                        }}
+                        style={{
+                          flex: '1 1 22%', padding: '0.4rem 0.3rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                          border: isSelected ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                          background: isSelected ? 'var(--primary-light)' : '#ffffff',
+                          color: isSelected ? 'var(--primary-dark)' : '#475569',
+                          cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center'
+                        }}
+                      >
+                        {chip.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 7. Trailing Lease Conditions Chips */}
+              <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>شروط ومزايا الإيجار</label>
+                <div style={{ display: 'flex', gap: '0.35rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, services_inclusive: !filters.services_inclusive })}
+                    style={{
+                      flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                      border: filters.services_inclusive ? '2px solid #16a34a' : '1px solid #cbd5e1',
+                      background: filters.services_inclusive ? '#dcfce7' : '#ffffff',
+                      color: filters.services_inclusive ? '#15803d' : '#475569',
+                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
+                    }}
+                  >
+                    <Zap style={{ width: 13, height: 13 }} /> شامل الخدمات
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, has_insurance: !filters.has_insurance })}
+                    style={{
+                      flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                      border: filters.has_insurance ? '2px solid #d97706' : '1px solid #cbd5e1',
+                      background: filters.has_insurance ? '#fef3c7' : '#ffffff',
+                      color: filters.has_insurance ? '#b45309' : '#475569',
+                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
+                    }}
+                  >
+                    <Shield style={{ width: 13, height: 13 }} /> يتطلب تأمين
+                  </button>
+                </div>
+              </div>
+
+              {/* 8. Max Commission + Amenities Modal Button (2-column paired row) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.45rem' }}>
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>أقصى عمولة (ج.م)</label>
+                  <input 
+                    type="number" 
+                    placeholder="1000" 
+                    value={filters.max_commission} 
+                    onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
+                    style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المرافق والخدمات</label>
+                  <button 
+                    type="button"
+                    className="btn-outline" 
+                    style={{ padding: '0.45rem 0.4rem', fontSize: '0.76rem', fontWeight: 700, width: '100%', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
+                    onClick={() => setShowAmenitiesModal(true)}
+                  >
+                    {filters.amenities.length > 0 ? `المرافق (${filters.amenities.length})` : 'اختر المرافق'}
+                  </button>
+                </div>
+              </div>
+
+              {/* 9. Sort By */}
+              <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>ترتيب النتائج حسب</label>
                 <select 
                   value={sortBy} 
                   onChange={(e) => setSortBy(e.target.value)}
-                  style={{ padding: '0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontWeight: 700 }}
+                  style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontWeight: 700, fontSize: '0.8rem' }}
                 >
                   <option value="newest">الأحدث نُشراً</option>
                   <option value="oldest">الأقدم نُشراً</option>
