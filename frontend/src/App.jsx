@@ -1618,185 +1618,49 @@ export default function App() {
         {/* TAB 1: BROWSE LISTINGS FEED */}
         {isBrowseTab && (
           <div>
-            {/* --- HERO SECTION REDESIGN --- */}
-            <section className="hero-redesign-wrapper" style={{ position: 'relative', borderRadius: '24px', overflow: 'hidden', margin: '0 0 2rem 0', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f2b5c 100%)', color: '#ffffff', boxShadow: '0 12px 32px rgba(15, 23, 42, 0.15)', border: '1px solid #1e293b' }}>
+            {/* --- HERO SECTION (MINIMALIST CLEAN REDESIGN) --- */}
+            <section className="hero-redesign-wrapper" style={{ position: 'relative', borderRadius: '24px', overflow: 'hidden', margin: '0 0 2rem 0', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f2b5c 100%)', color: '#ffffff', boxShadow: '0 12px 32px rgba(15, 23, 42, 0.15)', border: '1px solid #1e293b', textAlign: 'center' }}>
               {/* Subtle Square Grid Pattern Overlay */}
               <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px)', backgroundSize: '28px 28px', pointerEvents: 'none' }} />
               
-              {/* Glow Accents */}
-              <div style={{ position: 'absolute', top: '-20%', left: '-10%', width: '350px', height: '350px', background: 'radial-gradient(circle, rgba(13,99,234,0.35) 0%, transparent 70%)', filter: 'blur(50px)', pointerEvents: 'none' }} />
-              <div style={{ position: 'absolute', bottom: '-20%', right: '-10%', width: '350px', height: '350px', background: 'radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%)', filter: 'blur(50px)', pointerEvents: 'none' }} />
+              {/* Subtle Ambient Glow */}
+              <div style={{ position: 'absolute', top: '-30%', left: '50%', transform: 'translateX(-50%)', width: '500px', height: '300px', background: 'radial-gradient(circle, rgba(37,99,235,0.3) 0%, transparent 70%)', filter: 'blur(60px)', pointerEvents: 'none' }} />
 
-              <div style={{ position: 'relative', zIndex: 2, padding: '2.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', alignItems: 'center' }}>
+              <div style={{ position: 'relative', zIndex: 2, padding: '3.5rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem', maxWidth: '780px', margin: '0 auto' }}>
                 
-                {/* Left Column: Title, Tagline & In-Page Scroll CTA */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', alignItems: 'flex-start' }}>
-                  {/* Brand Pill Badge */}
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.85rem', background: 'rgba(255, 255, 255, 0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255, 255, 255, 0.18)', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700, color: '#93c5fd' }}>
-                    <Sparkles style={{ width: 14, height: 14, color: '#38bdf8' }} />
-                    منصة الإسكان الطلابي المعتمدة في مصر
-                  </div>
-
-                  {/* Main Hero Title */}
-                  <h1 style={{ fontSize: '2.2rem', fontWeight: 900, lineHeight: 1.25, margin: 0, color: '#ffffff', letterSpacing: '-0.02em' }}>
-                    ابحث عن <span style={{ background: 'linear-gradient(135deg, #38bdf8 0%, #818cf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>سكنك الطلابي</span> المثالي
-                  </h1>
-
-                  {/* Tagline */}
-                  <p style={{ fontSize: '1.15rem', color: '#cbd5e1', fontWeight: 600, margin: 0, lineHeight: 1.5 }}>
-                    سكنك الطلابي، من غير معاناة البحث العشوائي.
-                  </p>
-
-                  {/* Scroll-To CTA Button */}
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      document.getElementById('main-listings-section')?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    style={{
-                      marginTop: '0.4rem', padding: '0.85rem 1.75rem', borderRadius: '14px',
-                      background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#ffffff',
-                      border: 'none', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer',
-                      display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-                      boxShadow: '0 8px 24px rgba(37, 99, 235, 0.35)', transition: 'transform 0.2s, box-shadow 0.2s'
-                    }}
-                  >
-                    <span>تصفح العقارات الآن</span>
-                    <ArrowDown style={{ width: 18, height: 18 }} />
-                  </button>
+                {/* Brand Pill Badge */}
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.9rem', background: 'rgba(255, 255, 255, 0.08)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255, 255, 255, 0.15)', borderRadius: '999px', fontSize: '0.82rem', fontWeight: 700, color: '#93c5fd' }}>
+                  <Sparkles style={{ width: 14, height: 14, color: '#38bdf8' }} />
+                  منصة الإسكان الطلابي المعتمدة في مصر
                 </div>
 
-                {/* Right Column: Clean Egypt Border Map + Student Housing Vector Line-Art */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: '24px', padding: '1.25rem', position: 'relative', overflow: 'hidden' }}>
-                  
-                  {/* Decorative Background Line-Art Pattern */}
-                  <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0.04, pointerEvents: 'none' }} viewBox="0 0 400 400">
-                    <pattern id="arch-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" strokeWidth="1" />
-                    </pattern>
-                    <rect width="100%" height="100%" fill="url(#arch-grid)" />
-                  </svg>
+                {/* Main Hero Title */}
+                <h1 style={{ fontSize: '2.5rem', fontWeight: 900, lineHeight: 1.25, margin: 0, color: '#ffffff', letterSpacing: '-0.02em' }}>
+                  ابحث عن <span style={{ background: 'linear-gradient(135deg, #38bdf8 0%, #818cf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>سكنك الطلابي</span> المثالي
+                </h1>
 
-                  {/* Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.65rem', position: 'relative', zIndex: 2 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 800, fontSize: '0.9rem', color: '#f8fafc' }}>
-                      <Compass style={{ width: 18, height: 18, color: '#38bdf8' }} />
-                      خريطة التوسع وحالة المحافظات
-                    </div>
-                    <span style={{ fontSize: '0.72rem', background: 'rgba(37, 99, 235, 0.2)', color: '#60a5fa', padding: '0.2rem 0.65rem', borderRadius: '999px', fontWeight: 700, border: '1px solid rgba(96, 165, 250, 0.3)' }}>
-                      جمهورية مصر العربية
-                    </span>
-                  </div>
+                {/* Tagline */}
+                <p style={{ fontSize: '1.2rem', color: '#cbd5e1', fontWeight: 600, margin: 0, lineHeight: 1.6, maxWidth: '600px' }}>
+                  سكنك الطلابي، من غير معاناة البحث العشوائي.
+                </p>
 
-                  {/* 2-Column Split: Simple Egypt Border Map (Left) + Student Housing Line-Art Graphic (Right) */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '0.85rem', alignItems: 'center', position: 'relative', zIndex: 2 }}>
-                    
-                    {/* 1. Simple Accurate Border Map of Egypt */}
-                    <div style={{ position: 'relative', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.1)', padding: '0.65rem 0.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      
-                      <svg viewBox="0 0 280 240" style={{ width: '100%', height: '165px', filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }}>
-                        {/* Egypt Border Outline */}
-                        <path
-                          d="M 30 30 L 70 34 L 115 30 L 140 20 L 165 18 L 185 24 L 220 28 L 245 65 L 230 100 L 215 125 L 245 180 L 265 235 L 30 235 Z"
-                          fill="rgba(30, 41, 59, 0.75)"
-                          stroke="#38bdf8"
-                          strokeWidth="2"
-                          strokeLinejoin="round"
-                        />
-                        
-                        {/* Nile River Curve */}
-                        <path
-                          d="M 195 235 C 185 190, 205 140, 180 130 C 170 100, 165 70, 160 50 L 150 30 M 160 50 L 165 18 M 160 50 L 140 20"
-                          fill="none"
-                          stroke="#60a5fa"
-                          strokeWidth="2"
-                          strokeDasharray="4 2"
-                          opacity="0.8"
-                        />
-
-                        {/* Damietta (LIVE ONLY) - Sakan Sky Blue Glow */}
-                        <g>
-                          <circle cx="165" cy="18" r="5" fill="#38bdf8" />
-                          <circle cx="165" cy="18" r="9" fill="none" stroke="#38bdf8" strokeWidth="1.5" opacity="0.8">
-                            <animate attributeName="r" values="5;12;5" dur="2.5s" repeatCount="indefinite" />
-                            <animate attributeName="opacity" values="0.9;0;0.9" dur="2.5s" repeatCount="indefinite" />
-                          </circle>
-                          <rect x="175" y="10" width="70" height="18" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke="#38bdf8" strokeWidth="1" />
-                          <text x="210" y="22" fill="#38bdf8" fontSize="10" fontWeight="bold" textAnchor="middle">دمياط (متاحة)</text>
-                        </g>
-
-                        {/* Expansion Governorates - Elegant Indigo / Slate Indicators */}
-                        <g opacity="0.9">
-                          {/* Cairo */}
-                          <circle cx="160" cy="50" r="4" fill="#818cf8" />
-                          <text x="170" y="54" fill="#cbd5e1" fontSize="9" textAnchor="start">القاهرة</text>
-
-                          {/* Alexandria */}
-                          <circle cx="115" cy="30" r="4" fill="#818cf8" />
-                          <text x="72" y="34" fill="#cbd5e1" fontSize="9" textAnchor="start">الإسكندرية</text>
-
-                          {/* Assiut (Expansion) */}
-                          <circle cx="180" cy="130" r="4" fill="#818cf8" />
-                          <rect x="188" y="122" width="78" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke="#818cf8" strokeWidth="0.8" />
-                          <text x="227" y="133" fill="#a5b4fc" fontSize="9" fontWeight="600" textAnchor="middle">أسيوط (توسع قريب)</text>
-                        </g>
-                      </svg>
-
-                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.3rem', fontSize: '0.7rem' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: '#38bdf8', fontWeight: 700 }}>
-                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#38bdf8', display: 'inline-block' }} /> متاحة حالياً
-                        </span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: '#a5b4fc', fontWeight: 600 }}>
-                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#818cf8', display: 'inline-block' }} /> قادمة في التوسع
-                        </span>
-                      </div>
-
-                    </div>
-
-                    {/* 2. Vector Student Housing Architectural Line-Art Graphic (Filling the side area) */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                      
-                      {/* Architectural Room Floorplan / Building Vector Box */}
-                      <div style={{ position: 'relative', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: '16px', padding: '0.85rem 0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '0.4rem' }}>
-                        
-                        {/* Vector Line-Art Graphic of Student Apartment Building */}
-                        <svg viewBox="0 0 160 90" style={{ width: '100%', height: '70px', stroke: '#60a5fa', strokeWidth: '1.5', fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' }}>
-                          {/* Building Outline */}
-                          <rect x="20" y="15" width="120" height="70" rx="6" stroke="#38bdf8" strokeWidth="2" fill="rgba(37,99,235,0.1)" />
-                          {/* Roof line */}
-                          <path d="M 15 15 L 80 4 L 145 15" stroke="#38bdf8" strokeWidth="2" />
-                          {/* Windows Grid */}
-                          <rect x="35" y="26" width="22" height="18" rx="3" stroke="#818cf8" />
-                          <rect x="69" y="26" width="22" height="18" rx="3" stroke="#818cf8" />
-                          <rect x="103" y="26" width="22" height="18" rx="3" stroke="#818cf8" />
-                          <rect x="35" y="54" width="22" height="20" rx="3" stroke="#818cf8" />
-                          {/* Door */}
-                          <path d="M 70 85 L 70 54 L 90 54 L 90 85" stroke="#38bdf8" strokeWidth="2" />
-                          <circle cx="85" cy="70" r="1.5" fill="#60a5fa" />
-                        </svg>
-
-                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f8fafc', marginTop: '0.1rem' }}>
-                          منظومة إسكان طلابي متكاملة
-                        </div>
-                      </div>
-
-                      {/* Floating Architectural Feature Badges */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.55rem', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.12)', border: '1px solid rgba(37, 99, 235, 0.25)', color: '#93c5fd', fontSize: '0.72rem', fontWeight: 700 }}>
-                          <Home style={{ width: 12, height: 12, color: '#38bdf8' }} />
-                          <span>غرف فردية ومزدوجة ومستقلة</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.55rem', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.25)', color: '#c7d2fe', fontSize: '0.72rem', fontWeight: 700 }}>
-                          <ShieldCheck style={{ width: 12, height: 12, color: '#818cf8' }} />
-                          <span>عقود وتواصل مباشر مع المالك</span>
-                        </div>
-                      </div>
-
-                    </div>
-
-                  </div>
-
-                </div>
+                {/* In-Page Scroll CTA Button */}
+                <button 
+                  type="button"
+                  onClick={() => {
+                    document.getElementById('main-listings-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  style={{
+                    marginTop: '0.5rem', padding: '0.9rem 2rem', borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#ffffff',
+                    border: 'none', fontWeight: 800, fontSize: '1rem', cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: '0.6rem',
+                    boxShadow: '0 8px 24px rgba(37, 99, 235, 0.35)', transition: 'all 0.2s'
+                  }}
+                >
+                  <span>تصفح العقارات الآن</span>
+                  <ArrowDown style={{ width: 18, height: 18 }} />
+                </button>
 
               </div>
             </section>
