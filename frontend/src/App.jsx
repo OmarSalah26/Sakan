@@ -508,16 +508,21 @@ export default function App() {
   
   // Auth state
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState('register'); // 'register' | 'login'
-  const [authStep, setAuthStep] = useState('phone'); // 'phone' | 'otp' | 'details'
+  const [authMode, setAuthMode] = useState('login'); // 'register' | 'login'
+  const [authLoginMethod, setAuthLoginMethod] = useState('password'); // 'password' | 'otp'
+  const [authStep, setAuthStep] = useState('phone'); // 'phone' | 'otp' | 'details' | 'change_password'
   const [authForm, setAuthForm] = useState({
     phone: '',
     otp: '',
     name: '',
     account_type: 'student', // 'student' | 'broker' | 'admin'
     governorates: [],
-    profile_photo_url: ''
+    profile_photo_url: '',
+    password: '',
+    new_password: '',
+    confirm_password: ''
   });
+  const [mustChangeUser, setMustChangeUser] = useState(null);
   const [pendingAction, setPendingAction] = useState(null); // callback after auth success
   
   // Filters state
@@ -902,23 +907,122 @@ export default function App() {
 
   const pendingActionRef = useRef(null); // persistent callback after auth success
 
+  // Check if active user must change password
+  useEffect(() => {
+    if (user && user.must_change_password) {
+      setMustChangeUser(user);
+      setAuthStep('change_password');
+      setIsAuthOpen(true);
+    }
+  }, [user]);
+
   // --- Auth logic ---
-  const handleStartAuth = (mode, overrideType = null, callback = null) => {
+  const handleStartAuth = (mode, overrideType = null, callback = null, initialPhone = '') => {
     setAuthMode(mode);
+    setAuthLoginMethod('password');
     const defaultGovs = (createForm.governorate && GOVERNORATES.includes(createForm.governorate)) 
       ? [createForm.governorate] 
       : [];
     setAuthForm({
-      phone: '',
+      phone: initialPhone || '',
       otp: '',
       name: '',
       account_type: overrideType || 'broker',
       governorates: defaultGovs,
-      profile_photo_url: ''
+      profile_photo_url: '',
+      password: '',
+      new_password: '',
+      confirm_password: ''
     });
     setAuthStep('phone');
     pendingActionRef.current = callback;
     setIsAuthOpen(true);
+  };
+
+  const handlePasswordLoginSubmit = async (e) => {
+    e.preventDefault();
+    const cleanPhone = (authForm.phone || '').trim();
+    const cleanPwd = (authForm.password || '').trim();
+    if (cleanPhone.length < 8) {
+      showToast("يرجى إدخال رقم هاتف صحيح لا يقل عن 8 أرقام");
+      return;
+    }
+    if (!cleanPwd) {
+      showToast("يرجى إدخال كلمة المرور");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/auth/login-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone, password: cleanPwd })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (data.must_change_password) {
+          setMustChangeUser(data);
+          setAuthStep('change_password');
+          showToast("مرحباً بك! يرجى تعيين كلمة مرور جديدة لحسابك لمتابعة استخدام المنصة");
+        } else {
+          setUser(data);
+          setIsAuthOpen(false);
+          showToast(`تم تسجيل الدخول بنجاح! مرحباً بك، ${data.name || ''}`);
+          if (pendingActionRef.current) {
+            const cb = pendingActionRef.current;
+            pendingActionRef.current = null;
+            cb(data);
+          }
+        }
+      } else {
+        showToast(data.detail || "خطأ أثناء تسجيل الدخول بكلمة المرور");
+      }
+    } catch (err) {
+      showToast("فشل الاتصال بالخادم");
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e) => {
+    e.preventDefault();
+    const targetUserId = mustChangeUser ? mustChangeUser.id : (user ? user.id : null);
+    if (!targetUserId) {
+      showToast("خطأ في تحديد الحساب المراد تغيير كلمة مروره");
+      return;
+    }
+    const newPwd = (authForm.new_password || '').trim();
+    const confirmPwd = (authForm.confirm_password || '').trim();
+
+    if (newPwd.length < 6) {
+      showToast("كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف");
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      showToast("كلمة المرور الجديدة وتأكيدها غير متطابقين");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: targetUserId, new_password: newPwd })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUser(data);
+        setMustChangeUser(null);
+        setIsAuthOpen(false);
+        showToast("تم تعيين كلمة المرور الجديدة بنجاح!");
+        if (pendingActionRef.current) {
+          const cb = pendingActionRef.current;
+          pendingActionRef.current = null;
+          cb(data);
+        }
+      } else {
+        showToast(data.detail || "فشل حفظ كلمة المرور الجديدة");
+      }
+    } catch (err) {
+      showToast("فشل الاتصال بالخادم");
+    }
   };
 
   const handlePhoneSubmit = async (e) => {
@@ -1113,6 +1217,25 @@ export default function App() {
         if (saved) activeUser = JSON.parse(saved);
       } catch {}
     }
+
+    const isEditing = Boolean(editingListing && editingListing.id);
+    if (isEditing) {
+      const targetPhone = editingListing.contact_phone || editingListing.whatsapp_phone || '';
+      const isOwnerOrAdmin = activeUser && (activeUser.id === editingListing.advertiser_id || activeUser.account_type === 'admin');
+
+      if (!activeUser || activeUser.must_change_password || !isOwnerOrAdmin) {
+        setIsCreateOpen(false);
+        showToast("لحفظ تعديلات هذا الإعلان، يرجى تسجيل الدخول بكلمة المرور المخصصة لمالك الإعلان أولاً");
+        handleStartAuth('login', 'broker', (authUser) => {
+          if (authUser) {
+            setIsCreateOpen(true);
+            submitListingWithUser(authUser);
+          }
+        }, targetPhone);
+        return;
+      }
+    }
+
     if (!activeUser) {
       setIsCreateOpen(false);
       showToast("لتأكيد ونشر إعلانك، يرجى إنشاء حسابك أو تسجيل الدخول أولاً");
@@ -2576,9 +2699,15 @@ export default function App() {
                   <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
                     <div style={{ background: '#fff', borderRadius: '16px', maxWidth: '600px', width: '100%', padding: '1.5rem', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
                       <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-dark)' }}>رسالة التواصل الجاهزة عبر الواتساب</h3>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                        تم تفعيل التعديل الشامل لمرة واحدة لهذا الإعلان وتوليد الرابط بنجاح.
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                        تم تفعيل التعديل الشامل لمرة واحدة لهذا الإعلان وتوليد كلمة المرور والرابط بنجاح.
                       </p>
+                      {outreachModalData.generated_password && (
+                        <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.5rem 0.75rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                          <span style={{ color: '#92400e', fontWeight: 600 }}>كلمة المرور المولدة للمعلن:</span>
+                          <strong style={{ fontFamily: 'monospace', fontSize: '1rem', color: '#b45309' }}>{outreachModalData.generated_password}</strong>
+                        </div>
+                      )}
                       <textarea 
                         readOnly 
                         rows="8" 
@@ -3295,64 +3424,175 @@ export default function App() {
         </div>
       </footer>
 
-      {/* --- AUTHENTICATION MODAL (Arabic / Distinct Login vs Register) --- */}
+      {/* --- AUTHENTICATION MODAL (Arabic / Password & OTP Coexistence) --- */}
       {isAuthOpen && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '400px' }}>
             <div className="modal-header">
               <h3>
-                {authMode === 'register' 
-                  ? (authStep === 'phone' ? 'إنشاء حساب جديد' : authStep === 'otp' ? 'رمز تحقق الحساب' : 'بيانات الحساب الإضافية')
-                  : (authStep === 'phone' ? 'تسجيل الدخول بالهاتف' : 'تأكيد الرمز والدخول')
+                {authStep === 'change_password'
+                  ? 'تعيين كلمة مرور جديدة'
+                  : authMode === 'register' 
+                    ? (authStep === 'phone' ? 'إنشاء حساب جديد' : authStep === 'otp' ? 'رمز تحقق الحساب' : 'بيانات الحساب الإضافية')
+                    : (authStep === 'phone' ? (authLoginMethod === 'password' ? 'تسجيل الدخول بكلمة المرور' : 'تسجيل الدخول بالهاتف') : 'تأكيد الرمز والدخول')
                 }
               </h3>
               <button className="modal-close" onClick={() => setIsAuthOpen(false)}>×</button>
             </div>
             <div className="modal-body">
-              
-              {/* Step 1: Input Phone */}
-              {authStep === 'phone' && (
-                <form onSubmit={handlePhoneSubmit}>
-                  {authMode === 'register' && (
-                    <div className="form-group">
-                      <label>نوع حسابك</label>
-                      <select value={authForm.account_type} onChange={(e) => setAuthForm({ ...authForm, account_type: e.target.value })}>
-                        <option value="student">طالب / مستخدم عادي</option>
-                        <option value="owner">مالك عقار (بدون عمولة)</option>
-                        <option value="broker">سمسار عقاري</option>
-                      </select>
-                    </div>
-                  )}
-                  
-                  <div className="form-group">
-                    <label>رقم الهاتف المحمول</label>
-                    <input 
-                      type="tel" 
-                      placeholder="01xxxxxxxxx" 
-                      required 
-                      value={authForm.phone}
-                      onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
-                    />
-                  </div>
-                  <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
-                    {authMode === 'register' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الحساب <MessageSquare style={{ width: 16, height: 16 }} /></span>
-                    ) : (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الدخول</span>
-                    )}
-                  </button>
 
-                  <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
-                    {authMode === 'register' ? (
-                      <span style={{ color: 'var(--text-light)' }}>
-                        لديك حساب بالفعل؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('login'); }}>تسجيل الدخول</a>
-                      </span>
-                    ) : (
+              {/* Login Method Selector Tabs (Password vs OTP) */}
+              {authMode === 'login' && authStep === 'phone' && (
+                <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.25rem', background: '#f1f5f9', padding: '4px', borderRadius: '12px' }}>
+                  <button 
+                    type="button"
+                    onClick={() => setAuthLoginMethod('password')}
+                    style={{
+                      flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', cursor: 'pointer',
+                      fontWeight: authLoginMethod === 'password' ? 700 : 500,
+                      background: authLoginMethod === 'password' ? '#ffffff' : 'transparent',
+                      color: authLoginMethod === 'password' ? 'var(--primary)' : 'var(--text-muted)',
+                      boxShadow: authLoginMethod === 'password' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    كلمة المرور
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setAuthLoginMethod('otp')}
+                    style={{
+                      flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', cursor: 'pointer',
+                      fontWeight: authLoginMethod === 'otp' ? 700 : 500,
+                      background: authLoginMethod === 'otp' ? '#ffffff' : 'transparent',
+                      color: authLoginMethod === 'otp' ? 'var(--primary)' : 'var(--text-muted)',
+                      boxShadow: authLoginMethod === 'otp' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    رمز التحقق (OTP)
+                  </button>
+                </div>
+              )}
+
+              {/* Step 1: Input Phone / Password */}
+              {authStep === 'phone' && (
+                authMode === 'login' && authLoginMethod === 'password' ? (
+                  <form onSubmit={handlePasswordLoginSubmit}>
+                    <div className="form-group">
+                      <label>رقم الهاتف المحمول</label>
+                      <input 
+                        type="tel" 
+                        placeholder="01xxxxxxxxx" 
+                        required 
+                        value={authForm.phone}
+                        onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>كلمة المرور</label>
+                      <input 
+                        type="password" 
+                        placeholder="أدخل كلمة المرور" 
+                        required 
+                        value={authForm.password || ''}
+                        onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                      />
+                    </div>
+
+                    <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>تسجيل الدخول بكلمة المرور</span>
+                    </button>
+
+                    <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
                       <span style={{ color: 'var(--text-light)' }}>
                         ليس لديك حساب؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('register'); }}>إنشاء حساب جديد</a>
                       </span>
+                    </div>
+                  </form>
+                ) : (
+                  <form onSubmit={handlePhoneSubmit}>
+                    {authMode === 'register' && (
+                      <div className="form-group">
+                        <label>نوع حسابك</label>
+                        <select value={authForm.account_type} onChange={(e) => setAuthForm({ ...authForm, account_type: e.target.value })}>
+                          <option value="student">طالب / مستخدم عادي</option>
+                          <option value="owner">مالك عقار (بدون عمولة)</option>
+                          <option value="broker">سمسار عقاري</option>
+                        </select>
+                      </div>
                     )}
+                    
+                    <div className="form-group">
+                      <label>رقم الهاتف المحمول</label>
+                      <input 
+                        type="tel" 
+                        placeholder="01xxxxxxxxx" 
+                        required 
+                        value={authForm.phone}
+                        onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
+                      />
+                    </div>
+                    <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
+                      {authMode === 'register' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الحساب <MessageSquare style={{ width: 16, height: 16 }} /></span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الدخول</span>
+                      )}
+                    </button>
+
+                    <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
+                      {authMode === 'register' ? (
+                        <span style={{ color: 'var(--text-light)' }}>
+                          لديك حساب بالفعل؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('login'); }}>تسجيل الدخول</a>
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-light)' }}>
+                          ليس لديك حساب؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('register'); }}>إنشاء حساب جديد</a>
+                        </span>
+                      )}
+                    </div>
+                  </form>
+                )
+              )}
+
+              {/* Step: Forced First-Login Password Change */}
+              {authStep === 'change_password' && (
+                <form onSubmit={handleChangePasswordSubmit}>
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', padding: '0.85rem 1rem', borderRadius: '12px', marginBottom: '1.25rem' }}>
+                    <p style={{ margin: 0, fontSize: '0.83rem', color: '#1e40af', lineHeight: 1.5 }}>
+                      مرحباً بك! لأن هذه المرة الأولى لدخولك بحسابك، يرجى تعيين كلمة مرور جديدة وخاصة بك لمتابعة استخدام المنصة وطلب أو حفظ تعديلات إعلانك.
+                    </p>
                   </div>
+
+                  <div className="form-group">
+                    <label>كلمة المرور الجديدة (الحد الأدنى 6 أحرف)</label>
+                    <input 
+                      type="password" 
+                      placeholder="******" 
+                      required 
+                      minLength={6}
+                      value={authForm.new_password || ''}
+                      onChange={(e) => setAuthForm({ ...authForm, new_password: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>تأكيد كلمة المرور الجديدة</label>
+                    <input 
+                      type="password" 
+                      placeholder="******" 
+                      required 
+                      minLength={6}
+                      value={authForm.confirm_password || ''}
+                      onChange={(e) => setAuthForm({ ...authForm, confirm_password: e.target.value })}
+                    />
+                  </div>
+
+                  <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.75rem' }}>
+                    حفظ كلمة المرور والدخول للمنصة
+                  </button>
                 </form>
               )}
 

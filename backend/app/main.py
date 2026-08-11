@@ -29,12 +29,38 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
+import hashlib
+import os
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_FILE = BASE_DIR / "sakan.db"
 DATABASE_URL = os.environ.get("DATABASE_URL") or f"sqlite:///{DB_FILE}"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+
+def hash_password(password: str, salt: str = None) -> str:
+    if not password:
+        return ""
+    if not salt:
+        salt = os.urandom(16).hex()
+    hashed = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+    return f"{salt}:{hashed}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    if not stored_hash or ":" not in stored_hash or not password:
+        return False
+    salt, hash_val = stored_hash.split(":", 1)
+    recalculated = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+    return recalculated == hash_val
+
+
+def get_default_password_for_phone(phone: str) -> str:
+    digits = ''.join(c for c in (phone or '') if c.isdigit())
+    last3 = digits[-3:] if len(digits) >= 3 else "123"
+    return f"sakan{last3}"
 
 
 class User(Base):
@@ -53,6 +79,8 @@ class User(Base):
     verified_by_sakan = Column(Boolean, default=False)
     terms_accepted_at = Column(DateTime, nullable=True)
     verified_channel = Column(String, nullable=True)  # "whatsapp", "telegram", "sms", "email"
+    password_hash = Column(String, nullable=True)
+    must_change_password = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     listings = relationship("Listing", back_populates="advertiser")
@@ -214,6 +242,10 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE users ADD COLUMN verified_by_sakan BOOLEAN DEFAULT 0"))
             if "verified_channel" not in user_cols:
                 connection.execute(text("ALTER TABLE users ADD COLUMN verified_channel VARCHAR"))
+            if "password_hash" not in user_cols:
+                connection.execute(text("ALTER TABLE users ADD COLUMN password_hash TEXT"))
+            if "must_change_password" not in user_cols:
+                connection.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))
 
         # Check listings table
         if "listings" in inspector.get_table_names():
@@ -485,6 +517,29 @@ class UserOut(BaseModel):
     verified_by_sakan: bool = False
     verified_channel: Optional[str] = None
     created_at: Optional[datetime] = None
+    must_change_password: bool = False
+    has_password: bool = False
+
+
+def user_to_user_out(u: User) -> UserOut:
+    govs = safe_json_loads(u.governorates, [])
+    return UserOut(
+        id=u.id,
+        phone=u.phone,
+        name=u.name,
+        account_type=u.account_type,
+        is_verified=u.is_verified,
+        is_banned=u.is_banned,
+        offense_count=u.offense_count,
+        profile_photo_url=u.profile_photo_url,
+        governorates=govs,
+        terms_accepted_at=u.terms_accepted_at,
+        verified_by_sakan=u.verified_by_sakan,
+        verified_channel=u.verified_channel,
+        created_at=u.created_at,
+        must_change_password=bool(u.must_change_password),
+        has_password=bool(u.password_hash)
+    )
 
 
 class RegisterRequest(BaseModel):
@@ -502,6 +557,17 @@ class VerifyRequest(BaseModel):
 
 class LoginOTPRequest(BaseModel):
     phone: str
+
+
+class LoginPasswordRequest(BaseModel):
+    phone: str
+    password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    user_id: int
+    current_password: Optional[str] = None
+    new_password: str = Field(..., min_length=6)
 
 
 class ListingCreate(BaseModel):
@@ -901,21 +967,60 @@ def login_user(payload: RegisterRequest):
         db.refresh(user)
 
         govs = safe_json_loads(user.governorates, [])
-        return UserOut(
-            id=user.id,
-            phone=user.phone,
-            name=user.name,
-            account_type=user.account_type,
-            is_verified=user.is_verified,
-            is_banned=user.is_banned,
-            offense_count=user.offense_count,
-            profile_photo_url=user.profile_photo_url,
-            governorates=govs,
-            terms_accepted_at=user.terms_accepted_at,
-            verified_by_sakan=user.verified_by_sakan,
-            verified_channel=user.verified_channel,
-            created_at=user.created_at
-        )
+        return user_to_user_out(user)
+    finally:
+        db.close()
+
+
+@app.post('/auth/login-password', response_model=UserOut)
+def login_password(payload: LoginPasswordRequest):
+    db = SessionLocal()
+    try:
+        phone = (payload.phone or "").strip()
+        blocked = db.query(PhoneBlocklist).filter(PhoneBlocklist.phone == phone).first()
+        if blocked:
+            raise HTTPException(status_code=403, detail="هذا الرقم محظور من تسجيل الدخول")
+
+        user = db.query(User).filter(User.phone == phone).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="رقم الهاتف غير مسجل لدينا، يرجى إنشاء حساب جديد")
+
+        if not user.password_hash:
+            raise HTTPException(status_code=400, detail="هذا الحساب لا يمتلك كلمة مرور حالياً، يرجى الدخول عبر رمز التحقق OTP")
+
+        if not verify_password(payload.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="كلمة المرور غير صحيحة")
+
+        if user.is_banned:
+            raise HTTPException(status_code=403, detail="هذا الحساب محظور من الاستخدام")
+
+        return user_to_user_out(user)
+    finally:
+        db.close()
+
+
+@app.post('/auth/change-password', response_model=UserOut)
+def change_password(payload: ChangePasswordRequest):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == payload.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+
+        # If user does NOT have must_change_password set, require current_password verification
+        if not user.must_change_password and user.password_hash:
+            if not payload.current_password or not verify_password(payload.current_password, user.password_hash):
+                raise HTTPException(status_code=401, detail="كلمة المرور الحالية غير صحيحة")
+
+        if len(payload.new_password) < 6:
+            raise HTTPException(status_code=400, detail="كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف")
+
+        user.password_hash = hash_password(payload.new_password)
+        user.must_change_password = False
+        db.commit()
+        db.refresh(user)
+
+        return user_to_user_out(user)
     finally:
         db.close()
 
@@ -1196,7 +1301,31 @@ def bulk_create_listings(payload: List[dict], x_user_id: Optional[int] = Header(
 
                 raw_photos = item.get("photo_urls", [])
                 processed_photos = process_photo_urls(raw_photos)
-                adv_id = item.get("advertiser_id") or default_advertiser.id
+                contact_phone = item.get("contact_phone") or item.get("whatsapp_phone")
+
+                adv_id = item.get("advertiser_id")
+                if not adv_id and contact_phone and contact_phone != default_advertiser.phone:
+                    existing_adv = db.query(User).filter(User.phone == contact_phone).first()
+                    if existing_adv:
+                        adv_id = existing_adv.id
+                    else:
+                        adv_name = item.get("advertiser_name") or f"معلن {contact_phone[-4:]}"
+                        gen_pwd = get_default_password_for_phone(contact_phone)
+                        new_adv = User(
+                            phone=contact_phone,
+                            name=adv_name,
+                            account_type="owner",
+                            password_hash=hash_password(gen_pwd),
+                            must_change_password=True,
+                            is_verified=True
+                        )
+                        db.add(new_adv)
+                        db.commit()
+                        db.refresh(new_adv)
+                        adv_id = new_adv.id
+
+                if not adv_id:
+                    adv_id = default_advertiser.id
 
                 listing = Listing(
                     title=item.get("title") or f"سكن مفروش في {neighborhood}",
@@ -1227,7 +1356,7 @@ def bulk_create_listings(payload: List[dict], x_user_id: Optional[int] = Header(
                     contact_phone=item.get("contact_phone") or default_advertiser.phone,
                     whatsapp_phone=item.get("whatsapp_phone") or item.get("contact_phone") or default_advertiser.phone,
                     source=item.get("source") or "bulk",
-                    full_edit_available=False,
+                    full_edit_available=True,
                     location_precise=bool(lat is not None and lng is not None)
                 )
                 db.add(listing)
@@ -2508,25 +2637,34 @@ def admin_generate_edit_link(
         listing.full_edit_available = True
         db.commit()
 
-        edit_url = f"/listings/{listing.id}"
-        fb_page_url = "https://www.facebook.com/share/19KKYnzN97/"
+        target_phone = listing.contact_phone or (listing.advertiser.phone if listing.advertiser else "")
+        generated_password = get_default_password_for_phone(target_phone)
+
+        advertiser = listing.advertiser
+        if advertiser:
+            if not advertiser.password_hash or advertiser.must_change_password:
+                advertiser.password_hash = hash_password(generated_password)
+                advertiser.must_change_password = True
+                db.commit()
 
         whatsapp_message = (
             f"السلام عليكم\n"
-            f"حابين نبلغ حضرتك إننا ضفنا إعلاناتك الخاصه على منصة (سكن) الخاصة بسكن الطلاب، لزيادة وصول إعلاناتك للطلاب الراغبين في التأجير هذا الموسم.\n"
-            f"معلومات سريعة:\n"
-            f"• الخدمة مجانية تماماً وبدون أي عمولات.\n"
-            f"• التواصل هيكون مباشر من الطالب على رقم الواتساب الخاص بحضرتك.\n"
-            f"معاينة إعلانك على المنصة: https://sakan-egy.com/listings/{listing.id}"
+            f"تم إضافة إعلانك الخاص على منصة (سكن) لسكن الطلاب بنجاح.\n\n"
+            f"بيانات الدخول إلى حسابك:\n"
+            f"• رقم الهاتف: {target_phone}\n"
+            f"• كلمة المرور: {generated_password}\n\n"
+            f"رابط التعديل المباشر لإعلانك:\n"
+            f"https://sakan-egy.com/listings/{listing.id}\n\n"
+            f"ملاحظة: يمكنك مراجعة وتعديل بيانات الإعلان عبر الرابط، ولحفظ التعديلات سيُطلب منك تسجيل الدخول وتغيير كلمة المرور لأول مرة."
         )
 
-        target_phone = listing.contact_phone or (listing.advertiser.phone if listing.advertiser else "")
         return {
             "status": "success",
             "listing_id": listing.id,
             "edit_token": token,
             "edit_url": edit_url,
             "full_edit_available": True,
+            "generated_password": generated_password,
             "whatsapp_message": whatsapp_message,
             "contact_phone": target_phone
         }
