@@ -580,8 +580,8 @@ export default function App() {
     available_beds: 1,
     room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
     amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
-    photo_urls: [...PRESETS_PROPERTY_IMAGES],
-    video_urls: [...PRESETS_PROPERTY_VIDEOS],
+    photo_urls: [],
+    video_urls: [],
     description: '',
     tier: 'regular',
     min_lease_months: null
@@ -1252,8 +1252,8 @@ export default function App() {
           available_beds: 1,
           room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
           amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
-          photo_urls: [...PRESETS_PROPERTY_IMAGES],
-          video_urls: [...PRESETS_PROPERTY_VIDEOS],
+          photo_urls: [],
+          video_urls: [],
           description: '',
           tier: 'regular',
           min_lease_months: null
