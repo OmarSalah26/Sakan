@@ -2637,6 +2637,7 @@ def admin_generate_edit_link(
         listing.full_edit_available = True
         db.commit()
 
+        edit_url = f"https://sakan-egy.com/listings/{listing.id}?token={token}"
         target_phone = listing.contact_phone or (listing.advertiser.phone if listing.advertiser else "")
         generated_password = get_default_password_for_phone(target_phone)
 

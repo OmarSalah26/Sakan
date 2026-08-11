@@ -262,7 +262,8 @@ export default function ListingDetailPage() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/ratings/create`, {
+      const endpoint = targetType === 'advertiser' ? 'advertiser' : 'property';
+      const res = await fetch(`${API_BASE}/ratings/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

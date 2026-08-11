@@ -427,6 +427,10 @@ export default function App() {
     navigate(`/listings/${listingId}`);
   };
 
+  const openListingDetail = (listingId) => {
+    navigate(`/listings/${listingId}`);
+  };
+
   // Restore scroll position to the exact opened listing card after listings load
   useEffect(() => {
     if (listings.length > 0) {

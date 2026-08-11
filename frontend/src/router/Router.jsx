@@ -23,13 +23,14 @@ export function RouterProvider({ children }) {
       window.history.go(to);
       return;
     }
+    const cleanPathname = typeof to === 'string' ? (to.split('?')[0].split('#')[0] || '/') : '/';
     // Save current scroll position before navigating away
     sessionStorage.setItem('scrollPos_' + pathname, window.scrollY.toString());
     window.history.pushState({}, '', to);
-    setPathname(to);
+    setPathname(cleanPathname);
     
     // Restore scroll position if previously saved for target route
-    const savedScroll = sessionStorage.getItem('scrollPos_' + to);
+    const savedScroll = sessionStorage.getItem('scrollPos_' + cleanPathname);
     if (savedScroll !== null) {
       setTimeout(() => window.scrollTo(0, parseInt(savedScroll, 10)), 50);
     } else {
@@ -109,10 +110,11 @@ export function Route({ element }) {
 }
 
 function matchPath(routePath, currentPath) {
+  const cleanCurrent = (currentPath || '/').split('?')[0].split('#')[0] || '/';
   if (routePath === '*') return { isMatch: true, params: {} };
   
   const routeParts = routePath.split('/').filter(Boolean);
-  const currentParts = currentPath.split('/').filter(Boolean);
+  const currentParts = cleanCurrent.split('/').filter(Boolean);
 
   if (routeParts.length !== currentParts.length) {
     return { isMatch: false, params: {} };
