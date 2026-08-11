@@ -418,6 +418,42 @@ export default function App() {
   const [profileUserId, setProfileUserId] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [listings, setListings] = useState([]);
+
+  const handleCardClick = (listingId) => {
+    try {
+      sessionStorage.setItem('last_opened_listing_id', String(listingId));
+      sessionStorage.setItem('last_feed_scroll_y', String(window.scrollY));
+    } catch {}
+    navigate(`/listings/${listingId}`);
+  };
+
+  // Restore scroll position to the exact opened listing card after listings load
+  useEffect(() => {
+    if (listings.length > 0) {
+      const lastId = sessionStorage.getItem('last_opened_listing_id');
+      const lastScrollY = sessionStorage.getItem('last_feed_scroll_y');
+      
+      if (lastId || lastScrollY) {
+        const timer = setTimeout(() => {
+          if (lastId) {
+            const cardEl = document.getElementById(`listing-card-${lastId}`);
+            if (cardEl) {
+              cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              sessionStorage.removeItem('last_opened_listing_id');
+              sessionStorage.removeItem('last_feed_scroll_y');
+              return;
+            }
+          }
+          if (lastScrollY) {
+            window.scrollTo({ top: parseInt(lastScrollY, 10), behavior: 'smooth' });
+            sessionStorage.removeItem('last_opened_listing_id');
+            sessionStorage.removeItem('last_feed_scroll_y');
+          }
+        }, 120);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [listings]);
   
   // Bulk Add state
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -2127,7 +2163,8 @@ export default function App() {
                             transition: 'transform 0.2s, box-shadow 0.2s',
                             cursor: 'pointer'
                           }}
-                          onClick={() => navigate(`/listings/${item.id}`)}
+                          id={`listing-card-${item.id}`}
+                          onClick={() => handleCardClick(item.id)}
                         >
                           <div className="card-img-wrapper" style={{ position: 'relative' }}>
                             <img className="card-img" src={coverImage} alt={item.title} />
@@ -2886,7 +2923,7 @@ export default function App() {
                     ? formatImageUrl(item.photo_urls[0])
                     : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
                   return (
-                    <article key={item.id} className="listing-card" onClick={() => navigate(`/listings/${item.id}`)}>
+                    <article key={item.id} id={`listing-card-${item.id}`} className="listing-card" onClick={() => handleCardClick(item.id)}>
                       <div className="card-img-wrapper">
                         <img className="card-img" src={coverImage} alt={item.title} />
                         <button
@@ -3189,7 +3226,7 @@ export default function App() {
                   ) : (
                     <div className="listings-grid">
                       {profileData.listings.map(item => (
-                        <article key={item.id} className="listing-card" onClick={() => navigate(`/listings/${item.id}`)}>
+                        <article key={item.id} id={`listing-card-${item.id}`} className="listing-card" onClick={() => handleCardClick(item.id)}>
                           <div className="card-img-wrapper">
                             <img className="card-img" src={formatImageUrl(item.photo_urls?.[0])} alt={item.title} />
                           </div>
