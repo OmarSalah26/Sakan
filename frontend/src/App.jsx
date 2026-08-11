@@ -1726,22 +1726,6 @@ export default function App() {
             سكن <span>Sakan</span>
           </a>
 
-          {/* Top Navbar Contact & Feedback Trigger (Positioned on Right Side next to Brand Logo) */}
-          <button
-            type="button"
-            className="btn-outline nav-contact-btn"
-            onClick={() => { setIsContactModalOpen(true); setMobileMenuOpen(false); }}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-              padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem',
-              fontWeight: 700, color: 'var(--primary)', borderColor: '#bfdbfe', background: '#eff6ff',
-              cursor: 'pointer', transition: 'all 0.15s'
-            }}
-          >
-            <MessageSquare style={{ width: 14, height: 14 }} />
-            <span>تواصل معنا</span>
-          </button>
-
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             {/* Directly Visible Mobile Header "أضف إعلانك" CTA Button */}
             {(!user || isBroker || isAdmin) && (
@@ -1801,6 +1785,15 @@ export default function App() {
             onClick={() => { navigateTo('#/terms'); setMobileMenuOpen(false); }}
           >
             الشروط والأحكام
+          </button>
+          <button 
+            type="button"
+            className="inactive-tab" 
+            onClick={() => { setIsContactModalOpen(true); setMobileMenuOpen(false); }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            <MessageSquare style={{ width: 15, height: 15 }} />
+            <span>تواصل معنا</span>
           </button>
 
           {/* Create listing button accessible for Brokers, Admins, or guests */}
