@@ -217,11 +217,13 @@ function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLn
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '/api');
 
 function formatImageUrl(url) {
-  if (!url) return "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
+  if (!url) return null;
   if (typeof url !== 'string') return url;
 
   let cleanUrl = url.trim();
-  cleanUrl = cleanUrl.replace(/^http:\/\/(127\.0\.0\.1|localhost):(8000|3000)/, '');
+  if (cleanUrl.startsWith('blob:') || cleanUrl.startsWith('data:')) return cleanUrl;
+
+  cleanUrl = cleanUrl.replace(/^https?:\/\/[^\/]+/, '');
 
   const apiServer = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '');
 
@@ -231,7 +233,7 @@ function formatImageUrl(url) {
   if (cleanUrl.startsWith('static/') || cleanUrl.startsWith('media/')) {
     return `${apiServer}/${cleanUrl}`;
   }
-  return cleanUrl;
+  return url;
 }
 
 const GOVERNORATES = [
@@ -1871,10 +1873,26 @@ export default function App() {
           <span className="nav-sep">|</span>
 
           {user ? (
-            <div className="nav-user-info">
+            <div className="nav-user-info" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div 
+                onClick={() => { setProfileUserId(user.id); navigateTo('#/profile'); setMobileMenuOpen(false); }}
+                style={{ width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid #cbd5e1', cursor: 'pointer' }}
+                title="الملف الشخصي"
+              >
+                {user.profile_photo_url ? (
+                  <img 
+                    src={formatImageUrl(user.profile_photo_url)} 
+                    alt="" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <User style={{ width: 20, height: 20, color: '#64748b' }} />
+                )}
+              </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{user.name}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 700 }}>{user.name}</div>
+                <div style={{ fontSize: '0.73rem', color: 'var(--text-light)' }}>
                   {isAdmin ? 'مشرف المنصة' : isBroker ? 'وسيط عقاري' : 'مستخدم عادي'}
                 </div>
               </div>
@@ -3353,7 +3371,7 @@ export default function App() {
                 <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: '2rem', border: '1px solid var(--border-color)', display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'var(--bg-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem', overflow: 'hidden', border: '2px solid var(--border-color)' }}>
                     {profileData.user.profile_photo_url ? (
-                      <img src={profileData.user.profile_photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={formatImageUrl(profileData.user.profile_photo_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                     ) : <User style={{ width: 32, height: 32, color: 'var(--text-muted)' }} />}
                   </div>
                   <div>

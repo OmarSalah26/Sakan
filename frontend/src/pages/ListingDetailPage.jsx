@@ -11,11 +11,13 @@ import { useApp } from '../context/AppContext';
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '/api');
 
 function formatImageUrl(url) {
-  if (!url) return "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
+  if (!url) return null;
   if (typeof url !== 'string') return url;
 
   let cleanUrl = url.trim();
-  cleanUrl = cleanUrl.replace(/^http:\/\/(127\.0\.0\.1|localhost):(8000|3000)/, '');
+  if (cleanUrl.startsWith('blob:') || cleanUrl.startsWith('data:')) return cleanUrl;
+
+  cleanUrl = cleanUrl.replace(/^https?:\/\/[^\/]+/, '');
 
   const apiServer = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '');
 
@@ -25,7 +27,7 @@ function formatImageUrl(url) {
   if (cleanUrl.startsWith('static/') || cleanUrl.startsWith('media/')) {
     return `${apiServer}/${cleanUrl}`;
   }
-  return cleanUrl;
+  return url;
 }
 
 function getTimeAgo(dateStr) {
@@ -656,7 +658,7 @@ export default function ListingDetailPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '1.25rem' }}>
               <div style={{ width: '56px', height: '56px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {advertiser.profile_photo_url ? (
-                  <img src={formatImageUrl(advertiser.profile_photo_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={formatImageUrl(advertiser.profile_photo_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 ) : (
                   <User style={{ width: 28, height: 28, color: '#64748b' }} />
                 )}
