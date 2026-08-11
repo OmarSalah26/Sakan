@@ -1666,82 +1666,134 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Right Column: Stylized Egypt Expansion Map & Line-Art Graphics */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: '20px', padding: '1.25rem' }}>
+                {/* Right Column: Clean Egypt Border Map + Student Housing Vector Line-Art */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: '24px', padding: '1.25rem', position: 'relative', overflow: 'hidden' }}>
                   
-                  {/* Map Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.6rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, fontSize: '0.9rem', color: '#f8fafc' }}>
+                  {/* Decorative Background Line-Art Pattern */}
+                  <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0.04, pointerEvents: 'none' }} viewBox="0 0 400 400">
+                    <pattern id="arch-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" strokeWidth="1" />
+                    </pattern>
+                    <rect width="100%" height="100%" fill="url(#arch-grid)" />
+                  </svg>
+
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.65rem', position: 'relative', zIndex: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 800, fontSize: '0.9rem', color: '#f8fafc' }}>
                       <Compass style={{ width: 18, height: 18, color: '#38bdf8' }} />
-                      خريطة التغطية والتوسع في المحافظات
+                      خريطة التوسع وحالة المحافظات
                     </div>
-                    <span style={{ fontSize: '0.72rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '0.15rem 0.55rem', borderRadius: '999px', fontWeight: 700 }}>
+                    <span style={{ fontSize: '0.72rem', background: 'rgba(37, 99, 235, 0.2)', color: '#60a5fa', padding: '0.2rem 0.65rem', borderRadius: '999px', fontWeight: 700, border: '1px solid rgba(96, 165, 250, 0.3)' }}>
                       جمهورية مصر العربية
                     </span>
                   </div>
 
-                  {/* Stylized Vector Map SVG Graphic of Nile River & Governorates */}
-                  <div style={{ position: 'relative', width: '100%', height: '140px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px dashed rgba(255, 255, 255, 0.15)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg viewBox="0 0 400 160" style={{ width: '100%', height: '100%', opacity: 0.9 }}>
-                      {/* Nile River Curve Line Graphic */}
-                      <path d="M 280 160 C 270 120, 290 80, 270 50 C 265 40, 250 30, 240 20 L 230 0" fill="none" stroke="#38bdf8" strokeWidth="3" strokeDasharray="4 2" opacity="0.6" />
-                      <path d="M 240 20 L 200 0" fill="none" stroke="#38bdf8" strokeWidth="2" opacity="0.4" />
+                  {/* 2-Column Split: Simple Egypt Border Map (Left) + Student Housing Line-Art Graphic (Right) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '0.85rem', alignItems: 'center', position: 'relative', zIndex: 2 }}>
+                    
+                    {/* 1. Simple Accurate Border Map of Egypt */}
+                    <div style={{ position: 'relative', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.1)', padding: '0.65rem 0.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      
+                      <svg viewBox="0 0 280 240" style={{ width: '100%', height: '165px', filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }}>
+                        {/* Egypt Border Outline */}
+                        <path
+                          d="M 30 30 L 70 34 L 115 30 L 140 20 L 165 18 L 185 24 L 220 28 L 245 65 L 230 100 L 215 125 L 245 180 L 265 235 L 30 235 Z"
+                          fill="rgba(30, 41, 59, 0.75)"
+                          stroke="#38bdf8"
+                          strokeWidth="2"
+                          strokeLinejoin="round"
+                        />
+                        
+                        {/* Nile River Curve */}
+                        <path
+                          d="M 195 235 C 185 190, 205 140, 180 130 C 170 100, 165 70, 160 50 L 150 30 M 160 50 L 165 18 M 160 50 L 140 20"
+                          fill="none"
+                          stroke="#60a5fa"
+                          strokeWidth="2"
+                          strokeDasharray="4 2"
+                          opacity="0.8"
+                        />
 
-                      {/* Delta Graphic Polygon */}
-                      <polygon points="210,0 270,0 240,25" fill="rgba(56,189,248,0.12)" stroke="#38bdf8" strokeWidth="1" opacity="0.6" />
+                        {/* Damietta (LIVE ONLY) - Sakan Sky Blue Glow */}
+                        <g>
+                          <circle cx="165" cy="18" r="5" fill="#38bdf8" />
+                          <circle cx="165" cy="18" r="9" fill="none" stroke="#38bdf8" strokeWidth="1.5" opacity="0.8">
+                            <animate attributeName="r" values="5;12;5" dur="2.5s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0.9;0;0.9" dur="2.5s" repeatCount="indefinite" />
+                          </circle>
+                          <rect x="175" y="10" width="70" height="18" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke="#38bdf8" strokeWidth="1" />
+                          <text x="210" y="22" fill="#38bdf8" fontSize="10" fontWeight="bold" textAnchor="middle">دمياط (متاحة)</text>
+                        </g>
 
-                      {/* Live Governorates Nodes (Green Signals) */}
-                      <g>
-                        {/* Damietta (Live) */}
-                        <circle cx="265" cy="12" r="5" fill="#22c55e" />
-                        <circle cx="265" cy="12" r="9" fill="rgba(34,197,94,0.35)" />
-                        <text x="275" y="16" fill="#4ade80" fontSize="10" fontWeight="bold" textAnchor="start">دمياط (مفعلة)</text>
+                        {/* Expansion Governorates - Elegant Indigo / Slate Indicators */}
+                        <g opacity="0.9">
+                          {/* Cairo */}
+                          <circle cx="160" cy="50" r="4" fill="#818cf8" />
+                          <text x="170" y="54" fill="#cbd5e1" fontSize="9" textAnchor="start">القاهرة</text>
 
-                        {/* Assiut (Live) */}
-                        <circle cx="275" cy="100" r="5" fill="#22c55e" />
-                        <circle cx="275" cy="100" r="9" fill="rgba(34,197,94,0.35)" />
-                        <text x="285" y="104" fill="#4ade80" fontSize="10" fontWeight="bold" textAnchor="start">أسيوط (مفعلة)</text>
-                      </g>
+                          {/* Alexandria */}
+                          <circle cx="115" cy="30" r="4" fill="#818cf8" />
+                          <text x="72" y="34" fill="#cbd5e1" fontSize="9" textAnchor="start">الإسكندرية</text>
 
-                      {/* Expansion Governorates Nodes (Amber/Purple Signals) */}
-                      <g opacity="0.85">
-                        {/* Cairo */}
-                        <circle cx="242" cy="32" r="3.5" fill="#f59e0b" />
-                        <text x="250" y="35" fill="#fcd34d" fontSize="9" textAnchor="start">القاهرة (قريباً)</text>
+                          {/* Assiut (Expansion) */}
+                          <circle cx="180" cy="130" r="4" fill="#818cf8" />
+                          <rect x="188" y="122" width="78" height="16" rx="4" fill="rgba(15, 23, 42, 0.85)" stroke="#818cf8" strokeWidth="0.8" />
+                          <text x="227" y="133" fill="#a5b4fc" fontSize="9" fontWeight="600" textAnchor="middle">أسيوط (توسع قريب)</text>
+                        </g>
+                      </svg>
 
-                        {/* Giza */}
-                        <circle cx="232" cy="38" r="3.5" fill="#f59e0b" />
-
-                        {/* Alexandria */}
-                        <circle cx="215" cy="12" r="3.5" fill="#a855f7" />
-                        <text x="175" y="15" fill="#c084fc" fontSize="9" textAnchor="start">الإسكندرية (توسع)</text>
-
-                        {/* Daqahlia */}
-                        <circle cx="250" cy="18" r="3.5" fill="#f59e0b" />
-
-                        {/* Monufia */}
-                        <circle cx="236" cy="22" r="3.5" fill="#f59e0b" />
-                      </g>
-                    </svg>
-                  </div>
-
-                  {/* Governorates Legend Badges */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.25)', padding: '0.4rem 0.65rem', borderRadius: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#4ade80', fontWeight: 700 }}>
-                        <CheckCircle2 style={{ width: 14, height: 14 }} />
-                        <span>المحافظات المتاحة حالياً</span>
+                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.3rem', fontSize: '0.7rem' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: '#38bdf8', fontWeight: 700 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#38bdf8', display: 'inline-block' }} /> متاحة حالياً
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: '#a5b4fc', fontWeight: 600 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#818cf8', display: 'inline-block' }} /> قادمة في التوسع
+                        </span>
                       </div>
-                      <span style={{ fontWeight: 800, color: '#ffffff' }}>دمياط، أسيوط</span>
+
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.25)', padding: '0.4rem 0.65rem', borderRadius: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#fcd34d', fontWeight: 700 }}>
-                        <Clock style={{ width: 14, height: 14 }} />
-                        <span>توسع قريب جداً</span>
+                    {/* 2. Vector Student Housing Architectural Line-Art Graphic (Filling the side area) */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                      
+                      {/* Architectural Room Floorplan / Building Vector Box */}
+                      <div style={{ position: 'relative', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: '16px', padding: '0.85rem 0.65rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '0.4rem' }}>
+                        
+                        {/* Vector Line-Art Graphic of Student Apartment Building */}
+                        <svg viewBox="0 0 160 90" style={{ width: '100%', height: '70px', stroke: '#60a5fa', strokeWidth: '1.5', fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' }}>
+                          {/* Building Outline */}
+                          <rect x="20" y="15" width="120" height="70" rx="6" stroke="#38bdf8" strokeWidth="2" fill="rgba(37,99,235,0.1)" />
+                          {/* Roof line */}
+                          <path d="M 15 15 L 80 4 L 145 15" stroke="#38bdf8" strokeWidth="2" />
+                          {/* Windows Grid */}
+                          <rect x="35" y="26" width="22" height="18" rx="3" stroke="#818cf8" />
+                          <rect x="69" y="26" width="22" height="18" rx="3" stroke="#818cf8" />
+                          <rect x="103" y="26" width="22" height="18" rx="3" stroke="#818cf8" />
+                          <rect x="35" y="54" width="22" height="20" rx="3" stroke="#818cf8" />
+                          {/* Door */}
+                          <path d="M 70 85 L 70 54 L 90 54 L 90 85" stroke="#38bdf8" strokeWidth="2" />
+                          <circle cx="85" cy="70" r="1.5" fill="#60a5fa" />
+                        </svg>
+
+                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#f8fafc', marginTop: '0.1rem' }}>
+                          منظومة إسكان طلابي متكاملة
+                        </div>
                       </div>
-                      <span style={{ fontWeight: 700, color: '#cbd5e1' }}>القاهرة، الجيزة، الإسكندرية +22</span>
+
+                      {/* Floating Architectural Feature Badges */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.55rem', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.12)', border: '1px solid rgba(37, 99, 235, 0.25)', color: '#93c5fd', fontSize: '0.72rem', fontWeight: 700 }}>
+                          <Home style={{ width: 12, height: 12, color: '#38bdf8' }} />
+                          <span>غرف فردية ومزدوجة ومستقلة</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.55rem', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.25)', color: '#c7d2fe', fontSize: '0.72rem', fontWeight: 700 }}>
+                          <ShieldCheck style={{ width: 12, height: 12, color: '#818cf8' }} />
+                          <span>عقود وتواصل مباشر مع المالك</span>
+                        </div>
+                      </div>
+
                     </div>
+
                   </div>
 
                 </div>
