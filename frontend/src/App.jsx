@@ -1618,46 +1618,28 @@ export default function App() {
         {/* TAB 1: BROWSE LISTINGS FEED */}
         {isBrowseTab && (
           <div>
-            {/* --- HERO SECTION (MINIMALIST CLEAN REDESIGN) --- */}
-            <section className="hero-redesign-wrapper" style={{ position: 'relative', borderRadius: '24px', overflow: 'hidden', margin: '0 0 2rem 0', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f2b5c 100%)', color: '#ffffff', boxShadow: '0 12px 32px rgba(15, 23, 42, 0.15)', border: '1px solid #1e293b', textAlign: 'center' }}>
-              {/* Subtle Square Grid Pattern Overlay */}
-              <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px)', backgroundSize: '28px 28px', pointerEvents: 'none' }} />
-              
-              {/* Subtle Ambient Glow */}
-              <div style={{ position: 'absolute', top: '-30%', left: '50%', transform: 'translateX(-50%)', width: '500px', height: '300px', background: 'radial-gradient(circle, rgba(37,99,235,0.3) 0%, transparent 70%)', filter: 'blur(60px)', pointerEvents: 'none' }} />
-
-              <div style={{ position: 'relative', zIndex: 2, padding: '3.5rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem', maxWidth: '780px', margin: '0 auto' }}>
-                
-                {/* Main Hero Title */}
-                <h1 style={{ fontSize: '2.5rem', fontWeight: 900, lineHeight: 1.25, margin: 0, color: '#ffffff', letterSpacing: '-0.02em' }}>
-                  ابحث عن <span style={{ background: 'linear-gradient(135deg, #38bdf8 0%, #818cf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>سكنك الطلابي</span> المثالي
-                </h1>
-
-                {/* Tagline */}
-                <p style={{ fontSize: '1.2rem', color: '#cbd5e1', fontWeight: 600, margin: 0, lineHeight: 1.6, maxWidth: '600px' }}>
-                  سكنك الطلابي، من غير معاناة البحث العشوائي.
-                </p>
-
-                {/* In-Page Scroll CTA Button */}
-                <button 
-                  type="button"
-                  onClick={() => {
-                    document.getElementById('main-listings-section')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  style={{
-                    marginTop: '0.5rem', padding: '0.9rem 2rem', borderRadius: '14px',
-                    background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#ffffff',
-                    border: 'none', fontWeight: 800, fontSize: '1rem', cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', gap: '0.6rem',
-                    boxShadow: '0 8px 24px rgba(37, 99, 235, 0.35)', transition: 'all 0.2s'
-                  }}
-                >
-                  <span>تصفح العقارات الآن</span>
-                  <ArrowDown style={{ width: 18, height: 18 }} />
-                </button>
-
-              </div>
-            </section>
+            {/* --- HERO SECTION (REVERTED TO CLASSIC LIGHT GRADIENT) --- */}
+            <div className="hero-section">
+              <h1 className="hero-title">ابحث عن <span>سكنك الطلابي</span> المثالي</h1>
+              <p className="hero-subtitle" style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                سكنك الطلابي، من غير معاناة البحث العشوائي.
+              </p>
+              <button 
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  document.getElementById('main-listings-section')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                style={{
+                  marginTop: '1rem', padding: '0.75rem 1.75rem', borderRadius: '12px',
+                  fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: '0.5rem'
+                }}
+              >
+                <span>تصفح العقارات الآن</span>
+                <ArrowDown style={{ width: 18, height: 18 }} />
+              </button>
+            </div>
 
             <div className="main-layout" id="main-listings-section">
               {/* Sidebar Filters */}
