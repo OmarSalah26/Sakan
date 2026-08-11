@@ -4,7 +4,7 @@ import {
   MapPin, Bed, FileText, Shield, Zap, Plug, Share2, 
   User, Briefcase, Home, Star, MessageSquare, Phone, 
   Calendar, PenTool, Send, AlertTriangle, ArrowRight, Check, CheckCircle, Copy,
-  ChevronLeft, ChevronRight, Play, ShieldCheck
+  ChevronLeft, ChevronRight, Play, ShieldCheck, Wind
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -68,20 +68,33 @@ const OUTDOOR_AMENITIES = [
 
 export function formatShareText(listing) {
   if (!listing) return '';
-  const genderStr = listing.gender === 'male' ? 'طلاب (شباب)' : 'طالبات (بنات)';
+  const genderStr = listing.gender === 'male' ? 'سكن طلاب (شباب)' : 'سكن طالبات (بنات)';
   
-  const configs = listing.room_configurations || [];
+  const configs = Array.isArray(listing.room_configurations) 
+    ? listing.room_configurations 
+    : typeof listing.room_configurations === 'string'
+      ? JSON.parse(listing.room_configurations || '[]')
+      : [];
+
   let totalBeds = 0;
   let servicesInclusive = false;
   let hasInsurance = false;
   let insuranceAmount = null;
+  let unitTotalPrice = 0;
+  const roomTypesList = [];
 
-  if (Array.isArray(configs)) {
+  if (Array.isArray(configs) && configs.length > 0) {
     configs.forEach(c => {
       const roomType = c.room_type || 'single';
-      const bedCount = roomType === 'single' ? 1 : roomType === 'double' ? 2 : roomType === 'triple' ? 3 : 4;
+      const label = roomType === 'single' ? 'فردية' : roomType === 'double' ? 'ثنائية' : roomType === 'triple' ? 'ثلاثية' : 'رباعية';
+      const multiplier = roomType === 'double' ? 2 : roomType === 'triple' ? 3 : roomType === 'quadruple' ? 4 : 1;
       const count = c.count || 1;
-      totalBeds += bedCount * count;
+      const price = c.price_per_person || 0;
+      
+      totalBeds += multiplier * count;
+      unitTotalPrice += (price * count * multiplier);
+      roomTypesList.push(`${count} غرفة ${label}`);
+
       if (c.services_inclusive) servicesInclusive = true;
       if (c.insurance_price) {
         hasInsurance = true;
@@ -93,32 +106,34 @@ export function formatShareText(listing) {
   if (totalBeds === 0) {
     totalBeds = listing.available_beds || 1;
   }
+  if (!unitTotalPrice && listing.price_per_person) {
+    unitTotalPrice = listing.price_per_person;
+  }
 
-  const availStr = `${listing.available_beds} سرير متاح من أصل ${totalBeds}`;
+  const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
+  const locationStr = locationParts.join('، ');
+
+  const availStr = `${listing.available_beds || 1} سرير متاح من أصل ${totalBeds}`;
   let depositStr = 'بدون تأمين';
   if (hasInsurance && insuranceAmount) {
     depositStr = `تأمين: ${insuranceAmount} ج.م`;
   } else if (hasInsurance) {
-    depositStr = 'يوجد تأمين';
+    depositStr = 'يتطلب دفع تأمين';
   }
 
-  const servicesStr = servicesInclusive ? 'شامل الخدمات' : 'الخدمات غير مشمولة';
-  const priceStr = listing.price_per_person ? `السعر: ${listing.price_per_person} ج.م / شهرياً` : '';
-  const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
-  const locationStr = locationParts.join('، ');
+  const servicesStr = servicesInclusive ? 'الخدمات مشمولة' : 'الخدمات غير مشمولة';
 
   const lines = [
-    `${listing.title} — ${genderStr}`,
+    genderStr,
     locationStr,
+    roomTypesList.length > 0 ? `تكوين الغرف: ${roomTypesList.join('، ')}` : null,
     availStr,
     depositStr,
     servicesStr,
-  ];
-  if (priceStr) lines.push(priceStr);
-
-  lines.push('');
-  lines.push('شاهد التفاصيل الكاملة والأسعار على سكن:');
-  lines.push(`https://sakan-egy.com/listings/${listing.id}`);
+    unitTotalPrice ? `السعر الكلي: ${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : null,
+    'التفاصيل والصور على سكن:',
+    `https://sakan-egy.com/listings/${listing.id}`
+  ].filter(Boolean);
 
   return lines.join('\n');
 }
@@ -145,7 +160,7 @@ export default function ListingDetailPage() {
     if (data && data.listing) {
       const l = data.listing;
       const genderStr = l.gender === 'male' ? 'طلاب (شباب)' : 'طالبات (بنات)';
-      const pageTitle = `${l.title} — ${genderStr} | سكن Sakan`;
+      const pageTitle = `${l.title} - ${genderStr} | سكن Sakan`;
       document.title = pageTitle;
 
       const setMeta = (propName, content) => {
@@ -162,11 +177,11 @@ export default function ListingDetailPage() {
       const shareDesc = formatShareText(l);
       const coverPhoto = l.photo_urls?.[0] ? formatImageUrl(l.photo_urls[0]) : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80";
 
-      setMeta('og:title', `${l.title} — ${genderStr}`);
+      setMeta('og:title', `${l.title} - ${genderStr}`);
       setMeta('og:description', shareDesc);
       setMeta('og:image', coverPhoto);
       setMeta('og:url', `https://sakan-egy.com/listings/${l.id}`);
-      setMeta('twitter:title', `${l.title} — ${genderStr}`);
+      setMeta('twitter:title', `${l.title} - ${genderStr}`);
       setMeta('twitter:description', shareDesc);
       setMeta('twitter:image', coverPhoto);
       setMeta('twitter:card', 'summary_large_image');
@@ -211,15 +226,26 @@ export default function ListingDetailPage() {
 
   const handleShare = async () => {
     const shareText = formatShareText(listing);
+    const shareUrl = window.location.href;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: listing.title,
+          text: shareText,
+          url: shareUrl
+        });
+        return;
+      } catch (err) {
+        if (err.name !== 'AbortError') console.error(err);
+      }
+    }
     if (navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(shareText);
-        showToast('تم نسخ الإعلان بنجاح! جاهز للمشاركة');
+        showToast('تم نسخ رابط وتفاصيل الإعلان بنجاح!');
       } catch {
         showToast('تعذر نسخ النص تلقائياً');
       }
-    } else {
-      showToast('تم نسخ الإعلان بنجاح! جاهز للمشاركة');
     }
   };
 
@@ -310,7 +336,13 @@ export default function ListingDetailPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
           <button 
-            onClick={() => navigate('/')} 
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1);
+              } else {
+                navigate('/');
+              }
+            }} 
             style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: 'var(--primary)', fontWeight: 600, fontSize: '0.875rem', padding: 0 }}
           >
             <ArrowRight style={{ width: 18, height: 18 }} /> العودة للرئيسية
@@ -344,7 +376,7 @@ export default function ListingDetailPage() {
           {((user && (user.id === listing.advertiser_id || user.account_type === 'admin')) || listing.full_edit_available || listing.edit_token) && (
             <button 
               onClick={() => {
-                navigate('/?edit=' + listing.id);
+                window.location.href = `/#/?edit=${listing.id}`;
               }}
               className="btn-primary"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem', fontSize: '0.85rem' }}
@@ -514,11 +546,22 @@ export default function ListingDetailPage() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                    {c.commission != null && (
+                    {(c.commission_type === 'range' || (c.commission_min && c.commission_max)) ? (
+                      <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 700 }}>
+                        عمولة: {c.commission_min} - {c.commission_max} ج.م (تفاوضي)
+                      </span>
+                    ) : c.commission != null ? (
                       <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
                         عمولة: {c.commission} ج.م
                       </span>
+                    ) : null}
+
+                    {c.has_ac && (
+                      <span style={{ background: '#e0f2fe', color: '#0284c7', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <Wind style={{ width: 13, height: 13 }} /> ❄️ مكيفة
+                      </span>
                     )}
+
                     {c.insurance_price ? (
                       <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
                         <Shield style={{ width: 13, height: 13 }} /> تأمين: {c.insurance_price} ج.م
@@ -622,7 +665,7 @@ export default function ListingDetailPage() {
                 <h4 style={{ fontWeight: 700, fontSize: '1.05rem', margin: '0 0 0.25rem' }}>{advertiser.name}</h4>
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.75rem', background: '#f1f5f9', color: '#334155', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
-                    {advertiser.account_type === 'broker' ? 'سمسار عقاري' : 'مالك مباشر'}
+                    {advertiser.account_type === 'broker' ? 'وسيط عقاري' : 'مالك مباشر'}
                   </span>
                   {advertiser.verified_by_sakan && (
                     <span style={{ fontSize: '0.75rem', background: '#dbeafe', color: '#1e40af', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
@@ -654,7 +697,7 @@ export default function ListingDetailPage() {
             {/* CTAs */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <a 
-                href={`https://wa.me/${listing.contact_phone || advertiser.phone}?text=${encodeURIComponent(`مرحباً أستاذ ${advertiser.name}، أنا مهتم بوحدتك السكنية المعروضة على سكن: ${listing.title}`)}`}
+                href={`https://wa.me/2${(listing.contact_phone || advertiser.phone || '').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`سلام عليكم أستاذ ${advertiser.name || ''}، شفت إعلان السكن "${listing.title}" في ${listing.governorate}، ${listing.city} على منصة سكن ومحتاج أستفسر عن التفاصيل.`)}`}
                 target="_blank" 
                 rel="noreferrer"
                 style={{ background: '#22c55e', color: '#fff', textDecoration: 'none', padding: '0.75rem', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.95rem' }}
@@ -717,9 +760,13 @@ export default function ListingDetailPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
           {(() => {
             const cleanAmenities = (listing.amenities || []).map(extractAmenityName).filter(Boolean);
-            const indoorList = cleanAmenities.filter(a => INDOOR_AMENITIES.includes(a));
+            const hasAcRoom = listing.room_configurations?.some(c => c.has_ac);
+            if (hasAcRoom && !cleanAmenities.some(a => a.includes('تكييف') || a.includes('مكيفة'))) {
+              cleanAmenities.push('❄️ مكيفة');
+            }
+            const indoorList = cleanAmenities.filter(a => INDOOR_AMENITIES.includes(a) || a.includes('مكيفة'));
             const outdoorList = cleanAmenities.filter(a => OUTDOOR_AMENITIES.includes(a));
-            const otherList = cleanAmenities.filter(a => !INDOOR_AMENITIES.includes(a) && !OUTDOOR_AMENITIES.includes(a));
+            const otherList = cleanAmenities.filter(a => !INDOOR_AMENITIES.includes(a) && !OUTDOOR_AMENITIES.includes(a) && !a.includes('مكيفة'));
 
             return (
               <>

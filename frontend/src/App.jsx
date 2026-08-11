@@ -6,12 +6,12 @@ import { useApp } from './context/AppContext';
 import { formatShareText } from './pages/ListingDetailPage';
 
 import { 
-  Bell, BookOpen, Plus, Search, MapPin, CheckCircle, ShieldCheck, 
+  Bell, BookOpen, Plus, Search, MapPin, CheckCircle, CheckCircle2, ShieldCheck, 
   AlertTriangle, Ban, Trash2, StopCircle, Star, Info, Megaphone, 
   User, Home, Briefcase, MessageSquare, Phone, Camera, Send, 
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
   Bed, Check, Clock, Award, Sparkles, Upload, Menu, X, Smartphone,
-  Navigation, Wind
+  Navigation, Wind, Video, ArrowDown, Compass, Building2, Mail
 } from 'lucide-react';
 
 
@@ -24,7 +24,7 @@ L.Icon.Default.mergeOptions({
 });
 
 // ---------------------------------------------------------------------------
-// formatAddress — builds a display string from structured address fields
+// formatAddress - builds a display string from structured address fields
 // Falls back to raw address string for old listings
 // ---------------------------------------------------------------------------
 function formatAddress(listing) {
@@ -32,7 +32,7 @@ function formatAddress(listing) {
 }
 
 // ---------------------------------------------------------------------------
-// MapPickerModal — full-screen modal with Leaflet, draggable marker.
+// MapPickerModal - full-screen modal with Leaflet, draggable marker.
 // ---------------------------------------------------------------------------
 function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLng, onConfirm, onClose }) {
   const currentCity = city || cityFallback || governorate || '';
@@ -337,6 +337,78 @@ const OUTDOOR_AMENITIES = [
   { name: "مكتبة", category: "الخدمات اليومية", prechecked: false }
 ];
 
+export function formatUnifiedShareText(listing) {
+  if (!listing) return '';
+  const genderStr = listing.gender === 'male' ? 'سكن طلاب (شباب)' : 'سكن طالبات (بنات)';
+  
+  const configs = Array.isArray(listing.room_configurations) 
+    ? listing.room_configurations 
+    : typeof listing.room_configurations === 'string'
+      ? JSON.parse(listing.room_configurations || '[]')
+      : [];
+
+  let totalBeds = 0;
+  let servicesInclusive = false;
+  let hasInsurance = false;
+  let insuranceAmount = null;
+  let unitTotalPrice = 0;
+  const roomTypesList = [];
+
+  if (Array.isArray(configs) && configs.length > 0) {
+    configs.forEach(c => {
+      const roomType = c.room_type || 'single';
+      const label = roomType === 'single' ? 'فردية' : roomType === 'double' ? 'ثنائية' : roomType === 'triple' ? 'ثلاثية' : 'رباعية';
+      const multiplier = roomType === 'double' ? 2 : roomType === 'triple' ? 3 : roomType === 'quadruple' ? 4 : 1;
+      const count = c.count || 1;
+      const price = c.price_per_person || 0;
+      
+      totalBeds += multiplier * count;
+      unitTotalPrice += (price * count * multiplier);
+      roomTypesList.push(`${count} غرفة ${label}`);
+
+      if (c.services_inclusive) servicesInclusive = true;
+      if (c.insurance_price) {
+        hasInsurance = true;
+        insuranceAmount = c.insurance_price;
+      }
+    });
+  }
+
+  if (totalBeds === 0) {
+    totalBeds = listing.available_beds || 1;
+  }
+  if (!unitTotalPrice && listing.price_per_person) {
+    unitTotalPrice = listing.price_per_person;
+  }
+
+  const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
+  const locationStr = locationParts.join('، ');
+
+  const availStr = `${listing.available_beds || 1} سرير متاح من أصل ${totalBeds}`;
+  let depositStr = 'بدون تأمين';
+  if (hasInsurance && insuranceAmount) {
+    depositStr = `تأمين: ${insuranceAmount} ج.م`;
+  } else if (hasInsurance) {
+    depositStr = 'يتطلب دفع تأمين';
+  }
+
+  const servicesStr = servicesInclusive ? 'الخدمات مشمولة' : 'الخدمات غير مشمولة';
+
+  const lines = [
+    genderStr,
+    locationStr,
+    roomTypesList.length > 0 ? `تكوين الغرف: ${roomTypesList.join('، ')}` : null,
+    availStr,
+    depositStr,
+    servicesStr,
+    unitTotalPrice ? `السعر الكلي: ${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : null,
+    'التفاصيل والصور على سكن:',
+    `https://sakan-egy.com/listings/${listing.id}`
+  ].filter(Boolean);
+
+  return lines.join('\n');
+}
+
 export default function App() {
   const { user, setUser, showToast } = useApp();
   const navigate = useNavigate();
@@ -346,6 +418,42 @@ export default function App() {
   const [profileUserId, setProfileUserId] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [listings, setListings] = useState([]);
+
+  const handleCardClick = (listingId) => {
+    try {
+      sessionStorage.setItem('last_opened_listing_id', String(listingId));
+      sessionStorage.setItem('last_feed_scroll_y', String(window.scrollY));
+    } catch {}
+    navigate(`/listings/${listingId}`);
+  };
+
+  // Restore scroll position to the exact opened listing card after listings load
+  useEffect(() => {
+    if (listings.length > 0) {
+      const lastId = sessionStorage.getItem('last_opened_listing_id');
+      const lastScrollY = sessionStorage.getItem('last_feed_scroll_y');
+      
+      if (lastId || lastScrollY) {
+        const timer = setTimeout(() => {
+          if (lastId) {
+            const cardEl = document.getElementById(`listing-card-${lastId}`);
+            if (cardEl) {
+              cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              sessionStorage.removeItem('last_opened_listing_id');
+              sessionStorage.removeItem('last_feed_scroll_y');
+              return;
+            }
+          }
+          if (lastScrollY) {
+            window.scrollTo({ top: parseInt(lastScrollY, 10), behavior: 'smooth' });
+            sessionStorage.removeItem('last_opened_listing_id');
+            sessionStorage.removeItem('last_feed_scroll_y');
+          }
+        }, 120);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [listings]);
   
   // Bulk Add state
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -400,16 +508,21 @@ export default function App() {
   
   // Auth state
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState('register'); // 'register' | 'login'
-  const [authStep, setAuthStep] = useState('phone'); // 'phone' | 'otp' | 'details'
+  const [authMode, setAuthMode] = useState('login'); // 'register' | 'login'
+  const [authLoginMethod, setAuthLoginMethod] = useState('password'); // 'password' | 'otp'
+  const [authStep, setAuthStep] = useState('phone'); // 'phone' | 'otp' | 'details' | 'change_password'
   const [authForm, setAuthForm] = useState({
     phone: '',
     otp: '',
     name: '',
     account_type: 'student', // 'student' | 'broker' | 'admin'
     governorates: [],
-    profile_photo_url: ''
+    profile_photo_url: '',
+    password: '',
+    new_password: '',
+    confirm_password: ''
   });
+  const [mustChangeUser, setMustChangeUser] = useState(null);
   const [pendingAction, setPendingAction] = useState(null); // callback after auth success
   
   // Filters state
@@ -429,6 +542,10 @@ export default function App() {
     min_total_beds: '',
     max_total_beds: ''
   });
+
+  const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'oldest' | 'price_asc' | 'price_desc'
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
 
   // Create listing wizard state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -562,6 +679,19 @@ export default function App() {
 
   const handleOpenEditFlow = (item) => {
     setEditingListing(item);
+    const parseArr = (v) => {
+      if (Array.isArray(v)) return v;
+      if (typeof v === 'string' && v.trim().startsWith('[')) {
+        try { return JSON.parse(v); } catch {}
+      }
+      return [];
+    };
+
+    const roomConfigs = parseArr(item.room_configurations);
+    const amenitiesList = parseArr(item.amenities);
+    const photoUrlsList = parseArr(item.photo_urls);
+    const videoUrlsList = parseArr(item.video_urls);
+
     setCreateForm({
       title: item.title || '',
       governorate: item.governorate || '',
@@ -575,10 +705,10 @@ export default function App() {
       longitude: item.longitude || null,
       gender: item.gender || 'female',
       available_beds: item.available_beds || 1,
-      room_configurations: item.room_configurations && item.room_configurations.length > 0 ? item.room_configurations : [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
-      amenities: item.amenities || [],
-      photo_urls: item.photo_urls || [],
-      video_urls: item.video_urls || [],
+      room_configurations: roomConfigs.length > 0 ? roomConfigs : [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
+      amenities: amenitiesList,
+      photo_urls: photoUrlsList,
+      video_urls: videoUrlsList,
       description: item.description || '',
       tier: item.tier || 'regular',
       min_lease_months: item.min_lease_months || null,
@@ -659,22 +789,55 @@ export default function App() {
     }
   };
 
+  const sortedListings = [...listings].sort((a, b) => {
+    if (sortBy === 'newest') return (b.id || 0) - (a.id || 0);
+    if (sortBy === 'oldest') return (a.id || 0) - (b.id || 0);
+    if (sortBy === 'price_asc') return (a.price_per_person || 0) - (b.price_per_person || 0);
+    if (sortBy === 'price_desc') return (b.price_per_person || 0) - (a.price_per_person || 0);
+    return 0;
+  });
+
   useEffect(() => {
     loadListings();
     loadGovernorates();
   }, [filters]);
 
   useEffect(() => {
-    if (user) loadBookmarks();
-    else setBookmarkedIds([]);
+    if (user) {
+      loadBookmarks();
+      if (user.account_type === 'admin') {
+        loadAdminData();
+      }
+    } else {
+      setBookmarkedIds([]);
+    }
   }, [user]);
 
-  // Auth Query Parameter Handler
+  useEffect(() => {
+    if (tab === 'admin' && user && user.account_type === 'admin') {
+      loadAdminData();
+    }
+  }, [tab, user]);
+
+  // Query Parameter Handler (Auth & Edit)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const authParam = params.get('auth');
     if (authParam === 'login' || authParam === 'register') {
       handleStartAuth(authParam);
+      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    }
+    const editId = params.get('edit');
+    if (editId) {
+      fetch(`${API_BASE}/listings/${editId}`)
+        .then(r => r.json())
+        .then(data => {
+          const item = data.listing || data;
+          if (item && item.id) {
+            handleOpenEditFlow(item);
+          }
+        })
+        .catch(() => {});
       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
     }
   }, []);
@@ -683,7 +846,21 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
-      if (hash.startsWith('#/profile/')) {
+      if (hash.includes('edit=')) {
+        const match = hash.match(/edit=(\d+)/);
+        if (match && match[1]) {
+          const editId = match[1];
+          fetch(`${API_BASE}/listings/${editId}`)
+            .then(r => r.json())
+            .then(data => {
+              const item = data.listing || data;
+              if (item && item.id) {
+                handleOpenEditFlow(item);
+              }
+            })
+            .catch(() => {});
+        }
+      } else if (hash.startsWith('#/profile/')) {
         const uid = hash.replace('#/profile/', '');
         setProfileUserId(uid);
         setTab('profile');
@@ -730,23 +907,122 @@ export default function App() {
 
   const pendingActionRef = useRef(null); // persistent callback after auth success
 
+  // Check if active user must change password
+  useEffect(() => {
+    if (user && user.must_change_password) {
+      setMustChangeUser(user);
+      setAuthStep('change_password');
+      setIsAuthOpen(true);
+    }
+  }, [user]);
+
   // --- Auth logic ---
-  const handleStartAuth = (mode, overrideType = null, callback = null) => {
+  const handleStartAuth = (mode, overrideType = null, callback = null, initialPhone = '') => {
     setAuthMode(mode);
+    setAuthLoginMethod('password');
     const defaultGovs = (createForm.governorate && GOVERNORATES.includes(createForm.governorate)) 
       ? [createForm.governorate] 
       : [];
     setAuthForm({
-      phone: '',
+      phone: initialPhone || '',
       otp: '',
       name: '',
       account_type: overrideType || 'broker',
       governorates: defaultGovs,
-      profile_photo_url: ''
+      profile_photo_url: '',
+      password: '',
+      new_password: '',
+      confirm_password: ''
     });
     setAuthStep('phone');
     pendingActionRef.current = callback;
     setIsAuthOpen(true);
+  };
+
+  const handlePasswordLoginSubmit = async (e) => {
+    e.preventDefault();
+    const cleanPhone = (authForm.phone || '').trim();
+    const cleanPwd = (authForm.password || '').trim();
+    if (cleanPhone.length < 8) {
+      showToast("يرجى إدخال رقم هاتف صحيح لا يقل عن 8 أرقام");
+      return;
+    }
+    if (!cleanPwd) {
+      showToast("يرجى إدخال كلمة المرور");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/auth/login-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone, password: cleanPwd })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (data.must_change_password) {
+          setMustChangeUser(data);
+          setAuthStep('change_password');
+          showToast("مرحباً بك! يرجى تعيين كلمة مرور جديدة لحسابك لمتابعة استخدام المنصة");
+        } else {
+          setUser(data);
+          setIsAuthOpen(false);
+          showToast(`تم تسجيل الدخول بنجاح! مرحباً بك، ${data.name || ''}`);
+          if (pendingActionRef.current) {
+            const cb = pendingActionRef.current;
+            pendingActionRef.current = null;
+            cb(data);
+          }
+        }
+      } else {
+        showToast(data.detail || "خطأ أثناء تسجيل الدخول بكلمة المرور");
+      }
+    } catch (err) {
+      showToast("فشل الاتصال بالخادم");
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e) => {
+    e.preventDefault();
+    const targetUserId = mustChangeUser ? mustChangeUser.id : (user ? user.id : null);
+    if (!targetUserId) {
+      showToast("خطأ في تحديد الحساب المراد تغيير كلمة مروره");
+      return;
+    }
+    const newPwd = (authForm.new_password || '').trim();
+    const confirmPwd = (authForm.confirm_password || '').trim();
+
+    if (newPwd.length < 6) {
+      showToast("كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف");
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      showToast("كلمة المرور الجديدة وتأكيدها غير متطابقين");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: targetUserId, new_password: newPwd })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUser(data);
+        setMustChangeUser(null);
+        setIsAuthOpen(false);
+        showToast("تم تعيين كلمة المرور الجديدة بنجاح!");
+        if (pendingActionRef.current) {
+          const cb = pendingActionRef.current;
+          pendingActionRef.current = null;
+          cb(data);
+        }
+      } else {
+        showToast(data.detail || "فشل حفظ كلمة المرور الجديدة");
+      }
+    } catch (err) {
+      showToast("فشل الاتصال بالخادم");
+    }
   };
 
   const handlePhoneSubmit = async (e) => {
@@ -789,13 +1065,15 @@ export default function App() {
 
   const handleOtpVerify = async (e) => {
     e.preventDefault();
+    const cleanPhone = (authForm.phone || '').trim();
+    const cleanOtp = (authForm.otp || '').trim();
     try {
       const res = await fetch(`${API_BASE}/auth/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: authForm.phone,
-          otp_code: authForm.otp
+          phone: cleanPhone,
+          otp_code: cleanOtp
         })
       });
       const data = await res.json();
@@ -939,6 +1217,25 @@ export default function App() {
         if (saved) activeUser = JSON.parse(saved);
       } catch {}
     }
+
+    const isEditing = Boolean(editingListing && editingListing.id);
+    if (isEditing) {
+      const targetPhone = editingListing.contact_phone || editingListing.whatsapp_phone || '';
+      const isOwnerOrAdmin = activeUser && (activeUser.id === editingListing.advertiser_id || activeUser.account_type === 'admin');
+
+      if (!activeUser || activeUser.must_change_password || !isOwnerOrAdmin) {
+        setIsCreateOpen(false);
+        showToast("لحفظ تعديلات هذا الإعلان، يرجى تسجيل الدخول بكلمة المرور المخصصة لمالك الإعلان أولاً");
+        handleStartAuth('login', 'broker', (authUser) => {
+          if (authUser) {
+            setIsCreateOpen(true);
+            submitListingWithUser(authUser);
+          }
+        }, targetPhone);
+        return;
+      }
+    }
+
     if (!activeUser) {
       setIsCreateOpen(false);
       showToast("لتأكيد ونشر إعلانك، يرجى إنشاء حسابك أو تسجيل الدخول أولاً");
@@ -1009,10 +1306,14 @@ export default function App() {
         showToast(isEditing ? "تم حفظ التعديلات بنجاح!" : "تم نشر العقار بنجاح وتفعيله على المنصة!");
         setIsCreateOpen(false);
         setEditingListing(null);
-        setTab('browse');
+        if (isEditing && publishedData?.id) {
+          openListingDetail(publishedData.id);
+        } else {
+          setTab('browse');
+        }
         loadListings();
 
-        if (publishedData) {
+        if (!isEditing && publishedData) {
           setPostPublishListing(publishedData);
           setIsPostPublishModalOpen(true);
         }
@@ -1028,7 +1329,24 @@ export default function App() {
   const addRoomConfig = () => {
     setCreateForm(prev => ({
       ...prev,
-      room_configurations: [...prev.room_configurations, { room_type: 'double', price_per_person: 800, commission: 400, count: 1, insurance_price: '', services_inclusive: false }]
+      room_configurations: [
+        ...prev.room_configurations,
+        {
+          room_type: 'double',
+          price_per_person: 800,
+          commission_pct: 50,
+          commission: 400,
+          commission_type: 'fixed',
+          commission_min_pct: 30,
+          commission_max_pct: 100,
+          commission_min: 240,
+          commission_max: 800,
+          count: 1,
+          insurance_price: '',
+          services_inclusive: false,
+          has_ac: false
+        }
+      ]
     }));
   };
 
@@ -1042,11 +1360,43 @@ export default function App() {
   const updateRoomConfig = (index, field, val) => {
     setCreateForm(prev => {
       const updated = [...prev.room_configurations];
-      updated[index] = { ...updated[index], [field]: val };
-      // Auto-fill commission as 50% of price when price changes
+      const item = { ...updated[index], [field]: val };
+      
+      const price = Number(item.price_per_person) || 0;
+      
       if (field === 'price_per_person') {
-        updated[index].commission = Math.round(val * 0.5);
+        const pct = item.commission_pct ?? 50;
+        item.commission = Math.round(price * (pct / 100));
+        
+        const minPct = item.commission_min_pct ?? 30;
+        const maxPct = item.commission_max_pct ?? 100;
+        item.commission_min = Math.round(price * (minPct / 100));
+        item.commission_max = Math.round(price * (maxPct / 100));
+      } else if (field === 'commission_pct') {
+        const pct = Math.max(0, Math.min(200, Number(val) || 0));
+        item.commission_pct = pct;
+        item.commission = Math.round(price * (pct / 100));
+      } else if (field === 'commission_min_pct') {
+        const minPct = Math.max(0, Math.min(200, Number(val) || 0));
+        item.commission_min_pct = minPct;
+        item.commission_min = Math.round(price * (minPct / 100));
+      } else if (field === 'commission_max_pct') {
+        const maxPct = Math.max(0, Math.min(200, Number(val) || 0));
+        item.commission_max_pct = maxPct;
+        item.commission_max = Math.round(price * (maxPct / 100));
+      } else if (field === 'commission_type') {
+        if (val === 'range') {
+          item.commission_min_pct = item.commission_min_pct ?? 30;
+          item.commission_max_pct = item.commission_max_pct ?? 100;
+          item.commission_min = Math.round(price * (item.commission_min_pct / 100));
+          item.commission_max = Math.round(price * (item.commission_max_pct / 100));
+        } else {
+          item.commission_pct = item.commission_pct ?? 50;
+          item.commission = Math.round(price * (item.commission_pct / 100));
+        }
       }
+
+      updated[index] = item;
       return { ...prev, room_configurations: updated };
     });
   };
@@ -1232,16 +1582,32 @@ export default function App() {
 
   // --- Admin Moderation panels fetches ---
   const loadAdminData = async () => {
-    if (!user || user.account_type !== 'admin') return;
+    let activeUser = user;
+    if (!activeUser) {
+      try {
+        const saved = localStorage.getItem('sakan_user');
+        if (saved) activeUser = JSON.parse(saved);
+      } catch {}
+    }
+    if (!activeUser || activeUser.account_type !== 'admin') return;
+
+    const authHeaders = {
+      'x-user-id': String(activeUser.id),
+      'x_user_id': String(activeUser.id)
+    };
+
     try {
-      const resC = await fetch(`${API_BASE}/admin/complaints?x_user_id=${user.id}`);
+      const resC = await fetch(`${API_BASE}/admin/complaints?x_user_id=${activeUser.id}`, { headers: authHeaders });
       if (resC.ok) setAdminComplaints(await resC.json());
 
-      const resU = await fetch(`${API_BASE}/admin/users?x_user_id=${user.id}`);
+      const resU = await fetch(`${API_BASE}/admin/users?x_user_id=${activeUser.id}`, { headers: authHeaders });
       if (resU.ok) setAdminUsers(await resU.json());
 
-      const resL = await fetch(`${API_BASE}/admin/listings?x_user_id=${user.id}`);
-      if (resL.ok) setAdminListings(await resL.json());
+      const resL = await fetch(`${API_BASE}/admin/listings?x_user_id=${activeUser.id}`, { headers: authHeaders });
+      if (resL.ok) {
+        const dataL = await resL.json();
+        setAdminListings(Array.isArray(dataL) ? dataL : []);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -1355,13 +1721,43 @@ export default function App() {
           <a href="#/browse" className="logo" onClick={(e) => { e.preventDefault(); navigateTo('#/browse'); setMobileMenuOpen(false); }}>
             سكن <span>Sakan</span>
           </a>
-          <button 
-            className="mobile-menu-toggle"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="القائمة"
+
+          {/* Top Navbar Contact & Feedback Trigger (Positioned on Right Side next to Brand Logo) */}
+          <button
+            type="button"
+            className="btn-outline nav-contact-btn"
+            onClick={() => { setIsContactModalOpen(true); setMobileMenuOpen(false); }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+              padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.8rem',
+              fontWeight: 700, color: 'var(--primary)', borderColor: '#bfdbfe', background: '#eff6ff',
+              cursor: 'pointer', transition: 'all 0.15s'
+            }}
           >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            <MessageSquare style={{ width: 14, height: 14 }} />
+            <span>تواصل معنا</span>
           </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {/* Directly Visible Mobile Header "أضف إعلانك" CTA Button */}
+            {(!user || isBroker || isAdmin) && (
+              <button 
+                className="btn-primary mobile-nav-cta" 
+                onClick={() => { handleOpenCreateFlow(); setMobileMenuOpen(false); }}
+                style={{ fontWeight: 800, padding: '0.4rem 0.85rem', fontSize: '0.82rem', borderRadius: '999px', alignItems: 'center', gap: '0.3rem' }}
+              >
+                أضف إعلانك <Plus style={{ width: 16, height: 16 }} />
+              </button>
+            )}
+
+            <button 
+              className="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="القائمة"
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
         </div>
 
         <div className={`nav-links ${mobileMenuOpen ? 'mobile-open' : ''}`}>
@@ -1406,7 +1802,7 @@ export default function App() {
           {/* Create listing button accessible for Brokers, Admins, or guests */}
           {(!user || isBroker || isAdmin) && (
             <button 
-              className="btn-primary nav-action-btn" 
+              className="btn-primary nav-action-btn nav-action-btn-desktop" 
               onClick={() => { handleOpenCreateFlow(); setMobileMenuOpen(false); }}
               style={{ fontWeight: 700 }}
             >
@@ -1414,8 +1810,8 @@ export default function App() {
             </button>
           )}
 
-          {/* Bulk import button accessible ONLY for Brokers, Owners, and Admins */}
-          {(isBroker || isAdmin) && (
+          {/* Bulk import button accessible ONLY for Admins */}
+          {isAdmin && (
             <button 
               className="btn-outline nav-action-btn" 
               onClick={() => { setIsBulkModalOpen(true); setBulkImportResult(null); setMobileMenuOpen(false); }}
@@ -1451,7 +1847,7 @@ export default function App() {
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{user.name}</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>
-                  {isAdmin ? 'مشرف المنصة' : isBroker ? 'سمسار عقاري' : 'مستخدم عادي'}
+                  {isAdmin ? 'مشرف المنصة' : isBroker ? 'وسيط عقاري' : 'مستخدم عادي'}
                 </div>
               </div>
               <button style={{ background: '#ef4444', color: 'white', border: 'none', padding: '0.4rem 1rem', borderRadius: 'var(--r-md)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }} onClick={() => { setUser(null); showToast("تم تسجيل الخروج"); setTab('browse'); setMobileMenuOpen(false); }}>تسجيل الخروج</button>
@@ -1470,197 +1866,358 @@ export default function App() {
         {/* TAB 1: BROWSE LISTINGS FEED */}
         {isBrowseTab && (
           <div>
+            {/* --- HERO SECTION (REVERTED TO CLASSIC LIGHT GRADIENT) --- */}
             <div className="hero-section">
               <h1 className="hero-title">ابحث عن <span>سكنك الطلابي</span> المثالي</h1>
-              <p className="hero-subtitle">أول منصة متكاملة في مصر لربط الطلاب المغتربين بأفضل الوحدات السكنية المتاحة في جميع المحافظات الجامعية.</p>
+              <p className="hero-subtitle" style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                سكنك الطلابي، من غير معاناة البحث العشوائي.
+              </p>
+              <button 
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  document.getElementById('main-listings-section')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                style={{
+                  marginTop: '1rem', padding: '0.75rem 1.75rem', borderRadius: '12px',
+                  fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: '0.5rem'
+                }}
+              >
+                <span>تصفح العقارات الآن</span>
+                <ArrowDown style={{ width: 18, height: 18 }} />
+              </button>
             </div>
 
-            <div className="main-layout">
+            <div className="main-layout" id="main-listings-section">
               {/* Sidebar Filters */}
-              <aside className="filter-sidebar">
-                <h3>
+              <aside className="filter-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                <h3 style={{ margin: 0, paddingBottom: '0.25rem' }}>
                   <span>تصفية النتائج</span>
-                  <button className="btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setFilters({
+                  <button className="btn-secondary" style={{ padding: '0.15rem 0.45rem', fontSize: '0.72rem' }} onClick={() => setFilters({
                     governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', max_commission: '', services_inclusive: false, has_insurance: false, fully_vacant: false, min_total_beds: '', max_total_beds: ''
                   })}>مسح الكل</button>
                 </h3>
                 
-                <div className="form-group">
-                  <label>المحافظة</label>
-                  <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })}>
-                    <option value="">جميع المحافظات</option>
-                    <optgroup label="المحافظات المتاحة حالياً">
-                      {dbGovernorates.filter(g => g.status === 'live').map(g => (
-                        <option key={g.id} value={g.name}>🟢 {g.name}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="المحافظات المتاحة في قائمة الانتظار">
-                      {dbGovernorates.filter(g => g.status !== 'live').map(g => (
-                        <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
-                          ⚪ {g.name} (قريباً - قائمة الانتظار)
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </div>
+                {/* 1. Governorates + City/Neighborhood (2-column paired row) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المحافظة</label>
+                    <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })} style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}>
+                      <option value="">جميع المحافظات</option>
+                      <optgroup label="المتاحة حالياً">
+                        {dbGovernorates.filter(g => g.status === 'live').map(g => (
+                          <option key={g.id} value={g.name}>{g.name}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="قائمة الانتظار">
+                        {dbGovernorates.filter(g => g.status !== 'live').map(g => (
+                          <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
+                            {g.name} (قريباً)
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
 
-                <div className="form-group">
-                  <label>المدينة / الحي</label>
-                  <input 
-                    type="text" 
-                    placeholder="مثال: مدينة نصر، الدقي..." 
-                    value={filters.neighborhood} 
-                    onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>النوع (سكن طلاب / طالبات)</label>
-                  <select value={filters.gender} onChange={(e) => setFilters({ ...filters, gender: e.target.value })}>
-                    <option value="">الكل</option>
-                    <option value="male">طلاب (شباب)</option>
-                    <option value="female">طالبات (بنات)</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>نطاق السعر الشهري (جنيه مصري)</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المدينة / الحي</label>
                     <input 
-                      type="number" 
-                      placeholder="الأدنى" 
-                      value={filters.min_price} 
-                      onChange={(e) => setFilters({ ...filters, min_price: e.target.value })} 
-                    />
-                    <input 
-                      type="number" 
-                      placeholder="الأقصى" 
-                      value={filters.max_price} 
-                      onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
+                      type="text" 
+                      placeholder="مدينة نصر، الدقي..." 
+                      value={filters.neighborhood} 
+                      onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value })}
+                      style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
                     />
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label>عدد الأسرة الكلي (بالشقة)</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {/* 2. Gender Horizontal Toggle Chips */}
+                <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>النوع المسموح بالسكن</label>
+                  <div style={{ display: 'flex', gap: '0.3rem' }}>
+                    {[
+                      { id: '', label: 'الكل' },
+                      { id: 'male', label: 'طلاب' },
+                      { id: 'female', label: 'طالبات' }
+                    ].map(chip => (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => setFilters({ ...filters, gender: chip.id })}
+                        style={{
+                          flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
+                          border: filters.gender === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                          background: filters.gender === chip.id ? 'var(--primary-light)' : '#ffffff',
+                          color: filters.gender === chip.id ? 'var(--primary-dark)' : '#475569',
+                          cursor: 'pointer', transition: 'all 0.15s'
+                        }}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Advertiser Type Horizontal Toggle Chips */}
+                <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>صفة المعلن</label>
+                  <div style={{ display: 'flex', gap: '0.3rem' }}>
+                    {[
+                      { id: '', label: 'الكل' },
+                      { id: 'owner', label: 'مالك مباشر' },
+                      { id: 'broker', label: 'وسيط' }
+                    ].map(chip => (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => setFilters({ ...filters, advertiser_type: chip.id })}
+                        style={{
+                          flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
+                          border: filters.advertiser_type === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                          background: filters.advertiser_type === chip.id ? 'var(--primary-light)' : '#ffffff',
+                          color: filters.advertiser_type === chip.id ? 'var(--primary-dark)' : '#475569',
+                          cursor: 'pointer', transition: 'all 0.15s'
+                        }}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 4. Monthly Price Range (2 columns with +/- steppers: +100 EGP / -50 EGP) */}
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>نطاق السعر الشهري (ج.م)</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+                    
+                    {/* Min Price Stepper (-50 / +100) */}
+                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(filters.min_price) || 0;
+                          const next = Math.max(0, cur - 50);
+                          setFilters({ ...filters, min_price: next === 0 ? '' : String(next) });
+                        }}
+                        style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                        title="-50 ج.م"
+                      >
+                        -
+                      </button>
+                      <input 
+                        type="number" 
+                        placeholder="الأدنى" 
+                        value={filters.min_price} 
+                        onChange={(e) => setFilters({ ...filters, min_price: e.target.value })} 
+                        style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(filters.min_price) || 0;
+                          const next = cur + 100;
+                          setFilters({ ...filters, min_price: String(next) });
+                        }}
+                        style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                        title="+100 ج.م"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Max Price Stepper (-50 / +100) */}
+                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(filters.max_price) || 0;
+                          const next = Math.max(0, cur - 50);
+                          setFilters({ ...filters, max_price: next === 0 ? '' : String(next) });
+                        }}
+                        style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                        title="-50 ج.م"
+                      >
+                        -
+                      </button>
+                      <input 
+                        type="number" 
+                        placeholder="الأقصى" 
+                        value={filters.max_price} 
+                        onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
+                        style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(filters.max_price) || 0;
+                          const next = cur + 100;
+                          setFilters({ ...filters, max_price: String(next) });
+                        }}
+                        style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                        title="+100 ج.م"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* 5. Total Bed Capacity Range (2 columns) */}
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>عدد الأسرة الكلي بالشقة</label>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
                     <input 
                       type="number" 
-                      placeholder="الأدنى (مثال: 1)" 
+                      placeholder="الأدنى (1)" 
                       min="1"
                       value={filters.min_total_beds} 
                       onChange={(e) => setFilters({ ...filters, min_total_beds: e.target.value })} 
+                      style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
                     />
                     <input 
                       type="number" 
-                      placeholder="الأقصى (مثال: 10)" 
+                      placeholder="الأقصى (10)" 
                       min="1"
                       value={filters.max_total_beds} 
                       onChange={(e) => setFilters({ ...filters, max_total_beds: e.target.value })} 
+                      style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
                     />
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label>نوع الغرفة</label>
-                  {['single', 'double', 'triple', 'quadruple'].map(type => {
-                    const labelText = type === 'single' ? 'فردية (Single)' : type === 'double' ? 'ثنائية (Double)' : type === 'triple' ? 'ثلاثية (Triple)' : 'رباعية (Quadruple)';
-                    const isChecked = filters.room_types.includes(type);
-                    return (
-                      <label key={type} className="checkbox-label" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={isChecked}
-                          onChange={() => {
-                            const updated = isChecked 
-                              ? filters.room_types.filter(t => t !== type)
-                              : [...filters.room_types, type];
+                {/* 6. Room Type Horizontal Chips (Converting checkboxes to 4 chips in one row) */}
+                <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>نوع الغرفة</label>
+                  <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                    {[
+                      { id: 'single', label: 'فردية' },
+                      { id: 'double', label: 'ثنائية' },
+                      { id: 'triple', label: 'ثلاثية' },
+                      { id: 'quadruple', label: 'رباعية' }
+                    ].map(chip => {
+                      const isSelected = filters.room_types.includes(chip.id);
+                      return (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          onClick={() => {
+                            const updated = isSelected 
+                              ? filters.room_types.filter(t => t !== chip.id)
+                              : [...filters.room_types, chip.id];
                             setFilters({ ...filters, room_types: updated });
                           }}
-                        />
-                        {labelText}
-                      </label>
-                    );
-                  })}
+                          style={{
+                            flex: '1 1 22%', padding: '0.35rem 0.3rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                            border: isSelected ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                            background: isSelected ? 'var(--primary-light)' : '#ffffff',
+                            color: isSelected ? 'var(--primary-dark)' : '#475569',
+                            cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center'
+                          }}
+                        >
+                          {chip.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label>الحد الأقصى للعمولة (جنيه)</label>
-                  <input 
-                    type="number" 
-                    placeholder="مثال: 1000" 
-                    value={filters.max_commission} 
-                    onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={filters.services_inclusive}
-                      onChange={(e) => setFilters({ ...filters, services_inclusive: e.target.checked })}
-                    />
-                    شامل الخدمات (الكهرباء، المياه، إلخ)
-                  </label>
-                  <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', marginTop: '0.5rem' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={filters.has_insurance}
-                      onChange={(e) => setFilters({ ...filters, has_insurance: e.target.checked })}
-                    />
-                    يتطلب دفع تأمين
-                  </label>
-                  <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', color: '#166534', background: '#dcfce7', padding: '0.3rem 0.6rem', borderRadius: 'var(--r-sm)', border: '1px solid #bbf7d0', marginTop: '0.5rem', display: 'inline-flex' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={filters.fully_vacant}
-                      onChange={(e) => setFilters({ ...filters, fully_vacant: e.target.checked })}
-                    />
-                    شاغر بالكامل فقط 🏠
-                  </label>
-                </div>
-
-                <div className="form-group">
-                  <label>المعلن</label>
-                  <select value={filters.advertiser_type} onChange={(e) => setFilters({ ...filters, advertiser_type: e.target.value })}>
-                    <option value="">الكل</option>
-                    <option value="owner">مالك مباشر</option>
-                    <option value="broker">سمسار عقاري</option>
-                  </select>
-                </div>
-
-                <div className="form-group" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label>الخدمات والمرافق المتوفرة</label>
-                    <button 
-                      className="btn-outline" 
-                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
-                      onClick={() => setShowAmenitiesModal(true)}
+                {/* 7. Trailing Lease Conditions (Converting stacked checkboxes to horizontal chips in one row) */}
+                <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>شروط ومزايا الإيجار</label>
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setFilters({ ...filters, services_inclusive: !filters.services_inclusive })}
+                      style={{
+                        flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                        border: filters.services_inclusive ? '2px solid #16a34a' : '1px solid #cbd5e1',
+                        background: filters.services_inclusive ? '#dcfce7' : '#ffffff',
+                        color: filters.services_inclusive ? '#15803d' : '#475569',
+                        cursor: 'pointer', transition: 'all 0.15s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
+                      }}
                     >
-                      اختر المرافق
+                      <Zap style={{ width: 13, height: 13 }} /> شامل الخدمات
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFilters({ ...filters, has_insurance: !filters.has_insurance })}
+                      style={{
+                        flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                        border: filters.has_insurance ? '2px solid #d97706' : '1px solid #cbd5e1',
+                        background: filters.has_insurance ? '#fef3c7' : '#ffffff',
+                        color: filters.has_insurance ? '#b45309' : '#475569',
+                        cursor: 'pointer', transition: 'all 0.15s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
+                      }}
+                    >
+                      <Shield style={{ width: 13, height: 13 }} /> يتطلب تأمين
                     </button>
                   </div>
-                  {filters.amenities.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.5rem' }}>
-                      {filters.amenities.map(a => (
-                        <span key={a} style={{ fontSize: '0.7rem', background: 'var(--primary-light)', color: 'var(--primary-dark)', padding: '0.15rem 0.4rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                          {a}
-                          <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => setFilters(prev => ({ ...prev, amenities: prev.amenities.filter(x => x !== a) }))}>×</span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
+
+                {/* 8. Max Commission + Amenities Modal Button (2-column paired row) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem', borderTop: '1px solid #dbeafe', paddingTop: '0.45rem' }}>
+                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>أقصى عمولة (ج.م)</label>
+                    <input 
+                      type="number" 
+                      placeholder="1000" 
+                      value={filters.max_commission} 
+                      onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
+                      style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المرافق والخدمات</label>
+                    <button 
+                      type="button"
+                      className="btn-outline" 
+                      style={{ padding: '0.4rem 0.4rem', fontSize: '0.76rem', fontWeight: 700, width: '100%', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
+                      onClick={() => setShowAmenitiesModal(true)}
+                    >
+                      {filters.amenities.length > 0 ? `المرافق (${filters.amenities.length})` : 'اختر المرافق'}
+                    </button>
+                  </div>
+                </div>
+
+                {filters.amenities.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.1rem' }}>
+                    {filters.amenities.map(a => (
+                      <span key={a} style={{ fontSize: '0.7rem', background: 'var(--primary-light)', color: 'var(--primary-dark)', padding: '0.12rem 0.4rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.2rem', border: '1px solid #bfdbfe' }}>
+                        {a}
+                        <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => setFilters(prev => ({ ...prev, amenities: prev.amenities.filter(x => x !== a) }))}>×</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </aside>
 
               {/* Listings feed */}
               <section style={{ flexGrow: 1 }}>
-                <div className="section-header">
-                  <span className="section-count">العقارات المتاحة: {listings.length} إعلان</span>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="section-count" style={{ fontWeight: 700, fontSize: '0.95rem' }}>العقارات المتاحة: {sortedListings.length} إعلان</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>ترتيب حسب:</span>
+                    <select 
+                      value={sortBy} 
+                      onChange={(e) => setSortBy(e.target.value)}
+                      style={{ padding: '0.35rem 0.75rem', borderRadius: 'var(--r-md)', border: '1.5px solid #cbd5e1', fontSize: '0.85rem', fontWeight: 700, background: '#ffffff', color: 'var(--text-dark)', cursor: 'pointer' }}
+                    >
+                      <option value="newest">الأحدث نُشراً</option>
+                      <option value="oldest">الأقدم نُشراً</option>
+                      <option value="price_asc">السعر: من الأقل للأعلى</option>
+                      <option value="price_desc">السعر: من الأعلى للأقل</option>
+                    </select>
+                  </div>
                 </div>
 
-                {listings.length === 0 ? (
+                {sortedListings.length === 0 ? (
                   <div className="empty-state">
                     <div className="empty-icon"><Search style={{ width: 48, height: 48, color: 'var(--text-muted)' }} /></div>
                     <h3 className="empty-title">لم نجد أي نتائج تطابق بحثك</h3>
@@ -1668,7 +2225,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="listings-grid">
-                    {listings.map((item) => {
+                    {sortedListings.map((item) => {
                       const coverImage = item.photo_urls && item.photo_urls.length > 0
                         ? formatImageUrl(item.photo_urls[0])
                         : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
@@ -1679,11 +2236,9 @@ export default function App() {
                         item.room_configurations.forEach(c => {
                           let bedsPerRoom = 1;
                           let name = 'فردية';
-                          let icon = <Bed style={{ width: 16, height: 16 }} />;
-                          if (c.room_type === 'double') { bedsPerRoom = 2; name = 'ثنائية'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; }
-                          else if (c.room_type === 'triple') { bedsPerRoom = 3; name = 'ثلاثية'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; }
-                          else if (c.room_type === 'quadruple') { bedsPerRoom = 4; name = 'رباعية'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; }
-                          else if (c.room_type === 'triple+') { bedsPerRoom = 4; name = 'مشتركة ٤+'; icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>; } // legacy
+                          if (c.room_type === 'double') { bedsPerRoom = 2; name = 'ثنائية'; }
+                          else if (c.room_type === 'triple') { bedsPerRoom = 3; name = 'ثلاثية'; }
+                          else if (c.room_type === 'quadruple' || c.room_type === 'triple+') { bedsPerRoom = 4; name = 'رباعية'; }
                           
                           const count = c.count || 1;
                           totalBeds += (bedsPerRoom * count);
@@ -1693,13 +2248,48 @@ export default function App() {
                         totalBeds = item.available_beds;
                       }
 
+                      const configs = item.room_configurations || [];
+                      let minPrice = item.price_per_person;
+                      if (configs.length > 0) {
+                        const prices = configs.map(c => c.price_per_person).filter(p => p > 0);
+                        if (prices.length > 0) minPrice = Math.min(...prices);
+                      }
+
+                      const servicesInclusive = configs.some(c => c.services_inclusive);
+                      const hasAc = configs.some(c => c.has_ac);
+                      const hasInsurance = configs.some(c => c.insurance_price && c.insurance_price > 0);
+
+                      // Calculate total monthly rent price of the entire unit
+                      let totalUnitRent = 0;
+                      if (configs.length > 0) {
+                        configs.forEach(c => {
+                          const roomType = c.room_type || 'single';
+                          const bedsPerRoom = roomType === 'single' ? 1 : roomType === 'double' ? 2 : roomType === 'triple' ? 3 : 4;
+                          const roomCount = c.count || 1;
+                          const pricePerPerson = c.price_per_person || 0;
+                          totalUnitRent += (roomCount * bedsPerRoom * pricePerPerson);
+                        });
+                      } else {
+                        totalUnitRent = (item.price_per_person || 0) * (item.available_beds || 1);
+                      }
+
                       return (
                         <article 
                           key={item.id} 
                           className="listing-card"
-                          onClick={() => navigate(`/listings/${item.id}`)}
+                          style={{
+                            background: '#ffffff',
+                            borderRadius: '16px',
+                            border: '1px solid #e2e8f0',
+                            overflow: 'hidden',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                            transition: 'transform 0.2s, box-shadow 0.2s',
+                            cursor: 'pointer'
+                          }}
+                          id={`listing-card-${item.id}`}
+                          onClick={() => handleCardClick(item.id)}
                         >
-                          <div className="card-img-wrapper">
+                          <div className="card-img-wrapper" style={{ position: 'relative' }}>
                             <img className="card-img" src={coverImage} alt={item.title} />
                             
                             <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 2, display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
@@ -1708,7 +2298,7 @@ export default function App() {
                               </span>
                               
                               {item.tier === 'premium' && (
-                                <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#eff6ff', color: '#0d63ea', border: '1px solid #bfdbfe', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#eff6ff', color: '#0d63ea', border: '1px solid #bfdbfe', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
                                   <Star style={{ width: 12, height: 12, color: '#f59e0b' }} /> مميز
                                 </span>
                               )}
@@ -1731,74 +2321,122 @@ export default function App() {
                             </button>
                           </div>
 
-                          <div className="card-content">
-                            <div className="card-location" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '14px', height: '14px', color: 'var(--primary)' }}><path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 3.69 2.944l.036.024.01.006.004.002ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" /></svg>
-                              {item.governorate}، {item.city}
+                          <div className="card-content" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                            {/* Header: Title + Location & Top-Left Total Capacity Badge */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.65rem' }}>
+                              <div>
+                                <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', margin: '0 0 0.25rem 0', lineHeight: 1.35 }}>
+                                  {item.title}
+                                </h2>
+                                <div style={{ fontSize: '0.82rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 500 }}>
+                                  <MapPin style={{ width: 14, height: 14, color: '#94a3b8' }} />
+                                  {item.governorate}، {item.city}{item.neighborhood ? `، ${item.neighborhood}` : ''}
+                                </div>
+                              </div>
+
+                              {/* Total Capacity Badge (Top-Left of Card Body) */}
+                              <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '0.35rem 0.65rem', textAlign: 'center', flexShrink: 0 }}>
+                                <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 600 }}>السعة الإجمالية</div>
+                                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem', marginTop: '0.1rem' }}>
+                                  <Bed style={{ width: 14, height: 14, color: 'var(--primary)' }} /> {totalBeds} أسرة
+                                </div>
+                              </div>
                             </div>
-                            <h2 className="card-title">{item.title}</h2>
-                            <div className="card-room-types" style={{ fontSize: '0.85rem' }}>{breakdown.join(' + ')}</div>
-                            <div className="card-beds" style={{ fontWeight: 600 }}>إجمالي السعة: {totalBeds} سرير</div>
-                            
-                            <div className="card-price-list">
-                              {item.room_configurations && item.room_configurations.length > 0 ? (
-                                item.room_configurations.map((config, idx) => {
-                                  let icon = <Bed style={{ width: 16, height: 16 }} />;
-                                  if (config.room_type === 'double') icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>;
-                                  else if (config.room_type === 'triple') icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>;
-                                  else if (config.room_type === 'quadruple' || config.room_type === 'triple+') icon = <span style={{ display: 'inline-flex', gap: '0.1rem' }}><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /><Bed style={{ width: 16, height: 16 }} /></span>;
-                                  
+
+                            {/* Focal Point 1: Hero Price Summary (Total Unit Rent as Hero) */}
+                            <div style={{ background: '#f8fafc', padding: '0.75rem 0.85rem', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
+                                <span style={{ fontSize: '1.55rem', fontWeight: 900, color: 'var(--primary-dark)', letterSpacing: '-0.02em' }}>
+                                  {totalUnitRent ? totalUnitRent.toLocaleString() : (minPrice ? minPrice.toLocaleString() : '---')} ج.م
+                                </span>
+                                <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>
+                                  / شهرياً (إيجار الشقة بالكامل)
+                                </span>
+                              </div>
+
+                              {/* Inline Inclusive Services Badge */}
+                              {servicesInclusive && (
+                                <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', padding: '0.2rem 0.55rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <Zap style={{ width: 12, height: 12 }} /> شامل الخدمات
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Grouped Per-Room Configurations (Room Type + AC + Price + Commission) */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.1rem' }}>
+                              {configs && configs.length > 0 ? (
+                                configs.map((config, idx) => {
+                                  let typeLabel = config.room_type === 'single' ? 'غرفة فردية' : config.room_type === 'double' ? 'غرفة ثنائية' : config.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية';
+                                  const isRange = config.commission_type === 'range' || (config.commission_min && config.commission_max);
+
                                   return (
-                                    <div key={idx} className="price-item" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '0.5rem', background: 'var(--bg-muted)', borderRadius: 'var(--r-sm)' }}>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                        <span className="room-lbl" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>{icon} ({config.count || 1})</span>
-                                        <span className="room-val">{config.price_per_person} ج.م/فرد</span>
-                                      </div>
-                                      {config.commission && (
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginTop: '0.25rem' }}>
-                                          عمولة: {config.commission} ج.م
+                                    <div key={idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.55rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                          <Bed style={{ width: 14, height: 14, color: 'var(--primary)' }} />
+                                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
+                                            ({config.count || 1}) {typeLabel}
+                                          </span>
+                                          
+                                          {/* AC Badge tied directly to THIS room */}
+                                          {config.has_ac && (
+                                            <span style={{ fontSize: '0.68rem', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', padding: '0.05rem 0.4rem', borderRadius: '999px', fontWeight: 700 }}>
+                                              ❄️ مكيفة
+                                            </span>
+                                          )}
                                         </div>
-                                      )}
+
+                                        {/* Room Rent Price */}
+                                        <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary-dark)' }}>
+                                          {config.price_per_person ? config.price_per_person.toLocaleString() : '---'} ج.م/فرد
+                                        </span>
+                                      </div>
+
+                                      {/* Room Commission */}
+                                      {isRange ? (
+                                        <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                          <Briefcase style={{ width: 12, height: 12 }} />
+                                          <span>عمولة: {config.commission_min} - {config.commission_max} ج.م (تفاوضي)</span>
+                                        </div>
+                                      ) : config.commission ? (
+                                        <div style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                          <Briefcase style={{ width: 12, height: 12 }} />
+                                          <span>عمولة: {config.commission} ج.م</span>
+                                        </div>
+                                      ) : null}
                                     </div>
                                   );
                                 })
                               ) : (
-                                <div className="price-item">
-                                  <span className="room-lbl">سعر السرير:</span>
-                                  <span className="room-val">{item.price_per_person} ج.م</span>
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.55rem 0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>سعر السرير</span>
+                                  <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary-dark)' }}>{item.price_per_person} ج.م/فرد</span>
                                 </div>
                               )}
                             </div>
-                          </div>
 
-                          <div className="card-footer" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px', color: 'var(--text-light)' }}><path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" /></svg>
-                              <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{item.advertiser_name || 'معلن مسجل'}</span>
-                              <span style={{ fontSize: '0.7rem', background: item.advertiser_type === 'owner' ? '#dcfce7' : '#e0e7ff', color: item.advertiser_type === 'owner' ? '#166534' : '#3730a3', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: 600 }}>
-                                {item.advertiser_type === 'owner' ? 'مالك مباشر' : item.advertiser_type === 'broker' ? 'سمسار' : 'معلن'}
+                            {/* Tertiary Tier: Unit-Level Badges Row */}
+                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center', paddingTop: '0.15rem' }}>
+                              {/* Advertiser Chip */}
+                              <span style={{ fontSize: '0.72rem', background: item.advertiser_type === 'owner' ? '#dcfce7' : '#f1f5f9', color: item.advertiser_type === 'owner' ? '#166534' : '#334155', border: `1px solid ${item.advertiser_type === 'owner' ? '#bbf7d0' : '#cbd5e1'}`, padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <User style={{ width: 12, height: 12 }} />
+                                {item.advertiser_type === 'owner' ? 'مالك مباشر (بدون عمولة)' : 'وسيط'}
                               </span>
+
+                              {/* Verified Chip */}
                               {item.advertiser_verified && (
-                                <span style={{ fontSize: '0.7rem', background: '#dbeafe', color: '#1e40af', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '12px', height: '12px' }}><path fillRule="evenodd" d="M8.603 3.799A4.49 4.49 0 0 1 12 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 0 1 3.498 1.307 4.491 4.491 0 0 1 1.307 3.497A4.49 4.49 0 0 1 21.75 12a4.49 4.49 0 0 1-1.549 3.397 4.491 4.491 0 0 1-1.307 3.497 4.491 4.491 0 0 1-3.497 1.307A4.49 4.49 0 0 1 12 21.75a4.49 4.49 0 0 1-3.397-1.549 4.49 4.49 0 0 1-3.498-1.306 4.491 4.491 0 0 1-1.307-3.498A4.49 4.49 0 0 1 2.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 0 1 1.307-3.497 4.49 4.49 0 0 1 3.497-1.307Zm7.007 6.387a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clipRule="evenodd" /></svg>
-                                  موثق من سكن
+                                <span style={{ fontSize: '0.72rem', background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                  <ShieldCheck style={{ width: 12, height: 12 }} /> موثق من سكن
+                                </span>
+                              )}
+
+                              {/* Insurance Chip */}
+                              {hasInsurance && (
+                                <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                  <Shield style={{ width: 12, height: 12 }} /> يوجد تأمين
                                 </span>
                               )}
                             </div>
-                            {item.advertiser_type === 'owner' && (
-                              <span style={{ fontSize: '0.75rem', background: '#fef3c7', color: '#92400e', padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-sm)', fontWeight: 700, display: 'inline-block', width: 'fit-content' }}>بدون عمولة</span>
-                            )}
-                            {(() => {
-                              const configs = item.room_configurations || [];
-                              const hasInsurance = configs.some(c => c.insurance_price && c.insurance_price > 0);
-                              const servicesInc = configs.some(c => c.services_inclusive);
-                              return (hasInsurance || servicesInc) ? (
-                                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                                  {servicesInc && <span style={{ fontSize: '0.7rem', color: '#059669', fontWeight: 500 }}>شامل الخدمات</span>}
-                                  {hasInsurance && <span style={{ fontSize: '0.7rem', color: '#b45309', fontWeight: 500 }}>يوجد تأمين</span>}
-                                </div>
-                              ) : null;
-                            })()}
                           </div>
                         </article>
                       );
@@ -1894,7 +2532,7 @@ export default function App() {
               <button className={adminTab === 'complaints' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('complaints')}>طابور الشكاوى ({adminComplaints.length})</button>
               <button className={adminTab === 'users' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('users')}>إدارة المعلنين ({adminUsers.length})</button>
               <button className={adminTab === 'listings' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('listings')}>جميع الوحدات ({adminListings.length})</button>
-              <button className={adminTab === 'admin_listings' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('admin_listings')}>إعلانات الإدارة والإستيراد ({adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.advertiser_id === user?.id).length})</button>
+              <button className={adminTab === 'admin_listings' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('admin_listings')}>إعلانات الإدارة والإستيراد ({adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.source === 'api' || l.source === 'manual' || (l.source && l.source !== 'normal') || l.advertiser_id === user?.id).length})</button>
               <button className={adminTab === 'ratings' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('ratings'); loadAdminRatings(); }}>التقييمات</button>
               <button className={adminTab === 'leaderboard' ? 'active-tab' : 'inactive-tab'} onClick={() => setAdminTab('leaderboard')}>الأعلى تقييماً</button>
               <button className={adminTab === 'governorates' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('governorates'); loadAdminGovernorates(); loadAdminWaitlist(); }}>إدارة المحافظات والانتظار</button>
@@ -1976,7 +2614,7 @@ export default function App() {
                         <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                           <td style={{ padding: '0.75rem' }}>{u.name}</td>
                           <td style={{ padding: '0.75rem' }}>{u.phone}</td>
-                          <td style={{ padding: '0.75rem' }}>{u.account_type === 'broker' ? 'سمسار' : u.account_type === 'owner' ? 'مالك' : u.account_type === 'admin' ? 'مسؤول' : 'طالب'}</td>
+                          <td style={{ padding: '0.75rem' }}>{u.account_type === 'broker' ? 'وسيط' : u.account_type === 'owner' ? 'مالك' : u.account_type === 'admin' ? 'مسؤول' : 'طالب'}</td>
                           <td style={{ padding: '0.75rem', fontWeight: 'bold', color: u.offense_count > 0 ? 'red' : 'inherit' }}>{u.offense_count}</td>
                           <td style={{ padding: '0.75rem', color: u.is_banned ? 'red' : 'green', fontWeight: 'bold' }}>{u.is_banned ? 'محظور' : 'نشط'}</td>
                           <td style={{ padding: '0.75rem' }}>
@@ -2026,7 +2664,12 @@ export default function App() {
               <div>
                 <h3>إدارة إعلانات السكن النشطة وغير النشطة</h3>
                 <div style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
-                  {adminListings.map(l => (
+                  {adminListings.length === 0 ? (
+                    <div style={{ padding: '2rem', textAlign: 'center', background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)' }}>
+                      لا توجد وحدات سكنية مضافة حالياً.
+                    </div>
+                  ) : (
+                    adminListings.map(l => (
                     <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'white', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                       <div>
                         <strong>{l.title}</strong>
@@ -2048,7 +2691,7 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                  ))}
+                  )))}
                 </div>
 
                 {/* WhatsApp Outreach Edit Link Modal */}
@@ -2056,9 +2699,15 @@ export default function App() {
                   <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
                     <div style={{ background: '#fff', borderRadius: '16px', maxWidth: '600px', width: '100%', padding: '1.5rem', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
                       <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-dark)' }}>رسالة التواصل الجاهزة عبر الواتساب</h3>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                        تم تفعيل التعديل الشامل لمرة واحدة لهذا الإعلان وتوليد الرابط بنجاح.
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                        تم تفعيل التعديل الشامل لمرة واحدة لهذا الإعلان وتوليد كلمة المرور والرابط بنجاح.
                       </p>
+                      {outreachModalData.generated_password && (
+                        <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.5rem 0.75rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                          <span style={{ color: '#92400e', fontWeight: 600 }}>كلمة المرور المولدة للمعلن:</span>
+                          <strong style={{ fontFamily: 'monospace', fontSize: '1rem', color: '#b45309' }}>{outreachModalData.generated_password}</strong>
+                        </div>
+                      )}
                       <textarea 
                         readOnly 
                         rows="8" 
@@ -2095,18 +2744,18 @@ export default function App() {
                 </p>
 
                 <div style={{ display: 'grid', gap: '1rem' }}>
-                  {adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.advertiser_id === user?.id).length === 0 ? (
+                  {adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.source === 'api' || l.source === 'manual' || (l.source && l.source !== 'normal') || l.advertiser_id === user?.id).length === 0 ? (
                     <div style={{ padding: '2rem', textAlign: 'center', background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)' }}>
                       لا توجد إعلانات خاصة بالإدارة أو مستوردة بالجملة حالياً.
                     </div>
                   ) : (
-                    adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.advertiser_id === user?.id).map(l => (
+                    adminListings.filter(l => l.source === 'bulk' || l.source === 'scraped' || l.source === 'api' || l.source === 'manual' || (l.source && l.source !== 'normal') || l.advertiser_id === user?.id).map(l => (
                       <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'white', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <strong style={{ fontSize: '1rem' }}>{l.title}</strong>
-                            <span style={{ fontSize: '0.7rem', background: l.source === 'bulk' ? '#e0e7ff' : l.source === 'scraped' ? '#fef3c7' : '#dcfce7', color: l.source === 'bulk' ? '#3730a3' : l.source === 'scraped' ? '#b45309' : '#166534', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
-                              {l.source === 'bulk' ? 'استيراد بالجملة' : l.source === 'scraped' ? 'مكشوط' : 'إضافة يدوية'}
+                            <span style={{ fontSize: '0.7rem', background: l.source === 'bulk' ? '#e0e7ff' : (l.source === 'scraped' || l.source === 'api') ? '#fef3c7' : '#dcfce7', color: l.source === 'bulk' ? '#3730a3' : (l.source === 'scraped' || l.source === 'api') ? '#b45309' : '#166534', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
+                              {l.source === 'bulk' ? 'استيراد بالجملة' : (l.source === 'scraped' || l.source === 'api') ? 'مكشوط' : 'إضافة يدوية'}
                             </span>
                             <span style={{ fontSize: '0.7rem', background: l.full_edit_available ? '#dbeafe' : '#f1f5f9', color: l.full_edit_available ? '#1e40af' : '#64748b', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
                               {l.full_edit_available ? '✓ متاح للتعديل الكامل' : 'مقفل (تعديل محدود)'}
@@ -2157,11 +2806,16 @@ export default function App() {
                           <td style={{ padding: '0.75rem', fontWeight: 600 }}>{g.name}</td>
                           <td style={{ padding: '0.75rem' }}>
                             <span style={{
-                              padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700,
+                              padding: '0.25rem 0.65rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700,
                               background: g.status === 'live' ? '#dcfce7' : '#fef3c7',
-                              color: g.status === 'live' ? '#15803d' : '#b45309'
+                              color: g.status === 'live' ? '#15803d' : '#b45309',
+                              display: 'inline-flex', alignItems: 'center', gap: '0.3rem'
                             }}>
-                              {g.status === 'live' ? '🟢 مفعلة (Live)' : '🟡 قائمة انتظار (Waitlist Open)'}
+                              {g.status === 'live' ? (
+                                <><CheckCircle style={{ width: 14, height: 14 }} /> مفعلة (Live)</>
+                              ) : (
+                                <><Clock style={{ width: 14, height: 14 }} /> قائمة انتظار (Waitlist Open)</>
+                              )}
                             </span>
                           </td>
                           <td style={{ padding: '0.75rem', fontWeight: 700 }}>{g.waitlist_count || 0} معلن</td>
@@ -2295,7 +2949,7 @@ export default function App() {
                         .map(u => (
                           <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                             <td style={{ padding: '0.75rem', fontWeight: 600 }}>{u.name}</td>
-                            <td style={{ padding: '0.75rem' }}>{u.account_type === 'owner' ? 'مالك مباشر' : 'سمسار'}</td>
+                            <td style={{ padding: '0.75rem' }}>{u.account_type === 'owner' ? 'مالك مباشر' : 'وسيط'}</td>
                             <td style={{ padding: '0.75rem' }}>
                               <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>★ {u.avg_rating ? u.avg_rating.toFixed(1) : 'جديد'}</span>
                             </td>
@@ -2398,7 +3052,7 @@ export default function App() {
                     ? formatImageUrl(item.photo_urls[0])
                     : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80";
                   return (
-                    <article key={item.id} className="listing-card" onClick={() => navigate(`/listings/${item.id}`)}>
+                    <article key={item.id} id={`listing-card-${item.id}`} className="listing-card" onClick={() => handleCardClick(item.id)}>
                       <div className="card-img-wrapper">
                         <img className="card-img" src={coverImage} alt={item.title} />
                         <button
@@ -2668,7 +3322,7 @@ export default function App() {
                       {profileData.user.account_type === 'owner' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Home style={{ width: 14, height: 14 }} /> مالك عقار مباشر (بدون عمولة)</span>
                       ) : profileData.user.account_type === 'broker' ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Briefcase style={{ width: 14, height: 14 }} /> سمسار عقاري</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Briefcase style={{ width: 14, height: 14 }} /> وسيط عقاري</span>
                       ) : (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><User style={{ width: 14, height: 14 }} /> طالب / مستخدم</span>
                       )}
@@ -2701,7 +3355,7 @@ export default function App() {
                   ) : (
                     <div className="listings-grid">
                       {profileData.listings.map(item => (
-                        <article key={item.id} className="listing-card" onClick={() => navigate(`/listings/${item.id}`)}>
+                        <article key={item.id} id={`listing-card-${item.id}`} className="listing-card" onClick={() => handleCardClick(item.id)}>
                           <div className="card-img-wrapper">
                             <img className="card-img" src={formatImageUrl(item.photo_urls?.[0])} alt={item.title} />
                           </div>
@@ -2758,7 +3412,11 @@ export default function App() {
           </div>
           <div>
             <h4 style={{ color: '#fff', marginBottom: '0.75rem', fontSize: '1rem' }}>الدعم والتواصل</h4>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>إذا واجهت أي استفسار أو مشكلة، يسعدنا تواصلك معنا مباشرة عبر المنصة أو البريد الإلكتروني.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', color: '#cbd5e1' }}>
+              <span>الدعم الفني: <a href="mailto:support@sakan-egy.com" style={{ color: 'var(--primary)', textDecoration: 'none' }}>support@sakan-egy.com</a></span>
+              <span>واتساب الخدمة: <a href="https://wa.me/201062400034" target="_blank" rel="noreferrer" style={{ color: '#22c55e', textDecoration: 'none', fontWeight: 600 }}>01062400034</a></span>
+              <span>الشراكات والأعمال: <a href="mailto:business@sakan-egy.com" style={{ color: '#cbd5e1', textDecoration: 'none' }}>business@sakan-egy.com</a></span>
+            </div>
           </div>
         </div>
         <div style={{ borderTop: '1px solid #334155', paddingTop: '1rem', textAlign: 'center', fontSize: '0.8rem', color: '#64748b' }}>
@@ -2766,64 +3424,175 @@ export default function App() {
         </div>
       </footer>
 
-      {/* --- AUTHENTICATION MODAL (Arabic / Distinct Login vs Register) --- */}
+      {/* --- AUTHENTICATION MODAL (Arabic / Password & OTP Coexistence) --- */}
       {isAuthOpen && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '400px' }}>
             <div className="modal-header">
               <h3>
-                {authMode === 'register' 
-                  ? (authStep === 'phone' ? 'إنشاء حساب جديد' : authStep === 'otp' ? 'رمز تحقق الحساب' : 'بيانات الحساب الإضافية')
-                  : (authStep === 'phone' ? 'تسجيل الدخول بالهاتف' : 'تأكيد الرمز والدخول')
+                {authStep === 'change_password'
+                  ? 'تعيين كلمة مرور جديدة'
+                  : authMode === 'register' 
+                    ? (authStep === 'phone' ? 'إنشاء حساب جديد' : authStep === 'otp' ? 'رمز تحقق الحساب' : 'بيانات الحساب الإضافية')
+                    : (authStep === 'phone' ? (authLoginMethod === 'password' ? 'تسجيل الدخول بكلمة المرور' : 'تسجيل الدخول بالهاتف') : 'تأكيد الرمز والدخول')
                 }
               </h3>
               <button className="modal-close" onClick={() => setIsAuthOpen(false)}>×</button>
             </div>
             <div className="modal-body">
-              
-              {/* Step 1: Input Phone */}
-              {authStep === 'phone' && (
-                <form onSubmit={handlePhoneSubmit}>
-                  {authMode === 'register' && (
-                    <div className="form-group">
-                      <label>نوع حسابك</label>
-                      <select value={authForm.account_type} onChange={(e) => setAuthForm({ ...authForm, account_type: e.target.value })}>
-                        <option value="student">طالب / مستخدم عادي</option>
-                        <option value="owner">مالك عقار (بدون عمولة)</option>
-                        <option value="broker">سمسار عقاري</option>
-                      </select>
-                    </div>
-                  )}
-                  
-                  <div className="form-group">
-                    <label>رقم الهاتف المحمول</label>
-                    <input 
-                      type="tel" 
-                      placeholder="01xxxxxxxxx" 
-                      required 
-                      value={authForm.phone}
-                      onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
-                    />
-                  </div>
-                  <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
-                    {authMode === 'register' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الحساب <MessageSquare style={{ width: 16, height: 16 }} /></span>
-                    ) : (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الدخول</span>
-                    )}
-                  </button>
 
-                  <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
-                    {authMode === 'register' ? (
-                      <span style={{ color: 'var(--text-light)' }}>
-                        لديك حساب بالفعل؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('login'); }}>تسجيل الدخول</a>
-                      </span>
-                    ) : (
+              {/* Login Method Selector Tabs (Password vs OTP) */}
+              {authMode === 'login' && authStep === 'phone' && (
+                <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.25rem', background: '#f1f5f9', padding: '4px', borderRadius: '12px' }}>
+                  <button 
+                    type="button"
+                    onClick={() => setAuthLoginMethod('password')}
+                    style={{
+                      flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', cursor: 'pointer',
+                      fontWeight: authLoginMethod === 'password' ? 700 : 500,
+                      background: authLoginMethod === 'password' ? '#ffffff' : 'transparent',
+                      color: authLoginMethod === 'password' ? 'var(--primary)' : 'var(--text-muted)',
+                      boxShadow: authLoginMethod === 'password' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    كلمة المرور
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setAuthLoginMethod('otp')}
+                    style={{
+                      flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', cursor: 'pointer',
+                      fontWeight: authLoginMethod === 'otp' ? 700 : 500,
+                      background: authLoginMethod === 'otp' ? '#ffffff' : 'transparent',
+                      color: authLoginMethod === 'otp' ? 'var(--primary)' : 'var(--text-muted)',
+                      boxShadow: authLoginMethod === 'otp' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    رمز التحقق (OTP)
+                  </button>
+                </div>
+              )}
+
+              {/* Step 1: Input Phone / Password */}
+              {authStep === 'phone' && (
+                authMode === 'login' && authLoginMethod === 'password' ? (
+                  <form onSubmit={handlePasswordLoginSubmit}>
+                    <div className="form-group">
+                      <label>رقم الهاتف المحمول</label>
+                      <input 
+                        type="tel" 
+                        placeholder="01xxxxxxxxx" 
+                        required 
+                        value={authForm.phone}
+                        onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>كلمة المرور</label>
+                      <input 
+                        type="password" 
+                        placeholder="أدخل كلمة المرور" 
+                        required 
+                        value={authForm.password || ''}
+                        onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                      />
+                    </div>
+
+                    <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>تسجيل الدخول بكلمة المرور</span>
+                    </button>
+
+                    <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
                       <span style={{ color: 'var(--text-light)' }}>
                         ليس لديك حساب؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('register'); }}>إنشاء حساب جديد</a>
                       </span>
+                    </div>
+                  </form>
+                ) : (
+                  <form onSubmit={handlePhoneSubmit}>
+                    {authMode === 'register' && (
+                      <div className="form-group">
+                        <label>نوع حسابك</label>
+                        <select value={authForm.account_type} onChange={(e) => setAuthForm({ ...authForm, account_type: e.target.value })}>
+                          <option value="student">طالب / مستخدم عادي</option>
+                          <option value="owner">مالك عقار (بدون عمولة)</option>
+                          <option value="broker">سمسار عقاري</option>
+                        </select>
+                      </div>
                     )}
+                    
+                    <div className="form-group">
+                      <label>رقم الهاتف المحمول</label>
+                      <input 
+                        type="tel" 
+                        placeholder="01xxxxxxxxx" 
+                        required 
+                        value={authForm.phone}
+                        onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
+                      />
+                    </div>
+                    <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
+                      {authMode === 'register' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الحساب <MessageSquare style={{ width: 16, height: 16 }} /></span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الدخول</span>
+                      )}
+                    </button>
+
+                    <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
+                      {authMode === 'register' ? (
+                        <span style={{ color: 'var(--text-light)' }}>
+                          لديك حساب بالفعل؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('login'); }}>تسجيل الدخول</a>
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-light)' }}>
+                          ليس لديك حساب؟ <a href="#" style={{ color: 'var(--primary)', fontWeight: 'bold' }} onClick={(e) => { e.preventDefault(); setAuthMode('register'); }}>إنشاء حساب جديد</a>
+                        </span>
+                      )}
+                    </div>
+                  </form>
+                )
+              )}
+
+              {/* Step: Forced First-Login Password Change */}
+              {authStep === 'change_password' && (
+                <form onSubmit={handleChangePasswordSubmit}>
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', padding: '0.85rem 1rem', borderRadius: '12px', marginBottom: '1.25rem' }}>
+                    <p style={{ margin: 0, fontSize: '0.83rem', color: '#1e40af', lineHeight: 1.5 }}>
+                      مرحباً بك! لأن هذه المرة الأولى لدخولك بحسابك، يرجى تعيين كلمة مرور جديدة وخاصة بك لمتابعة استخدام المنصة وطلب أو حفظ تعديلات إعلانك.
+                    </p>
                   </div>
+
+                  <div className="form-group">
+                    <label>كلمة المرور الجديدة (الحد الأدنى 6 أحرف)</label>
+                    <input 
+                      type="password" 
+                      placeholder="******" 
+                      required 
+                      minLength={6}
+                      value={authForm.new_password || ''}
+                      onChange={(e) => setAuthForm({ ...authForm, new_password: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>تأكيد كلمة المرور الجديدة</label>
+                    <input 
+                      type="password" 
+                      placeholder="******" 
+                      required 
+                      minLength={6}
+                      value={authForm.confirm_password || ''}
+                      onChange={(e) => setAuthForm({ ...authForm, confirm_password: e.target.value })}
+                    />
+                  </div>
+
+                  <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.75rem' }}>
+                    حفظ كلمة المرور والدخول للمنصة
+                  </button>
                 </form>
               )}
 
@@ -2887,7 +3656,7 @@ export default function App() {
                         >
                           {authForm.profile_photo_url ? 'تغيير الصورة' : 'رفع صورة شخصية'}
                         </button>
-                        <small style={{ color: 'var(--text-light)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>JPG أو PNG أو WEBP — حد أقصى 10 ميجابايت</small>
+                        <small style={{ color: 'var(--text-light)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>JPG أو PNG أو WEBP - حد أقصى 10 ميجابايت</small>
                       </div>
                     </div>
                     <input
@@ -2952,14 +3721,14 @@ export default function App() {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '600px' }}>
             <div className="modal-header">
-              <h3>إضافة إعلان سكن طلابي جديد ({createStep} من 7)</h3>
+              <h3>إضافة إعلان سكن طلابي جديد ({createStep} من 5)</h3>
               <button className="modal-close" onClick={() => setIsCreateOpen(false)}>×</button>
             </div>
             
             <div className="modal-body">
               <div className="wizard-progress">
-                <div className="progress-bar-fill" style={{ width: `${(createStep - 1) * 16.66}%` }} />
-                {[1, 2, 3, 4, 5, 6, 7].map(num => (
+                <div className="progress-bar-fill" style={{ width: `${(createStep - 1) * 25}%` }} />
+                {[1, 2, 3, 4, 5].map(num => (
                   <span 
                     key={num} 
                     className={`wizard-step-node ${createStep === num ? 'active' : createStep > num ? 'completed' : ''}`}
@@ -3197,14 +3966,14 @@ export default function App() {
                 </div>
               )}
 
-              {/* STEP 3: ROOM CONFIGURATION */}
+              {/* STEP 3: ROOM CONFIGURATION, PRICING & COMMISSION */}
               {createStep === 3 && (
                 <div>
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>تهيئة الغرف والأسعار والعمولة</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>يمكنك إدراج نوع واحد أو أكثر للغرف المتوفرة في الشقة. السعر المطلوب للسرير الفردي فقط.</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>قم بإضافة فئات الغرف المتوفرة، تحديد الأسعار، والعمولة بشكل منظم.</p>
                   
-                  {/* Minimum lease duration option moved to the TOP */}
-                  <div style={{ background: '#EFF6FF', border: '1px solid #bfdbfe', borderRadius: 'var(--r-md)', padding: '1rem', marginBottom: '1.25rem' }}>
+                  {/* Minimum lease duration option */}
+                  <div style={{ background: '#EFF6FF', border: '1px solid #60a5fa', borderRadius: 'var(--r-md)', padding: '1rem', marginBottom: '1.25rem' }}>
                     <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <input 
                         type="checkbox" 
@@ -3214,164 +3983,310 @@ export default function App() {
                       تحديد حد أدنى لمدة الإيجار (شرط تعاقد)
                     </label>
                     {createForm.min_lease_months && (
-                      <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'white', padding: '0.5rem 0.75rem', borderRadius: 'var(--r-sm)', border: '1px solid #93c5fd' }}>
-                        <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>الحد الأدنى بالشهور:</label>
-                        <input 
-                          type="number" 
-                          min="1" 
-                          max="36" 
-                          value={createForm.min_lease_months} 
-                          onChange={(e) => setCreateForm(prev => ({ ...prev, min_lease_months: Number(e.target.value) || null }))}
-                          style={{ width: '90px', padding: '0.25rem 0.5rem', borderRadius: 'var(--r-sm)' }}
-                        />
+                      <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'white', padding: '0.5rem 0.75rem', borderRadius: 'var(--r-sm)', border: '1.5px solid #3b82f6' }}>
+                        <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>الحد الأدنى (بالأشهر):</label>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
+                            onClick={() => setCreateForm(prev => ({ ...prev, min_lease_months: Math.max(1, (prev.min_lease_months || 1) - 1) }))}
+                          >-</button>
+                          <input 
+                            type="number" 
+                            inputMode="numeric"
+                            min="1" 
+                            max="36" 
+                            value={createForm.min_lease_months} 
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => setCreateForm(prev => ({ ...prev, min_lease_months: Math.max(1, Number(e.target.value) || 1) }))}
+                            style={{ width: '60px', textAlign: 'center', padding: '0.35rem', borderRadius: 'var(--r-sm)', background: '#ffffff', border: '1.5px solid #94a3b8', fontWeight: 700 }}
+                          />
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
+                            onClick={() => setCreateForm(prev => ({ ...prev, min_lease_months: (prev.min_lease_months || 1) + 1 }))}
+                          >+</button>
+                        </div>
                         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>أشهر</span>
                       </div>
                     )}
                   </div>
 
-                  {createForm.room_configurations.map((config, index) => (
-                    <div key={index} style={{ background: '#f8fafc', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem', display: 'grid', gap: '0.75rem' }}>
-                      <div style={{ display: 'flex', justifySelf: 'space-between', alignItems: 'center' }}>
-                        <strong>تهيئة فئة #{index + 1}</strong>
-                        {createForm.room_configurations.length > 1 && (
-                          <button className="btn-danger" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => removeRoomConfig(index)}>حذف</button>
-                        )}
-                      </div>
-                      
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <div style={{ flex: '1 1 120px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>نوع الغرفة</label>
-                          <select value={config.room_type} onChange={(e) => updateRoomConfig(index, 'room_type', e.target.value)}>
-                            <option value="single">فردية (Single)</option>
-                            <option value="double">ثنائية (Double)</option>
-                            <option value="triple">ثلاثية (Triple)</option>
-                            <option value="quadruple">رباعية (Quadruple)</option>
-                          </select>
+                  {createForm.room_configurations.map((config, index) => {
+                    const price = Number(config.price_per_person) || 0;
+                    const isRange = config.commission_type === 'range';
+                    
+                    return (
+                      <div key={index} style={{ background: '#ffffff', border: '2px solid #cbd5e1', padding: '1.25rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem', display: 'grid', gap: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1.5px dashed #cbd5e1', paddingBottom: '0.5rem' }}>
+                          <strong style={{ color: 'var(--primary)', fontSize: '0.95rem' }}>فئة غرفة #{index + 1}</strong>
+                          {createForm.room_configurations.length > 1 && (
+                            <button className="btn-danger" style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }} onClick={() => removeRoomConfig(index)}>حذف الفئة</button>
+                          )}
                         </div>
                         
-                        <div style={{ flex: '1 1 100px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>عدد الغرف المتاحة</label>
-                          <input 
-                            type="number" 
-                            value={config.count} 
-                            onChange={(e) => updateRoomConfig(index, 'count', Number(e.target.value))} 
-                            min="1" 
-                          />
-                        </div>
+                        {/* Section A: Room Type & Count Stepper */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>نوع الغرفة</label>
+                            <select 
+                              value={config.room_type} 
+                              onChange={(e) => updateRoomConfig(index, 'room_type', e.target.value)}
+                              style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem', fontWeight: 600, width: '100%' }}
+                            >
+                              <option value="single">فردية (Single)</option>
+                              <option value="double">ثنائية (Double)</option>
+                              <option value="triple">ثلاثية (Triple)</option>
+                              <option value="quadruple">رباعية (Quadruple)</option>
+                            </select>
+                          </div>
 
-                        <div style={{ flex: '1 1 120px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>السعر الشهري للفرد (جنيه)</label>
-                          <input 
-                            type="number" 
-                            value={config.price_per_person} 
-                            onChange={(e) => updateRoomConfig(index, 'price_per_person', Number(e.target.value))} 
-                            min="0" 
-                            step="50"
-                          />
-                        </div>
-
-                        <div style={{ flex: '1 1 120px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>مبلغ التأمين (اختياري)</label>
-                          <input 
-                            type="number" 
-                            value={config.insurance_price} 
-                            placeholder={`${config.price_per_person}`}
-                            onChange={(e) => updateRoomConfig(index, 'insurance_price', e.target.value ? Number(e.target.value) : '')} 
-                          />
-                        </div>
-
-                         <div style={{ flex: '1 1 120px' }}>
-                          <label style={{ fontSize: '0.75rem' }}>نوع العمولة</label>
-                          <select 
-                            value={config.commission_type || 'fixed'} 
-                            onChange={(e) => updateRoomConfig(index, 'commission_type', e.target.value)}
-                          >
-                            <option value="fixed">ثابتة</option>
-                            <option value="range">نطاق قابل للتفاوض</option>
-                          </select>
-                        </div>
-
-                        {config.commission_type === 'range' ? (
-                          <div style={{ display: 'flex', gap: '0.25rem', flex: '1 1 160px' }}>
-                            <div>
-                              <label style={{ fontSize: '0.7rem' }}>من (أدنى)</label>
+                          <div>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>عدد الغرف المتاحة</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '0.35rem 0.75rem', fontWeight: 800 }}
+                                onClick={() => updateRoomConfig(index, 'count', Math.max(1, (config.count || 1) - 1))}
+                              >-</button>
                               <input 
                                 type="number" 
-                                value={config.commission_min || ''} 
-                                onChange={(e) => updateRoomConfig(index, 'commission_min', e.target.value ? Number(e.target.value) : '')} 
-                                placeholder="300" 
+                                inputMode="numeric"
+                                value={config.count} 
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => updateRoomConfig(index, 'count', Math.max(1, Number(e.target.value) || 1))} 
+                                style={{ textAlign: 'center', fontWeight: 700, background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem' }}
+                                min="1" 
                               />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: '0.7rem' }}>إلى (أقصى)</label>
-                              <input 
-                                type="number" 
-                                value={config.commission_max || ''} 
-                                onChange={(e) => updateRoomConfig(index, 'commission_max', e.target.value ? Number(e.target.value) : '')} 
-                                placeholder="600" 
-                              />
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '0.35rem 0.75rem', fontWeight: 800 }}
+                                onClick={() => updateRoomConfig(index, 'count', (config.count || 1) + 1)}
+                              >+</button>
                             </div>
                           </div>
-                        ) : (
-                          <div style={{ flex: '1 1 120px' }}>
-                            <label style={{ fontSize: '0.75rem' }}>قيمة العمولة (جنيه)</label>
+                        </div>
+
+                        {/* Section B: Pricing & Insurance */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>الإيجار الشهري للفرد (جنيه)</label>
                             <input 
                               type="number" 
-                              value={config.commission} 
-                              placeholder={`${config.price_per_person * 0.5}`}
-                              onChange={(e) => updateRoomConfig(index, 'commission', e.target.value ? Number(e.target.value) : '')} 
+                              inputMode="numeric"
+                              value={config.price_per_person || ''} 
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => updateRoomConfig(index, 'price_per_person', e.target.value ? Number(e.target.value) : '')} 
+                              placeholder="مثال: 1200"
+                              style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem 0.65rem', fontWeight: 700, width: '100%' }}
+                              min="0" 
+                              step="50"
+                            />
+                            {(!config.price_per_person || config.price_per_person <= 0) && (
+                              <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 600, display: 'block', marginTop: '0.2rem' }}>يرجى إدخال السعر المطلوب</span>
+                            )}
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>مبلغ التأمين (اختياري)</label>
+                            <input 
+                              type="number" 
+                              inputMode="numeric"
+                              value={config.insurance_price || ''} 
+                              onFocus={(e) => e.target.select()}
+                              placeholder="مثال: 500"
+                              style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem 0.65rem', fontWeight: 600, width: '100%' }}
+                              onChange={(e) => updateRoomConfig(index, 'insurance_price', e.target.value ? Number(e.target.value) : '')} 
                             />
                           </div>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <input 
-                            type="checkbox" 
-                            id={`services-${index}`} 
-                            checked={config.services_inclusive}
-                            onChange={(e) => updateRoomConfig(index, 'services_inclusive', e.target.checked)} 
-                          />
-                          <label htmlFor={`services-${index}`} style={{ fontSize: '0.85rem', fontWeight: 500, margin: 0, cursor: 'pointer' }}>
-                            السعر شامل الخدمات (الكهرباء، المياه، الغاز)
-                          </label>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <input 
-                            type="checkbox" 
-                            id={`ac-${index}`} 
-                            checked={!!config.has_ac}
-                            onChange={(e) => updateRoomConfig(index, 'has_ac', e.target.checked)} 
-                          />
-                          <label htmlFor={`ac-${index}`} style={{ fontSize: '0.85rem', fontWeight: 500, margin: 0, cursor: 'pointer', color: '#0284c7' }}>
-                            ❄️ تكييف هواء متوفر بالفئة
+                        {/* Section C: Commission Setup (Percentage based) */}
+                        <div style={{ background: '#f8fafc', border: '1.5px solid #cbd5e1', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-dark)' }}>عمولة الوسيط المعنية بهذه الفئة</label>
+                            
+                            {/* Checkbox for Fixed vs Range */}
+                            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <input 
+                                type="checkbox"
+                                checked={isRange}
+                                onChange={(e) => updateRoomConfig(index, 'commission_type', e.target.checked ? 'range' : 'fixed')}
+                              />
+                              عمولة غير ثابتة/عمولة تقريبية
+                            </label>
+                          </div>
+
+                          {!isRange ? (
+                            /* Fixed Percentage Stepper */
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>نسبة العمولة من الإيجار الشهري:</span>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
+                                    onClick={() => updateRoomConfig(index, 'commission_pct', Math.max(0, (config.commission_pct ?? 50) - 5))}
+                                  >-</button>
+                                  <input 
+                                    type="number" 
+                                    inputMode="numeric"
+                                    value={config.commission_pct ?? 50} 
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => updateRoomConfig(index, 'commission_pct', e.target.value ? Number(e.target.value) : 0)} 
+                                    style={{ width: '65px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.35rem', fontWeight: 700 }}
+                                    min="0"
+                                    max="200"
+                                    step="5"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
+                                    onClick={() => updateRoomConfig(index, 'commission_pct', Math.min(200, (config.commission_pct ?? 50) + 5))}
+                                  >+</button>
+                                </div>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)' }}>%</span>
+                              </div>
+                              
+                              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#15803d', marginTop: '0.35rem' }}>
+                                💡 قيمة العمولة التلقائية: {config.commission ?? Math.round(price * 0.5)} جنيه {price > 0 && `(من إيجار ${price} جنيه)`}
+                              </div>
+                            </div>
+                          ) : (
+                            /* Range Percentage Steppers */
+                            <div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.35rem' }}>
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.25rem' }}>نسبة الحد الأدنى (%):</label>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <button
+                                      type="button"
+                                      className="btn-secondary"
+                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
+                                      onClick={() => updateRoomConfig(index, 'commission_min_pct', Math.max(0, (config.commission_min_pct ?? 30) - 5))}
+                                    >-</button>
+                                    <input 
+                                      type="number" 
+                                      inputMode="numeric"
+                                      value={config.commission_min_pct ?? 30} 
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => updateRoomConfig(index, 'commission_min_pct', e.target.value ? Number(e.target.value) : 0)} 
+                                      style={{ width: '55px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.3rem', fontWeight: 700 }}
+                                      min="0"
+                                      max="200"
+                                      step="5"
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn-secondary"
+                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
+                                      onClick={() => updateRoomConfig(index, 'commission_min_pct', Math.min(200, (config.commission_min_pct ?? 30) + 5))}
+                                    >+</button>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>%</span>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.25rem' }}>نسبة الحد الأقصى (%):</label>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <button
+                                      type="button"
+                                      className="btn-secondary"
+                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
+                                      onClick={() => updateRoomConfig(index, 'commission_max_pct', Math.max(0, (config.commission_max_pct ?? 100) - 5))}
+                                    >-</button>
+                                    <input 
+                                      type="number" 
+                                      inputMode="numeric"
+                                      value={config.commission_max_pct ?? 100} 
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => updateRoomConfig(index, 'commission_max_pct', e.target.value ? Number(e.target.value) : 0)} 
+                                      style={{ width: '55px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.3rem', fontWeight: 700 }}
+                                      min="0"
+                                      max="200"
+                                      step="5"
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn-secondary"
+                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
+                                      onClick={() => updateRoomConfig(index, 'commission_max_pct', Math.min(200, (config.commission_max_pct ?? 100) + 5))}
+                                    >+</button>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>%</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0284c7', marginTop: '0.35rem' }}>
+                                💡 نطاق العمولة التلقائي: {config.commission_min ?? Math.round(price * 0.3)} إلى {config.commission_max ?? price} جنيه (قابل للتفاوض)
+                              </div>
+                            </div>
+                          )}
+
+                          <small style={{ color: 'var(--text-light)', fontSize: '0.72rem', display: 'block', marginTop: '0.4rem' }}>
+                            نسبة العمولة من الإيجار الشهري. يتم حساب وتوليد المبالغ بالجنيه تلقائياً لعرضها على الكروت وسطح الإعلان.
+                          </small>
+                        </div>
+
+                        {/* Inclusive Options */}
+                        <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                          <label style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={!!config.services_inclusive}
+                              onChange={(e) => updateRoomConfig(index, 'services_inclusive', e.target.checked)} 
+                            />
+                            السعر شامل الفواتير (كهرباء، مياه، غاز)
+                          </label>
+
+                          <label style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#0284c7' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={!!config.has_ac}
+                              onChange={(e) => updateRoomConfig(index, 'has_ac', e.target.checked)} 
+                            />
+                            ❄️ مكيفة
                           </label>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
-                  <button className="btn-outline" onClick={addRoomConfig} style={{ width: '100%', marginBottom: '1.25rem' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><Plus style={{ width: 16, height: 16 }} /> إضافة فئة غرفة أخرى</span></button>
+                  <button className="btn-outline" onClick={addRoomConfig} style={{ width: '100%', marginBottom: '1.25rem' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><Plus style={{ width: 16, height: 16 }} /> إضافة فئة غرفة أخرى</span>
+                  </button>
 
-                  <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(2)}>السابق</button>
                     <button className="btn-primary" onClick={() => setCreateStep(4)}>التالي</button>
                   </div>
                 </div>
               )}
 
-              {/* STEP 4: AMENITIES */}
+              {/* STEP 4: AMENITIES & BED COUNT */}
               {createStep === 4 && (
                 <div>
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>المرافق والخدمات المتوفرة</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>قم بتحديد الخدمات المتواجدة داخل الوحدة السكنية وخارجها لتسهيل وصول الباحثين إليها.</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>حدد الخدمات المتواجدة داخل الوحدة السكنية وخارجها لتسهيل وصول الباحثين إليها.</p>
 
-                  {/* Services Clarification Banner */}
-                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.75rem 1rem', borderRadius: '10px', marginBottom: '1.25rem', fontSize: '0.85rem', color: '#166534', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Info style={{ width: 18, height: 18, flexShrink: 0 }} />
-                    <span>الغاز، المياه، والكهرباء خدمات أساسية مفترضة في جميع الإعلانات. الإنترنت غير شامل إلا إذا تم تحديده صراحة.</span>
+                  <div className="form-group" style={{ background: '#ffffff', padding: '0.85rem 1rem', border: '1.5px solid #94a3b8', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem' }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--primary)', marginBottom: '0.35rem', display: 'block' }}>إجمالي عدد الأسرة الشاغرة المتاحة حالياً</label>
+                    <input 
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      value={createForm.available_beds === 0 ? '' : createForm.available_beds}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setCreateForm({ ...createForm, available_beds: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)) })}
+                      placeholder="عدد الأسرة المتاحة"
+                      style={{ fontWeight: 700, fontSize: '1rem', background: '#ffffff', border: '1.5px solid #94a3b8' }}
+                    />
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -3403,7 +4318,7 @@ export default function App() {
                             checked={isChecked}
                             onChange={() => toggleAmenity(amenity.name)}
                           />
-                          {amenity.name} {amenity.prechecked && <span style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>(موصى به)</span>}
+                          {amenity.name}
                         </label>
                       );
                     })}
@@ -3433,28 +4348,29 @@ export default function App() {
                         type="text" 
                         placeholder="مثال: غسالة أطباق، اشتراك بين سبورت" 
                         value={customAmenity}
+                        style={{ background: '#ffffff', border: '1.5px solid #94a3b8' }}
                         onChange={(e) => setCustomAmenity(e.target.value)}
                       />
                       <button type="button" className="btn-secondary" onClick={handleAddCustomAmenity}>إضافة</button>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%', marginTop: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '1rem' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(3)}>السابق</button>
                     <button className="btn-primary" onClick={() => setCreateStep(5)}>التالي</button>
                   </div>
                 </div>
               )}
 
-              {/* STEP 5: MEDIA */}
+              {/* STEP 5: MEDIA & DIRECT PUBLISH */}
               {createStep === 5 && (
                 <div>
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>الوسائط المرئية (صور + فيديو)</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>تتطلب المنصة رفع ٥ صور على الأقل وفيديو واحد للوحدة.</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>قم برفع الصور والفيديو الخاص بالوحدة لإكمال نشر الإعلان.</p>
 
                   {/* Photo Upload */}
                   <div className="form-group">
-                    <label>صور الوحدة — {createForm.photo_urls.length} مرفوعة (٥ كحد أدنى، ٣٠ كحد أقصى)</label>
+                    <label>صور الوحدة - {createForm.photo_urls.length} مرفوعة (٥ كحد أدنى، ٣٠ كحد أقصى)</label>
 
                     {/* Thumbnail grid */}
                     {createForm.photo_urls.length > 0 && (
@@ -3465,7 +4381,7 @@ export default function App() {
                             
                             {idx === 0 ? (
                               <span style={{ position: 'absolute', bottom: '4px', right: '4px', background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', padding: '0.15rem 0.4rem', borderRadius: '4px', fontWeight: 700 }}>
-                                الغلاف 🌟
+                                الغلاف
                               </span>
                             ) : (
                               <button
@@ -3505,18 +4421,18 @@ export default function App() {
                       htmlFor="listing-photo-input"
                       style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        justifyContent: 'center', border: '2px dashed var(--border)',
-                        borderRadius: '12px', padding: '2rem 1rem', cursor: 'pointer',
-                        background: 'var(--bg-muted)', color: 'var(--text-muted)',
+                        justifyContent: 'center', border: '2px dashed #94a3b8',
+                        borderRadius: '12px', padding: '1.5rem 1rem', cursor: 'pointer',
+                        background: '#ffffff', color: 'var(--text-muted)',
                         fontSize: '0.875rem', gap: '0.4rem', transition: 'border-color 0.2s',
                       }}
                       onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = '#94a3b8'}
                       onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = 'var(--primary)'; }}
-                      onDragLeave={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = 'var(--border)'; }}
+                      onDragLeave={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = '#94a3b8'; }}
                       onDrop={async e => {
                         e.preventDefault(); e.stopPropagation();
-                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.borderColor = '#94a3b8';
                         const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
                         if (!files.length) return;
                         const remaining = 30 - createForm.photo_urls.length;
@@ -3538,9 +4454,9 @@ export default function App() {
                         if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح`);
                       }}
                     >
-                      <span style={{ fontSize: '2rem' }}><Camera style={{ width: 32, height: 32, color: 'var(--text-muted)' }} /></span>
-                      <span style={{ fontWeight: 600 }}>اضغط لرفع صور</span>
-                      <span style={{ fontSize: '0.75rem' }}>JPG, PNG, WEBP — حد أقصى 10 ميجابايت لكل صورة</span>
+                      <Camera style={{ width: 28, height: 28, color: 'var(--text-muted)' }} />
+                      <span style={{ fontWeight: 600 }}>اضغط لرفع صور الوحدة السكنية</span>
+                      <span style={{ fontSize: '0.75rem' }}>JPG, PNG, WEBP - حد أقصى 10 ميجابايت لكل صورة</span>
                       <input
                         id="listing-photo-input"
                         type="file"
@@ -3566,64 +4482,86 @@ export default function App() {
                             } catch {}
                           }
                           setCreateForm(prev => ({ ...prev, photo_urls: [...prev.photo_urls, ...newUrls] }));
-                          if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح <CheckCircle style={{ width: 16, height: 16, display: 'inline', color: '#16a34a' }} />`);
+                          if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح`);
                           e.target.value = '';
                         }}
                       />
                     </label>
-                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>يمكنك اختيار عدة صور في نفس الوقت.</small>
                   </div>
 
-                  {/* Video URL */}
-                  <div className="form-group">
-                    <label>رابط الفيديو (فيديو واحد كحد أدنى — YouTube أو Google Drive)</label>
-                    <textarea
-                      rows="2"
-                      placeholder="ضع رابط فيديو واحد في كل سطر..."
-                      value={createForm.video_urls.join('\n')}
-                      onChange={(e) => setCreateForm({ ...createForm, video_urls: e.target.value.split('\n').filter(Boolean) })}
-                    />
-                    <small style={{ color: 'var(--text-light)', fontSize: '0.75rem' }}>عدد الفيديوهات المرفقة: {createForm.video_urls.length}</small>
+                  {/* Device Storage Video Upload */}
+                  <div className="form-group" style={{ marginTop: '1.25rem' }}>
+                    <label style={{ fontWeight: 600 }}>فيديو المعاينة المرئية للوحدة السكنية</label>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>قم برفع فيديو من جهازك بمساحة حتى 150 ميجابايت (MP4, MOV, AVI, WEBM, MKV).</p>
+                    
+                    {createForm.video_urls.length > 0 && (
+                      <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {createForm.video_urls.map((vurl, vidx) => (
+                          <div key={vidx} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#e0f2fe', color: '#0369a1', padding: '0.35rem 0.75rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600 }}>
+                            <Video style={{ width: 14, height: 14 }} />
+                            <span>فيديو #{vidx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => setCreateForm(prev => ({ ...prev, video_urls: prev.video_urls.filter((_, i) => i !== vidx) }))}
+                              style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', fontWeight: 800, marginLeft: '0.25rem' }}
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <label
+                      htmlFor="listing-video-input"
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                        border: '1.5px dashed #0284c7', borderRadius: '10px', padding: '0.85rem 1rem',
+                        cursor: 'pointer', background: '#f0f9ff', color: '#0369a1', fontSize: '0.85rem', fontWeight: 600
+                      }}
+                    >
+                      <Video style={{ width: 18, height: 18 }} />
+                      <span>اختر ملف فيديو من جهازك لرفعه</span>
+                      <input
+                        id="listing-video-input"
+                        type="file"
+                        accept="video/mp4,video/quicktime,video/x-msvideo,video/webm,video/x-matroska"
+                        style={{ display: 'none' }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 150 * 1024 * 1024) {
+                            showToast('حجم الفيديو كبير جداً. الحد الأقصى 150 ميجابايت.');
+                            return;
+                          }
+                          showToast('جاري رفع الفيديو...');
+                          try {
+                            const fd = new FormData();
+                            fd.append('file', file);
+                            const res = await fetch(`${API_BASE}/upload/listing-video`, { method: 'POST', body: fd });
+                            if (res.ok) {
+                              const data = await res.json();
+                              setCreateForm(prev => ({ ...prev, video_urls: [...prev.video_urls, formatImageUrl(data.url)] }));
+                              showToast('تم رفع الفيديو بنجاح!');
+                            } else {
+                              const err = await res.json();
+                              showToast(err.detail || 'فشل رفع الفيديو');
+                            }
+                          } catch {
+                            showToast('خطأ أثناء رفع الفيديو');
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '1.5rem' }}>
                     <button className="btn-secondary" onClick={() => setCreateStep(4)}>السابق</button>
                     <button
                       className="btn-primary"
-                      disabled={createForm.photo_urls.length < 5 || createForm.video_urls.length < 1}
-                      onClick={() => setCreateStep(6)}
+                      onClick={handleCreateSubmit}
                     >
-                      التالي
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>نشر الإعلان مباشرة <Send style={{ width: 16, height: 16 }} /></span>
                     </button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 6: CHOOSE TIER & SUBMIT */}
-              {createStep === 6 && (
-                <div>
-                  <h4 style={{ fontWeight: 700, marginBottom: '1.25rem' }}>اختر باقة الإعلان وانشر عقارك</h4>
-                  <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
-                    <label style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: createForm.tier === 'regular' ? '#f0fdf4' : 'white', borderColor: createForm.tier === 'regular' ? 'var(--primary)' : 'var(--border-color)' }}>
-                      <input type="radio" name="tier" checked={createForm.tier === 'regular'} onChange={() => setCreateForm({ ...createForm, tier: 'regular' })} />
-                      <div>
-                        <strong>إعلان عادي (Regular Listing) - ١٠٠ جنيه مصري / شهر</strong>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>نشر قياسي للإعلان في ذيل القائمة حسب تاريخ النشر.</p>
-                      </div>
-                    </label>
-
-                    <label style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: createForm.tier === 'premium' ? '#fffbeb' : 'white', borderColor: createForm.tier === 'premium' ? 'var(--premium-gold)' : 'var(--border-color)' }}>
-                      <input type="radio" name="tier" checked={createForm.tier === 'premium'} onChange={() => setCreateForm({ ...createForm, tier: 'premium' })} />
-                      <div>
-                        <strong><Star style={{ width: 14, height: 14, display: 'inline', color: '#f59e0b' }} /> إعلان مميز (Premium Listing) - ١٥٠ جنيه مصري / شهر</strong>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>أولوية ظهور الإعلان في أعلى نتائج البحث ووضع شارة عقار مميز ملفتة للانتباه.</p>
-                      </div>
-                    </label>
-                  </div>
-
-                  <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%' }}>
-                    <button className="btn-secondary" onClick={() => setCreateStep(5)}>السابق</button>
-                    <button className="btn-primary" onClick={handleCreateSubmit}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>نشر الإعلان <Send style={{ width: 16, height: 16 }} /></span></button>
                   </div>
                 </div>
               )}
@@ -3996,7 +4934,7 @@ export default function App() {
       )}
 
       {/* --- BULK ADD LISTINGS MODAL --- */}
-      {isBulkModalOpen && (
+      {isBulkModalOpen && isAdmin && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '680px' }}>
             <div className="modal-header">
@@ -4099,26 +5037,54 @@ export default function App() {
         </div>
       )}
 
-      {/* --- POST-PUBLISH SHARE MODAL --- */}
+      {/* --- POST-PUBLISH SHARE MODAL REWORK --- */}
       {isPostPublishModalOpen && postPublishListing && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
-          <div className="modal-content" style={{ maxWidth: '500px', textAlign: 'center', padding: '2rem 1.5rem' }}>
-            <div style={{ background: '#dcfce7', color: '#166534', width: '56px', height: '56px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-              <CheckCircle style={{ width: 32, height: 32 }} />
+          <div className="modal-content" style={{ maxWidth: '480px', textAlign: 'center', padding: '2rem 1.5rem', borderRadius: '20px' }}>
+            <div style={{ background: '#dcfce7', color: '#10b981', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
+              <CheckCircle style={{ width: 36, height: 36, color: '#10b981' }} />
             </div>
 
-            <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-dark)', marginBottom: '0.75rem' }}>
-              تم نشر إعلانك بنجاح
+            <h3 style={{ fontSize: '1.45rem', fontWeight: 900, color: 'var(--text-dark)', marginBottom: '0.5rem' }}>
+              إعلانك جاهز الآن
             </h3>
 
-            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1.5rem' }}>
-              عايز تشاركه في الجروبات وقنواتك التانية؟ دوس وهيبقى معاك نسخة تقدر تعملها لصق في أي مكان.
+            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1rem' }}>
+              يمكنك مشاركة إعلانك مباشرة على المجموعات والقنوات لوصول أسرع للطلاب.
             </p>
+
+            {/* Visual Message Bubble Preview Box */}
+            <div style={{
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: '16px',
+              padding: '0.9rem 1.15rem',
+              marginBottom: '1.5rem',
+              textAlign: 'right',
+              color: '#0f172a',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#15803d', fontWeight: 800, fontSize: '0.78rem', marginBottom: '0.4rem', borderBottom: '1px solid #dcfce7', paddingBottom: '0.35rem' }}>
+                <MessageSquare style={{ width: 14, height: 14, color: '#16a34a' }} />
+                <span>معاينة نص الإعلان الجاهز للمشاركة:</span>
+              </div>
+              <pre style={{
+                fontFamily: 'inherit',
+                whiteSpace: 'pre-wrap',
+                margin: 0,
+                fontSize: '0.82rem',
+                color: '#1e293b',
+                fontWeight: 600,
+                lineHeight: 1.6
+              }}>
+                {formatUnifiedShareText(postPublishListing)}
+              </pre>
+            </div>
 
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
               <button 
                 className="btn-outline" 
-                style={{ padding: '0.65rem 1.25rem', fontWeight: 600 }}
+                style={{ padding: '0.65rem 1.25rem', fontWeight: 600, borderRadius: '12px' }}
                 onClick={() => {
                   setIsPostPublishModalOpen(false);
                   setPostPublishListing(null);
@@ -4129,26 +5095,487 @@ export default function App() {
 
               <button 
                 className="btn-primary" 
-                style={{ padding: '0.65rem 1.5rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                style={{ padding: '0.65rem 1.5rem', fontWeight: 800, borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
                 onClick={async () => {
-                  const textToCopy = formatShareText(postPublishListing);
-                  if (navigator.clipboard) {
+                  const shareText = formatUnifiedShareText(postPublishListing);
+                  const shareUrl = `https://sakan-egy.com/listings/${postPublishListing.id}`;
+                  
+                  if (navigator.share) {
                     try {
-                      await navigator.clipboard.writeText(textToCopy);
-                      showToast('تم نسخ الإعلان بنجاح! جاهز للمشاركة');
-                    } catch {
-                      showToast('تعذر نسخ النص تلقائياً');
+                      await navigator.share({
+                        title: postPublishListing.title,
+                        text: shareText,
+                        url: shareUrl
+                      });
+                      showToast('تمت مشاركة الإعلان بنجاح!');
+                    } catch (err) {
+                      if (err.name !== 'AbortError' && navigator.clipboard) {
+                        await navigator.clipboard.writeText(shareText);
+                        showToast('تم نسخ نص الإعلان جاهزاً للمشاركة!');
+                      }
                     }
-                  } else {
-                    showToast('تم نسخ الإعلان بنجاح! جاهز للمشاركة');
+                  } else if (navigator.clipboard) {
+                    await navigator.clipboard.writeText(shareText);
+                    showToast('تم نسخ نص الإعلان جاهزاً للمشاركة!');
                   }
                   setIsPostPublishModalOpen(false);
                   setPostPublishListing(null);
                 }}
               >
-                <Share2 style={{ width: 18, height: 18 }} /> انسخ الإعلان
+                <Share2 style={{ width: 18, height: 18 }} /> مشاركة الإعلان
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* --- FLOATING MOBILE FILTER FAB --- */}
+      {tab === 'browse' && (
+        <button 
+          className="mobile-filter-fab"
+          style={{
+            position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 900,
+            background: 'var(--primary)', color: '#ffffff', border: 'none', borderRadius: '999px',
+            padding: '0.65rem 1.4rem', fontWeight: 800, fontSize: '0.9rem', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+            display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer'
+          }}
+          onClick={() => setIsMobileFilterOpen(true)}
+        >
+          <Search style={{ width: 18, height: 18 }} /> تصفية النتائج ({sortedListings.length})
+        </button>
+      )}
+
+      {/* --- MOBILE FILTER DRAWER MODAL --- */}
+      {isMobileFilterOpen && (
+        <div className="modal-overlay" style={{ zIndex: 99999 }}>
+          <div className="modal-content" style={{ maxWidth: '500px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0 }}>
+            <div className="modal-header" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontWeight: 800, margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Search style={{ width: 20, height: 20, color: 'var(--primary)' }} /> تصفية نتائج البحث
+              </h3>
+              <button className="modal-close" onClick={() => setIsMobileFilterOpen(false)}>×</button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '1rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {/* 1. Governorates + City/Neighborhood (2-column paired row) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المحافظة</label>
+                  <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })} style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}>
+                    <option value="">جميع المحافظات</option>
+                    <optgroup label="المحافظات المتاحة حالياً">
+                      {dbGovernorates.filter(g => g.status === 'live').map(g => (
+                        <option key={g.id} value={g.name}>{g.name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="المحافظات المتاحة في قائمة الانتظار">
+                      {dbGovernorates.filter(g => g.status !== 'live').map(g => (
+                        <option key={g.id} value={g.name} style={{ color: '#94a3b8' }}>
+                          {g.name} (قريباً)
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المدينة / الحي</label>
+                  <input 
+                    type="text" 
+                    placeholder="مدينة نصر، الدقي..." 
+                    value={filters.neighborhood} 
+                    onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value })}
+                    style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* 2. Gender Horizontal Toggle Chips */}
+              <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>النوع المسموح بالسكن</label>
+                <div style={{ display: 'flex', gap: '0.3rem' }}>
+                  {[
+                    { id: '', label: 'الكل' },
+                    { id: 'male', label: 'طلاب' },
+                    { id: 'female', label: 'طالبات' }
+                  ].map(chip => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setFilters({ ...filters, gender: chip.id })}
+                      style={{
+                        flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
+                        border: filters.gender === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                        background: filters.gender === chip.id ? 'var(--primary-light)' : '#ffffff',
+                        color: filters.gender === chip.id ? 'var(--primary-dark)' : '#475569',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3. Advertiser Type Horizontal Toggle Chips */}
+              <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>صفة المعلن</label>
+                <div style={{ display: 'flex', gap: '0.3rem' }}>
+                  {[
+                    { id: '', label: 'الكل' },
+                    { id: 'owner', label: 'مالك مباشر' },
+                    { id: 'broker', label: 'وسيط' }
+                  ].map(chip => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setFilters({ ...filters, advertiser_type: chip.id })}
+                      style={{
+                        flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
+                        border: filters.advertiser_type === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                        background: filters.advertiser_type === chip.id ? 'var(--primary-light)' : '#ffffff',
+                        color: filters.advertiser_type === chip.id ? 'var(--primary-dark)' : '#475569',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 4. Monthly Price Range (2 columns with +/- steppers: +100 EGP / -50 EGP) */}
+              <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>نطاق السعر الشهري (ج.م)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+                  
+                  {/* Min Price Stepper (-50 / +100) */}
+                  <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', overflow: 'hidden', background: '#ffffff' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(filters.min_price) || 0;
+                        const next = Math.max(0, cur - 50);
+                        setFilters({ ...filters, min_price: next === 0 ? '' : String(next) });
+                      }}
+                      style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                      title="-50 ج.م"
+                    >
+                      -
+                    </button>
+                    <input 
+                      type="number" 
+                      placeholder="الأدنى" 
+                      value={filters.min_price} 
+                      onChange={(e) => setFilters({ ...filters, min_price: e.target.value })} 
+                      style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none', background: 'transparent' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(filters.min_price) || 0;
+                        const next = cur + 100;
+                        setFilters({ ...filters, min_price: String(next) });
+                      }}
+                      style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                      title="+100 ج.م"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Max Price Stepper (-50 / +100) */}
+                  <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', overflow: 'hidden', background: '#ffffff' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(filters.max_price) || 0;
+                        const next = Math.max(0, cur - 50);
+                        setFilters({ ...filters, max_price: next === 0 ? '' : String(next) });
+                      }}
+                      style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                      title="-50 ج.م"
+                    >
+                      -
+                    </button>
+                    <input 
+                      type="number" 
+                      placeholder="الأقصى" 
+                      value={filters.max_price} 
+                      onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
+                      style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none', background: 'transparent' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(filters.max_price) || 0;
+                        const next = cur + 100;
+                        setFilters({ ...filters, max_price: String(next) });
+                      }}
+                      style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
+                      title="+100 ج.م"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* 5. Total Bed Capacity Range (2 columns) */}
+              <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>عدد الأسرة الكلي بالشقة</label>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <input 
+                    type="number" 
+                    placeholder="الأدنى (1)" 
+                    min="1"
+                    value={filters.min_total_beds} 
+                    onChange={(e) => setFilters({ ...filters, min_total_beds: e.target.value })} 
+                    style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
+                  />
+                  <input 
+                    type="number" 
+                    placeholder="الأقصى (10)" 
+                    min="1"
+                    value={filters.max_total_beds} 
+                    onChange={(e) => setFilters({ ...filters, max_total_beds: e.target.value })} 
+                    style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* 6. Room Type Horizontal Chips */}
+              <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>نوع الغرفة</label>
+                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'single', label: 'فردية' },
+                    { id: 'double', label: 'ثنائية' },
+                    { id: 'triple', label: 'ثلاثية' },
+                    { id: 'quadruple', label: 'رباعية' }
+                  ].map(chip => {
+                    const isSelected = filters.room_types.includes(chip.id);
+                    return (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => {
+                          const updated = isSelected 
+                            ? filters.room_types.filter(t => t !== chip.id)
+                            : [...filters.room_types, chip.id];
+                          setFilters({ ...filters, room_types: updated });
+                        }}
+                        style={{
+                          flex: '1 1 22%', padding: '0.4rem 0.3rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                          border: isSelected ? '2px solid var(--primary)' : '1px solid #cbd5e1',
+                          background: isSelected ? 'var(--primary-light)' : '#ffffff',
+                          color: isSelected ? 'var(--primary-dark)' : '#475569',
+                          cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center'
+                        }}
+                      >
+                        {chip.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 7. Trailing Lease Conditions Chips */}
+              <div className="form-group" style={{ gap: '0.25rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem', display: 'block' }}>شروط ومزايا الإيجار</label>
+                <div style={{ display: 'flex', gap: '0.35rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, services_inclusive: !filters.services_inclusive })}
+                    style={{
+                      flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                      border: filters.services_inclusive ? '2px solid #16a34a' : '1px solid #cbd5e1',
+                      background: filters.services_inclusive ? '#dcfce7' : '#ffffff',
+                      color: filters.services_inclusive ? '#15803d' : '#475569',
+                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
+                    }}
+                  >
+                    <Zap style={{ width: 13, height: 13 }} /> شامل الخدمات
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, has_insurance: !filters.has_insurance })}
+                    style={{
+                      flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
+                      border: filters.has_insurance ? '2px solid #d97706' : '1px solid #cbd5e1',
+                      background: filters.has_insurance ? '#fef3c7' : '#ffffff',
+                      color: filters.has_insurance ? '#b45309' : '#475569',
+                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
+                    }}
+                  >
+                    <Shield style={{ width: 13, height: 13 }} /> يتطلب تأمين
+                  </button>
+                </div>
+              </div>
+
+              {/* 8. Max Commission + Amenities Modal Button (2-column paired row) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.45rem' }}>
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>أقصى عمولة (ج.م)</label>
+                  <input 
+                    type="number" 
+                    placeholder="1000" 
+                    value={filters.max_commission} 
+                    onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
+                    style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المرافق والخدمات</label>
+                  <button 
+                    type="button"
+                    className="btn-outline" 
+                    style={{ padding: '0.45rem 0.4rem', fontSize: '0.76rem', fontWeight: 700, width: '100%', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
+                    onClick={() => setShowAmenitiesModal(true)}
+                  >
+                    {filters.amenities.length > 0 ? `المرافق (${filters.amenities.length})` : 'اختر المرافق'}
+                  </button>
+                </div>
+              </div>
+
+              {/* 9. Sort By */}
+              <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>ترتيب النتائج حسب</label>
+                <select 
+                  value={sortBy} 
+                  onChange={(e) => setSortBy(e.target.value)}
+                  style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontWeight: 700, fontSize: '0.8rem' }}
+                >
+                  <option value="newest">الأحدث نُشراً</option>
+                  <option value="oldest">الأقدم نُشراً</option>
+                  <option value="price_asc">السعر: من الأقل للأعلى</option>
+                  <option value="price_desc">السعر: من الأعلى للأقل</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid var(--border-color)', background: '#f8fafc', display: 'flex', gap: '0.75rem' }}>
+              <button 
+                className="btn-outline" 
+                style={{ flex: 1, padding: '0.65rem' }}
+                onClick={() => {
+                  setFilters({ governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', max_commission: '', services_inclusive: false, has_insurance: false, min_total_beds: '', max_total_beds: '' });
+                }}
+              >
+                مسح الكل
+              </button>
+              <button className="btn-primary" style={{ flex: 2, padding: '0.65rem', fontWeight: 800 }} onClick={() => setIsMobileFilterOpen(false)}>
+                عرض النتائج ({sortedListings.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- CONTACT & FEEDBACK CHANNELS MODAL POPUP --- */}
+      {isContactModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 99999 }}>
+          <div className="modal-content" style={{ maxWidth: '520px', borderRadius: '20px', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            
+            {/* Modal Header */}
+            <div className="modal-header" style={{ padding: '1.25rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#0f172a' }}>
+                <MessageSquare style={{ width: 20, height: 20, color: 'var(--primary)' }} />
+                قنوات التواصل والدعم الفني
+              </h3>
+              <button className="modal-close" onClick={() => setIsContactModalOpen(false)}>×</button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
+              
+              {/* Channel 1: WhatsApp (Questions / Student Enquiries) */}
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '14px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '0.95rem', color: '#166534' }}>
+                    <MessageSquare style={{ width: 18, height: 18, color: '#16a34a' }} />
+                    <span>أسئلة واستفسارات الطلاب (أسئلة)</span>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', padding: '0.15rem 0.55rem', borderRadius: '999px', fontWeight: 700 }}>
+                    فوري عبر الواتساب
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
+                  لجميع الأسئلة السريعة والاستفسارات اليومية للطلاب حول السكن المتاح.
+                </p>
+                <a
+                  href="https://wa.me/201062400034?text=%D8%B3%D9%84%D8%A7%D9%85%20%D8%B9%D9%84%D9%8A%D9%83%D9%85%D8%8C%20%D8%B9%D9%86%D8%AF%D9%8A%20%D8%A7%D8%B3%D8%AA%D9%81%D8%B3%D8%A7%D8%B1%20%D8%AE%D8%A7%D8%B5%20%D8%A8%D9%85%D9%86%D8%B5%D8%A9%20%D8%B3%D9%83%D9%86"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    marginTop: '0.25rem', padding: '0.5rem 1rem', background: '#16a34a', color: '#ffffff',
+                    borderRadius: '8px', textDecoration: 'none', fontWeight: 700, fontSize: '0.82rem',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', width: 'fit-content'
+                  }}
+                >
+                  <MessageSquare style={{ width: 15, height: 15 }} />
+                  مراسلة الدعم عبر الواتساب (01062400034)
+                </a>
+              </div>
+
+              {/* Channel 2: Support Email (Suggestions & Feedback) */}
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '0.95rem', color: '#1e40af' }}>
+                    <Mail style={{ width: 18, height: 18, color: '#2563eb' }} />
+                    <span>اقتراحات وملاحظات الفيدباك (اقتراحات)</span>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', background: '#dbeafe', color: '#1d4ed8', padding: '0.15rem 0.55rem', borderRadius: '999px', fontWeight: 700 }}>
+                    إيميل الدعم
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
+                  لتقديم الفيدباك والاقتراحات أو ملاحظات تحسين تجربة المنصة.
+                </p>
+                <a
+                  href="mailto:support@sakan-egy.com"
+                  style={{
+                    marginTop: '0.25rem', padding: '0.5rem 1rem', background: '#2563eb', color: '#ffffff',
+                    borderRadius: '8px', textDecoration: 'none', fontWeight: 700, fontSize: '0.82rem',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', width: 'fit-content'
+                  }}
+                >
+                  <Mail style={{ width: 15, height: 15 }} />
+                  support@sakan-egy.com
+                </a>
+              </div>
+
+              {/* Channel 3: Business Email (Business & Partnerships) */}
+              <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '14px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '0.95rem', color: '#6b21a8' }}>
+                    <Briefcase style={{ width: 18, height: 18, color: '#9333ea' }} />
+                    <span>استفسارات بزنس وشراكات (بزنس)</span>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', background: '#f3e8ff', color: '#7e22ce', padding: '0.15rem 0.55rem', borderRadius: '999px', fontWeight: 700 }}>
+                    إيميل البيزنس
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
+                  لطلبات التعاون وشراكات الأعمال والتوسع السكني الاستثماري.
+                </p>
+                <a
+                  href="mailto:business@sakan-egy.com"
+                  style={{
+                    marginTop: '0.25rem', padding: '0.5rem 1rem', background: '#9333ea', color: '#ffffff',
+                    borderRadius: '8px', textDecoration: 'none', fontWeight: 700, fontSize: '0.82rem',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', width: 'fit-content'
+                  }}
+                >
+                  <Briefcase style={{ width: 15, height: 15 }} />
+                  business@sakan-egy.com
+                </a>
+              </div>
+
+            </div>
+
           </div>
         </div>
       )}

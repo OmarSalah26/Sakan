@@ -981,6 +981,10 @@ main.container { padding-top: 1.5rem; padding-bottom: 3rem; }
   justify-content: space-between;
 }
 
+.mobile-nav-cta {
+  display: none !important;
+}
+
 .mobile-menu-toggle {
   display: none;
   background: transparent;
@@ -1009,6 +1013,14 @@ main.container { padding-top: 1.5rem; padding-bottom: 3rem; }
    RESPONSIVE & MOBILE DESIGN SYSTEM
    ============================================ */
 @media (max-width: 992px) {
+  .mobile-nav-cta {
+    display: inline-flex !important;
+  }
+
+  .nav-action-btn-desktop {
+    display: none !important;
+  }
+
   .nav-brand-wrapper {
     width: 100%;
   }

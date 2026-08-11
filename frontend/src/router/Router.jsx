@@ -7,7 +7,12 @@ export function RouterProvider({ children }) {
 
   useEffect(() => {
     const handlePopState = () => {
-      setPathname(window.location.pathname);
+      const currentPath = window.location.pathname;
+      setPathname(currentPath);
+      const savedScroll = sessionStorage.getItem('scrollPos_' + currentPath);
+      if (savedScroll !== null) {
+        setTimeout(() => window.scrollTo(0, parseInt(savedScroll, 10)), 50);
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -18,9 +23,18 @@ export function RouterProvider({ children }) {
       window.history.go(to);
       return;
     }
+    // Save current scroll position before navigating away
+    sessionStorage.setItem('scrollPos_' + pathname, window.scrollY.toString());
     window.history.pushState({}, '', to);
     setPathname(to);
-    window.scrollTo(0, 0);
+    
+    // Restore scroll position if previously saved for target route
+    const savedScroll = sessionStorage.getItem('scrollPos_' + to);
+    if (savedScroll !== null) {
+      setTimeout(() => window.scrollTo(0, parseInt(savedScroll, 10)), 50);
+    } else {
+      window.scrollTo(0, 0);
+    }
   };
 
   return (
