@@ -1034,8 +1034,13 @@ export default function App() {
   const handlePhoneSubmit = async (e) => {
     e.preventDefault();
     const cleanPhone = (authForm.phone || '').trim();
+    const cleanName = (authForm.name || '').trim();
     if (cleanPhone.length < 8) {
       showToast("يرجى إدخال رقم هاتف صحيح لا يقل عن 8 أرقام");
+      return;
+    }
+    if (authMode === 'register' && cleanName.length < 2) {
+      showToast("يرجى إدخال الاسم بالكامل (مطلوب لجميع الحسابات)");
       return;
     }
     try {
@@ -1043,7 +1048,7 @@ export default function App() {
       const validAccountType = ['student', 'owner', 'broker', 'admin'].includes(authForm.account_type) ? authForm.account_type : 'student';
       const payload = authMode === 'register' ? {
         phone: cleanPhone,
-        name: (authForm.name || '').trim() || "مستخدم جديد",
+        name: cleanName,
         account_type: validAccountType,
         governorates: Array.isArray(authForm.governorates) ? authForm.governorates : [],
         profile_photo_url: authForm.profile_photo_url || null
@@ -3579,14 +3584,27 @@ export default function App() {
                 ) : (
                   <form onSubmit={handlePhoneSubmit}>
                     {authMode === 'register' && (
-                      <div className="form-group">
-                        <label>نوع حسابك</label>
-                        <select value={authForm.account_type} onChange={(e) => setAuthForm({ ...authForm, account_type: e.target.value })}>
-                          <option value="student">طالب / مستخدم عادي</option>
-                          <option value="owner">مالك عقار (بدون عمولة)</option>
-                          <option value="broker">سمسار عقاري</option>
-                        </select>
-                      </div>
+                      <>
+                        <div className="form-group">
+                          <label>الاسم بالكامل (مطلوب)</label>
+                          <input 
+                            type="text" 
+                            placeholder="أدخل اسمك بالكامل" 
+                            required 
+                            value={authForm.name || ''}
+                            onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label>نوع حسابك</label>
+                          <select value={authForm.account_type} onChange={(e) => setAuthForm({ ...authForm, account_type: e.target.value })}>
+                            <option value="student">طالب / مستخدم عادي</option>
+                            <option value="owner">مالك عقار (بدون عمولة)</option>
+                            <option value="broker">سمسار عقاري</option>
+                          </select>
+                        </div>
+                      </>
                     )}
                     
                     <div className="form-group">

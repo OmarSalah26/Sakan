@@ -833,6 +833,9 @@ def register_user(payload: RegisterRequest):
         if blocked:
             raise HTTPException(status_code=403, detail="هذا الرقم محظور من التسجيل")
 
+        if not payload.name or len(payload.name.strip()) < 2:
+            raise HTTPException(status_code=400, detail="الاسم بالكامل مطلوب لجميع الحسابات")
+
         user = db.query(User).filter(User.phone == payload.phone).first()
         if user:
             raise HTTPException(status_code=400, detail="رقم الهاتف مسجل بالفعل، يرجى تسجيل الدخول بدلاً من ذلك")

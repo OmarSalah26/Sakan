@@ -550,18 +550,18 @@ export default function ListingDetailPage() {
 
                   <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
                     {(c.commission_type === 'range' || (c.commission_min && c.commission_max)) ? (
-                      <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 700 }}>
-                        عمولة: {c.commission_min} - {c.commission_max} ج.م (تفاوضي)
+                      <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
+                        <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {c.commission_min} - {c.commission_max} ج.م (تفاوضي)
                       </span>
                     ) : c.commission != null ? (
-                      <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
-                        عمولة: {c.commission} ج.م
+                      <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
+                        <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {c.commission} ج.م
                       </span>
                     ) : null}
 
                     {c.has_ac && (
-                      <span style={{ background: '#e0f2fe', color: '#0284c7', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <Wind style={{ width: 13, height: 13 }} /> ❄️ مكيفة
+                      <span style={{ background: '#e0f2fe', color: '#0284c7', border: '1px solid #bae6fd', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <Wind style={{ width: 14, height: 14 }} /> مكيفة
                       </span>
                     )}
 
