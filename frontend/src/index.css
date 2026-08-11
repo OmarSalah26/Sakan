@@ -131,6 +131,20 @@ a { color: inherit; text-decoration: none; }
   flex-wrap: wrap;
 }
 
+.nav-sep {
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  font-weight: 300;
+  user-select: none;
+  opacity: 0.7;
+}
+
+@media (max-width: 768px) {
+  .nav-sep {
+    display: none;
+  }
+}
+
 .active-tab {
   display: inline-flex;
   align-items: center;

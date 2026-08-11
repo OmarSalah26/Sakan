@@ -11,7 +11,7 @@ import {
   User, Home, Briefcase, MessageSquare, Phone, Camera, Send, 
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
   Bed, Check, Clock, Award, Sparkles, Upload, Menu, X, Smartphone,
-  Navigation, Wind, Video, ArrowDown, Compass, Building2, Mail
+  Navigation, Wind, Video, ArrowDown, Compass, Building2, Mail, LogOut
 } from 'lucide-react';
 
 
@@ -1755,37 +1755,54 @@ export default function App() {
           >
             تصفح العقارات
           </button>
+          
+          <span className="nav-sep">|</span>
+
           {user && (
-            <button 
-              className={tab === 'saved' ? 'active-tab' : 'inactive-tab'} 
-              onClick={() => { navigateTo('#/saved'); setMobileMenuOpen(false); }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginLeft: '0.25rem' }}>
-                <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 11.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 0 1-1.085.67L12 18.089l-7.165 3.583A.75.75 0 0 1 3.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93Z" clipRule="evenodd" />
-              </svg>
-              المحفوظات
-            </button>
+            <>
+              <button 
+                className={tab === 'saved' ? 'active-tab' : 'inactive-tab'} 
+                onClick={() => { navigateTo('#/saved'); setMobileMenuOpen(false); }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginLeft: '0.25rem' }}>
+                  <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 11.36 0c1.497.174 2.57 1.46 2.57 2.93V21a.75.75 0 0 1-1.085.67L12 18.089l-7.165 3.583A.75.75 0 0 1 3.75 21V5.507c0-1.47 1.073-2.756 2.57-2.93Z" clipRule="evenodd" />
+                </svg>
+                المحفوظات
+              </button>
+              <span className="nav-sep">|</span>
+            </>
           )}
+
           {(!user || user.account_type === 'student') && (
-            <button 
-              className={tab === 'guide' ? 'active-tab' : 'inactive-tab'} 
-              onClick={() => { navigateTo('#/guide'); setMobileMenuOpen(false); }}
-            >
-              <span>دليل الطالب</span> <BookOpen style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: '0.25rem' }} />
-            </button>
+            <>
+              <button 
+                className={tab === 'guide' ? 'active-tab' : 'inactive-tab'} 
+                onClick={() => { navigateTo('#/guide'); setMobileMenuOpen(false); }}
+              >
+                <span>دليل الطالب</span> <BookOpen style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: '0.25rem' }} />
+              </button>
+              <span className="nav-sep">|</span>
+            </>
           )}
+
           <button 
             className={tab === 'about' ? 'active-tab' : 'inactive-tab'} 
             onClick={() => { navigateTo('#/about'); setMobileMenuOpen(false); }}
           >
             من نحن
           </button>
+
+          <span className="nav-sep">|</span>
+
           <button 
             className={tab === 'terms' ? 'active-tab' : 'inactive-tab'} 
             onClick={() => { navigateTo('#/terms'); setMobileMenuOpen(false); }}
           >
             الشروط والأحكام
           </button>
+
+          <span className="nav-sep">|</span>
+
           <button 
             type="button"
             className="inactive-tab" 
@@ -1798,46 +1815,60 @@ export default function App() {
 
           {/* Create listing button accessible for Brokers, Admins, or guests */}
           {(!user || isBroker || isAdmin) && (
-            <button 
-              className="btn-primary nav-action-btn nav-action-btn-desktop" 
-              onClick={() => { handleOpenCreateFlow(); setMobileMenuOpen(false); }}
-              style={{ fontWeight: 700 }}
-            >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>أضف إعلانك <Plus style={{ width: 18, height: 18 }} /></span>
-            </button>
+            <>
+              <span className="nav-sep">|</span>
+              <button 
+                className="btn-primary nav-action-btn nav-action-btn-desktop" 
+                onClick={() => { handleOpenCreateFlow(); setMobileMenuOpen(false); }}
+                style={{ fontWeight: 700 }}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>أضف إعلانك <Plus style={{ width: 18, height: 18 }} /></span>
+              </button>
+            </>
           )}
 
           {/* Bulk import button accessible ONLY for Admins */}
           {isAdmin && (
-            <button 
-              className="btn-outline nav-action-btn" 
-              onClick={() => { setIsBulkModalOpen(true); setBulkImportResult(null); setMobileMenuOpen(false); }}
-              style={{ fontWeight: 600, fontSize: '0.8rem', padding: '0.45rem 0.75rem', background: '#f8fafc' }}
-              title="استيراد وتغذية إعلانات بالجملة عبر JSON"
-            >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Upload style={{ width: 16, height: 16 }} /> استيراد بالجملة</span>
-            </button>
+            <>
+              <span className="nav-sep">|</span>
+              <button 
+                className="btn-outline nav-action-btn" 
+                onClick={() => { setIsBulkModalOpen(true); setBulkImportResult(null); setMobileMenuOpen(false); }}
+                style={{ fontWeight: 600, fontSize: '0.8rem', padding: '0.45rem 0.75rem', background: '#f8fafc' }}
+                title="استيراد وتغذية إعلانات بالجملة عبر JSON"
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Upload style={{ width: 16, height: 16 }} /> استيراد بالجملة</span>
+              </button>
+            </>
           )}
 
           {/* Show dashboard to logged-in Brokers and Admins */}
           {(isBroker || isAdmin) && (
-            <button 
-              className={tab === 'dashboard' ? 'active-tab' : 'inactive-tab'} 
-              onClick={() => { navigateTo('#/dashboard'); setMobileMenuOpen(false); }}
-            >
-              لوحة التحكم
-            </button>
+            <>
+              <span className="nav-sep">|</span>
+              <button 
+                className={tab === 'dashboard' ? 'active-tab' : 'inactive-tab'} 
+                onClick={() => { navigateTo('#/dashboard'); setMobileMenuOpen(false); }}
+              >
+                لوحة التحكم
+              </button>
+            </>
           )}
 
           {/* Show admin panel ONLY to logged-in Admins */}
           {isAdmin && (
-            <button 
-              className={tab === 'admin' ? 'active-tab' : 'inactive-tab'} 
-              onClick={() => { navigateTo('#/admin'); setMobileMenuOpen(false); }}
-            >
-              لوحة الإشراف
-            </button>
+            <>
+              <span className="nav-sep">|</span>
+              <button 
+                className={tab === 'admin' ? 'active-tab' : 'inactive-tab'} 
+                onClick={() => { navigateTo('#/admin'); setMobileMenuOpen(false); }}
+              >
+                لوحة الإشراف
+              </button>
+            </>
           )}
+
+          <span className="nav-sep">|</span>
 
           {user ? (
             <div className="nav-user-info">
@@ -1847,7 +1878,26 @@ export default function App() {
                   {isAdmin ? 'مشرف المنصة' : isBroker ? 'وسيط عقاري' : 'مستخدم عادي'}
                 </div>
               </div>
-              <button style={{ background: '#ef4444', color: 'white', border: 'none', padding: '0.4rem 1rem', borderRadius: 'var(--r-md)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }} onClick={() => { setUser(null); showToast("تم تسجيل الخروج"); setTab('browse'); setMobileMenuOpen(false); }}>تسجيل الخروج</button>
+              <button 
+                className="btn-outline"
+                onClick={() => { setUser(null); showToast("تم تسجيل الخروج"); setTab('browse'); setMobileMenuOpen(false); }}
+                style={{ 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '0.35rem', 
+                  fontSize: '0.82rem', 
+                  fontWeight: 600, 
+                  color: '#475569', 
+                  borderColor: '#cbd5e1', 
+                  background: '#f8fafc',
+                  padding: '0.4rem 0.85rem',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer'
+                }}
+              >
+                <LogOut style={{ width: 14, height: 14 }} />
+                <span>تسجيل الخروج</span>
+              </button>
             </div>
           ) : (
             <div className="nav-auth-btns">
