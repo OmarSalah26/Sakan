@@ -124,7 +124,6 @@ export function formatShareText(listing) {
   const servicesStr = servicesInclusive ? 'الخدمات مشمولة' : 'الخدمات غير مشمولة';
 
   const lines = [
-    'شوف السكن ده، لقيته على سكن',
     genderStr,
     locationStr,
     roomTypesList.length > 0 ? `تكوين الغرف: ${roomTypesList.join('، ')}` : null,
@@ -132,7 +131,6 @@ export function formatShareText(listing) {
     depositStr,
     servicesStr,
     unitTotalPrice ? `السعر الكلي: ${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : null,
-    '',
     'التفاصيل والصور على سكن:',
     `https://sakan-egy.com/listings/${listing.id}`
   ].filter(Boolean);

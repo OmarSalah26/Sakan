@@ -337,35 +337,72 @@ const OUTDOOR_AMENITIES = [
   { name: "مكتبة", category: "الخدمات اليومية", prechecked: false }
 ];
 
-export function formatAdvertiserShareText(listing) {
+export function formatUnifiedShareText(listing) {
   if (!listing) return '';
-  const genderText = listing.gender === 'male' ? 'طلاب' : 'طالبات';
-  const locationParts = [listing.neighborhood || listing.city, listing.governorate].filter(Boolean);
-  const locationStr = locationParts.join('، ');
-
+  const genderStr = listing.gender === 'male' ? 'سكن طلاب (شباب)' : 'سكن طالبات (بنات)';
+  
   const configs = Array.isArray(listing.room_configurations) 
     ? listing.room_configurations 
     : typeof listing.room_configurations === 'string'
       ? JSON.parse(listing.room_configurations || '[]')
       : [];
 
-  let totalPrice = 0;
-  if (configs && configs.length > 0) {
-    totalPrice = configs.reduce((sum, c) => {
-      const mult = c.room_type === 'double' ? 2 : c.room_type === 'triple' ? 3 : c.room_type === 'quadruple' ? 4 : 1;
-      return sum + ((c.price_per_person || 0) * (c.count || 1) * mult);
-    }, 0);
-  }
-  if (!totalPrice && listing.price_per_person) {
-    totalPrice = listing.price_per_person;
+  let totalBeds = 0;
+  let servicesInclusive = false;
+  let hasInsurance = false;
+  let insuranceAmount = null;
+  let unitTotalPrice = 0;
+  const roomTypesList = [];
+
+  if (Array.isArray(configs) && configs.length > 0) {
+    configs.forEach(c => {
+      const roomType = c.room_type || 'single';
+      const label = roomType === 'single' ? 'فردية' : roomType === 'double' ? 'ثنائية' : roomType === 'triple' ? 'ثلاثية' : 'رباعية';
+      const multiplier = roomType === 'double' ? 2 : roomType === 'triple' ? 3 : roomType === 'quadruple' ? 4 : 1;
+      const count = c.count || 1;
+      const price = c.price_per_person || 0;
+      
+      totalBeds += multiplier * count;
+      unitTotalPrice += (price * count * multiplier);
+      roomTypesList.push(`${count} غرفة ${label}`);
+
+      if (c.services_inclusive) servicesInclusive = true;
+      if (c.insurance_price) {
+        hasInsurance = true;
+        insuranceAmount = c.insurance_price;
+      }
+    });
   }
 
+  if (totalBeds === 0) {
+    totalBeds = listing.available_beds || 1;
+  }
+  if (!unitTotalPrice && listing.price_per_person) {
+    unitTotalPrice = listing.price_per_person;
+  }
+
+  const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
+  const locationStr = locationParts.join('، ');
+
+  const availStr = `${listing.available_beds || 1} سرير متاح من أصل ${totalBeds}`;
+  let depositStr = 'بدون تأمين';
+  if (hasInsurance && insuranceAmount) {
+    depositStr = `تأمين: ${insuranceAmount} ج.م`;
+  } else if (hasInsurance) {
+    depositStr = 'يتطلب دفع تأمين';
+  }
+
+  const servicesStr = servicesInclusive ? 'الخدمات مشمولة' : 'الخدمات غير مشمولة';
+
   const lines = [
-    `نوع السكن: ${genderText} - ${locationStr}`,
-    totalPrice ? `السعر الكلي: ${totalPrice.toLocaleString()} ج.م/شهرياً` : null,
-    `${listing.available_beds || 1} أسرة متاحة`,
-    '',
-    'شاهد كل التفاصيل على سكن:',
+    genderStr,
+    locationStr,
+    roomTypesList.length > 0 ? `تكوين الغرف: ${roomTypesList.join('، ')}` : null,
+    availStr,
+    depositStr,
+    servicesStr,
+    unitTotalPrice ? `السعر الكلي: ${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : null,
+    'التفاصيل والصور على سكن:',
     `https://sakan-egy.com/listings/${listing.id}`
   ].filter(Boolean);
 
@@ -4735,9 +4772,37 @@ export default function App() {
               إعلانك جاهز الآن
             </h3>
 
-            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1.75rem' }}>
+            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1rem' }}>
               يمكنك مشاركة إعلانك مباشرة على المجموعات والقنوات لوصول أسرع للطلاب.
             </p>
+
+            {/* Visual Message Bubble Preview Box */}
+            <div style={{
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: '16px',
+              padding: '0.9rem 1.15rem',
+              marginBottom: '1.5rem',
+              textAlign: 'right',
+              color: '#0f172a',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#15803d', fontWeight: 800, fontSize: '0.78rem', marginBottom: '0.4rem', borderBottom: '1px solid #dcfce7', paddingBottom: '0.35rem' }}>
+                <MessageSquare style={{ width: 14, height: 14, color: '#16a34a' }} />
+                <span>معاينة نص الإعلان الجاهز للمشاركة:</span>
+              </div>
+              <pre style={{
+                fontFamily: 'inherit',
+                whiteSpace: 'pre-wrap',
+                margin: 0,
+                fontSize: '0.82rem',
+                color: '#1e293b',
+                fontWeight: 600,
+                lineHeight: 1.6
+              }}>
+                {formatUnifiedShareText(postPublishListing)}
+              </pre>
+            </div>
 
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
               <button 
@@ -4755,7 +4820,7 @@ export default function App() {
                 className="btn-primary" 
                 style={{ padding: '0.65rem 1.5rem', fontWeight: 800, borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
                 onClick={async () => {
-                  const shareText = formatAdvertiserShareText(postPublishListing);
+                  const shareText = formatUnifiedShareText(postPublishListing);
                   const shareUrl = `https://sakan-egy.com/listings/${postPublishListing.id}`;
                   
                   if (navigator.share) {
