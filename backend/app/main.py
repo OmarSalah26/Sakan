@@ -195,6 +195,18 @@ class Bookmark(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class AdvertiserMessage(Base):
+    __tablename__ = "advertiser_messages"
+    id = Column(Integer, primary_key=True, index=True)
+    recipient_id = Column(Integer, ForeignKey("users.id"), nullable=True) # None = broadcast to all
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    msg_type = Column(String, default="announcement") # "announcement", "feedback", "system"
+    title = Column(String, nullable=False)
+    body = Column(String, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Governorate(Base):
     __tablename__ = "governorates"
     id = Column(Integer, primary_key=True, index=True)
@@ -334,6 +346,10 @@ def ensure_schema():
         # Check waitlist_entries table
         if "waitlist_entries" not in inspector.get_table_names():
             WaitlistEntry.__table__.create(engine)
+
+        # Check advertiser_messages table
+        if "advertiser_messages" not in inspector.get_table_names():
+            AdvertiserMessage.__table__.create(engine)
 
     # Seed Governorates if empty
     db = SessionLocal()
@@ -2793,6 +2809,80 @@ def report_listing_not_vacant(listing_id: int, payload: Optional[dict] = None):
             "listing_id": listing.id,
             "not_vacant_reports": listing.not_vacant_reports
         }
+    finally:
+        db.close()
+
+
+@app.get('/advertiser/inbox/{user_id}')
+def get_advertiser_inbox(user_id: int):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+        
+        # Get messages sent directly to this user OR broadcast (recipient_id is None)
+        messages = db.query(AdvertiserMessage).filter(
+            or_(
+                AdvertiserMessage.recipient_id == user_id,
+                AdvertiserMessage.recipient_id.is_(None)
+            )
+        ).order_by(AdvertiserMessage.created_at.desc()).all()
+        
+        return [
+            {
+                "id": m.id,
+                "recipient_id": m.recipient_id,
+                "sender_id": m.sender_id,
+                "msg_type": m.msg_type,
+                "title": m.title,
+                "body": m.body,
+                "is_read": m.is_read,
+                "created_at": m.created_at
+            } for m in messages
+        ]
+    finally:
+        db.close()
+
+
+@app.post('/advertiser/inbox/{message_id}/read')
+def mark_message_read(message_id: int):
+    db = SessionLocal()
+    try:
+        msg = db.query(AdvertiserMessage).filter(AdvertiserMessage.id == message_id).first()
+        if not msg:
+            raise HTTPException(status_code=404, detail="الرسالة غير موجودة")
+        msg.is_read = True
+        db.commit()
+        return {"status": "ok", "message_id": message_id}
+    finally:
+        db.close()
+
+
+@app.post('/admin/send-message')
+def admin_send_advertiser_message(payload: dict, x_user_id: Optional[int] = None):
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id)
+        recipient_id = payload.get("recipient_id")  # None for broadcast all
+        msg_type = payload.get("msg_type", "announcement")
+        title = payload.get("title", "").strip()
+        body = payload.get("body", "").strip()
+        
+        if not title or not body:
+            raise HTTPException(status_code=400, detail="عنوان الرسالة ومحتواها مطلوبان")
+            
+        msg = AdvertiserMessage(
+            recipient_id=recipient_id if recipient_id else None,
+            sender_id=x_user_id,
+            msg_type=msg_type,
+            title=title,
+            body=body
+        )
+        db.add(msg)
+        db.commit()
+        db.refresh(msg)
+        return {"status": "sent", "id": msg.id}
     finally:
         db.close()
 

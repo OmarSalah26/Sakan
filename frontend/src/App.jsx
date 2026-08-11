@@ -529,6 +529,11 @@ export default function App() {
     confirm_password: ''
   });
   const [mustChangeUser, setMustChangeUser] = useState(null);
+  
+  // Advertiser Inbox & Admin Messaging state
+  const [advertiserInbox, setAdvertiserInbox] = useState([]);
+  const [selectedInboxMsg, setSelectedInboxMsg] = useState(null);
+  const [adminMsgForm, setAdminMsgForm] = useState({ recipient_id: '', msg_type: 'announcement', title: '', body: '' });
   const [pendingAction, setPendingAction] = useState(null); // callback after auth success
   
   // Filters state
@@ -612,6 +617,54 @@ export default function App() {
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminListings, setAdminListings] = useState([]);
   const [bookmarkedIds, setBookmarkedIds] = useState([]);
+
+  // Load Advertiser Inbox Messages
+  const loadAdvertiserInbox = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_BASE}/advertiser/inbox/${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAdvertiserInbox(data);
+      }
+    } catch {}
+  };
+
+  const markMessageAsRead = async (msgId) => {
+    try {
+      await fetch(`${API_BASE}/advertiser/inbox/${msgId}/read`, { method: 'POST' });
+      setAdvertiserInbox(prev => prev.map(m => m.id === msgId ? { ...m, is_read: true } : m));
+    } catch {}
+  };
+
+  const handleAdminSendMessage = async (e) => {
+    e.preventDefault();
+    if (!adminMsgForm.title || !adminMsgForm.body) {
+      showToast('يرجى إدخال عنوان الرسالة ومحتواها');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/admin/send-message?x_user_id=${user.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient_id: adminMsgForm.recipient_id ? Number(adminMsgForm.recipient_id) : null,
+          msg_type: adminMsgForm.msg_type,
+          title: adminMsgForm.title,
+          body: adminMsgForm.body
+        })
+      });
+      if (res.ok) {
+        showToast('تم إرسال الرسالة للمعلنين بنجاح!');
+        setAdminMsgForm({ recipient_id: '', msg_type: 'announcement', title: '', body: '' });
+      } else {
+        const data = await res.json();
+        showToast(data.detail || 'فشل إرسال الرسالة');
+      }
+    } catch {
+      showToast('خطأ في الاتصال بالخادم');
+    }
+  };
   const [adminTab, setAdminTab] = useState('complaints'); // 'complaints' | 'users' | 'listings' | 'ratings' | 'leaderboard' | 'governorates'
   const [adminSearch, setAdminSearch] = useState('');
   const [adminRatings, setAdminRatings] = useState([]);
@@ -2606,7 +2659,79 @@ export default function App() {
               <button className={adminTab === 'ratings' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('ratings'); loadAdminRatings(); }}>التقييمات</button>
               <button className={adminTab === 'leaderboard' ? 'active-tab' : 'inactive-tab'} onClick={() => setAdminTab('leaderboard')}>الأعلى تقييماً</button>
               <button className={adminTab === 'governorates' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('governorates'); loadAdminGovernorates(); loadAdminWaitlist(); }}>إدارة المحافظات والانتظار</button>
+              <button className={adminTab === 'send_msg' ? 'active-tab' : 'inactive-tab'} onClick={() => setAdminTab('send_msg')}>إرسال رسائل للمعلنين</button>
             </div>
+
+            {/* Send Message to Advertisers subtab */}
+            {adminTab === 'send_msg' && (
+              <div style={{ background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem', marginBottom: '2rem' }}>
+                <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.15rem', fontWeight: 700, color: '#0f172a' }}>
+                  إرسال رسالة أو إعلان إلى صندوق رسائل المعلنين
+                </h3>
+                <p style={{ margin: '0 0 1.25rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  يمكنك توجيه الرسائل والإشعارات إلى معلن محدد أو بث إعلان عام لكافة المعلنين على المنصة.
+                </p>
+
+                <form onSubmit={handleAdminSendMessage} style={{ display: 'grid', gap: '1rem', maxWidth: '600px' }}>
+                  <div className="form-group">
+                    <label style={{ fontWeight: 700, fontSize: '0.85rem' }}>المستلم</label>
+                    <select 
+                      value={adminMsgForm.recipient_id} 
+                      onChange={(e) => setAdminMsgForm({ ...adminMsgForm, recipient_id: e.target.value })}
+                      style={{ padding: '0.55rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                    >
+                      <option value="">جميع المعلنين (بث عام)</option>
+                      {adminUsers.filter(u => u.account_type === 'owner' || u.account_type === 'broker').map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.phone}) — {u.account_type === 'owner' ? 'مالك' : 'وسيط'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label style={{ fontWeight: 700, fontSize: '0.85rem' }}>نوع الرسالة</label>
+                    <select 
+                      value={adminMsgForm.msg_type} 
+                      onChange={(e) => setAdminMsgForm({ ...adminMsgForm, msg_type: e.target.value })}
+                      style={{ padding: '0.55rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                    >
+                      <option value="announcement">إعلان من المنصة (Announcement)</option>
+                      <option value="feedback">ملاحظات وفيدباك (Feedback)</option>
+                      <option value="system">تنبيه نظام (System Notice)</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label style={{ fontWeight: 700, fontSize: '0.85rem' }}>عنوان الرسالة</label>
+                    <input 
+                      type="text" 
+                      placeholder="أدخل عنوان الرسالة" 
+                      required 
+                      value={adminMsgForm.title}
+                      onChange={(e) => setAdminMsgForm({ ...adminMsgForm, title: e.target.value })}
+                      style={{ padding: '0.55rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label style={{ fontWeight: 700, fontSize: '0.85rem' }}>نص الرسالة</label>
+                    <textarea 
+                      placeholder="اكتب محتوى الرسالة هنا..." 
+                      required 
+                      rows="4"
+                      value={adminMsgForm.body}
+                      onChange={(e) => setAdminMsgForm({ ...adminMsgForm, body: e.target.value })}
+                      style={{ padding: '0.55rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                    ></textarea>
+                  </div>
+
+                  <button type="submit" className="btn-primary" style={{ padding: '0.65rem 1.25rem', width: 'fit-content' }}>
+                    إرسال الرسالة إلى صندوق المعلن
+                  </button>
+                </form>
+              </div>
+            )}
 
             {/* 1. Complaints queue subtab */}
             {adminTab === 'complaints' && (
