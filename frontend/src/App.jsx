@@ -5539,35 +5539,35 @@ export default function App() {
         </div>
       )}
 
-      {/* --- CONTACT & FEEDBACK CHANNELS MODAL POPUP --- */}
+            {/* --- CONTACT & FEEDBACK CHANNELS MODAL POPUP --- */}
       {isContactModalOpen && (
         <div className="modal-overlay" style={{ zIndex: 99999 }}>
-          <div className="modal-content" style={{ maxWidth: '520px', borderRadius: '20px', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div className="modal-content" style={{ maxWidth: '480px', borderRadius: '16px', padding: 0, overflow: 'hidden', background: '#ffffff', boxShadow: '0 20px 40px rgba(0,0,0,0.12)' }}>
             
             {/* Modal Header */}
-            <div className="modal-header" style={{ padding: '1.25rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#0f172a' }}>
-                <MessageSquare style={{ width: 20, height: 20, color: 'var(--primary)' }} />
-                قنوات التواصل والدعم الفني
+            <div className="modal-header" style={{ padding: '1.25rem 1.5rem', background: '#ffffff', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontWeight: 700, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#0f172a' }}>
+                <MessageSquare style={{ width: 18, height: 18, color: '#334155' }} />
+                قنوات التواصل والدعم
               </h3>
-              <button className="modal-close" onClick={() => setIsContactModalOpen(false)}>×</button>
+              <button className="modal-close" onClick={() => setIsContactModalOpen(false)} style={{ fontSize: '1.25rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
             </div>
 
             {/* Modal Body */}
-            <div className="modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto' }}>
+            <div className="modal-body" style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               
-              {/* Channel 1: WhatsApp (Questions / Student Enquiries) */}
-              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '14px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {/* Channel 1: WhatsApp */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '0.95rem', color: '#166534' }}>
-                    <MessageSquare style={{ width: 18, height: 18, color: '#16a34a' }} />
-                    <span>أسئلة واستفسارات الطلاب (أسئلة)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700, fontSize: '0.92rem', color: '#0f172a' }}>
+                    <MessageSquare style={{ width: 16, height: 16, color: '#475569' }} />
+                    <span>أسئلة واستفسارات الطلاب</span>
                   </div>
-                  <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', padding: '0.15rem 0.55rem', borderRadius: '999px', fontWeight: 700 }}>
-                    فوري عبر الواتساب
+                  <span style={{ fontSize: '0.7rem', background: '#f1f5f9', color: '#475569', padding: '0.15rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0', fontWeight: 600 }}>
+                    واتساب
                   </span>
                 </div>
-                <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
                   لجميع الأسئلة السريعة والاستفسارات اليومية للطلاب حول السكن المتاح.
                 </p>
                 <a
@@ -5575,67 +5575,67 @@ export default function App() {
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
-                    marginTop: '0.25rem', padding: '0.5rem 1rem', background: '#16a34a', color: '#ffffff',
-                    borderRadius: '8px', textDecoration: 'none', fontWeight: 700, fontSize: '0.82rem',
+                    marginTop: '0.2rem', padding: '0.45rem 0.85rem', background: '#f8fafc', color: '#0f172a',
+                    border: '1px solid #cbd5e1', borderRadius: '8px', textDecoration: 'none', fontWeight: 600, fontSize: '0.82rem',
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', width: 'fit-content'
                   }}
                 >
-                  <MessageSquare style={{ width: 15, height: 15 }} />
-                  مراسلة الدعم عبر الواتساب (01062400034)
+                  <MessageSquare style={{ width: 14, height: 14, color: '#16a34a' }} />
+                  <span>مراسلة عبر الواتساب (01062400034)</span>
                 </a>
               </div>
 
-              {/* Channel 2: Support Email (Suggestions & Feedback) */}
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {/* Channel 2: Support Email */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '0.95rem', color: '#1e40af' }}>
-                    <Mail style={{ width: 18, height: 18, color: '#2563eb' }} />
-                    <span>اقتراحات وملاحظات الفيدباك (اقتراحات)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700, fontSize: '0.92rem', color: '#0f172a' }}>
+                    <Mail style={{ width: 16, height: 16, color: '#475569' }} />
+                    <span>اقتراحات وملاحظات الدعم</span>
                   </div>
-                  <span style={{ fontSize: '0.72rem', background: '#dbeafe', color: '#1d4ed8', padding: '0.15rem 0.55rem', borderRadius: '999px', fontWeight: 700 }}>
-                    إيميل الدعم
+                  <span style={{ fontSize: '0.7rem', background: '#f1f5f9', color: '#475569', padding: '0.15rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0', fontWeight: 600 }}>
+                    البريد الإلكتروني
                   </span>
                 </div>
-                <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
                   لتقديم الفيدباك والاقتراحات أو ملاحظات تحسين تجربة المنصة.
                 </p>
                 <a
                   href="mailto:support@sakan-egy.com"
                   style={{
-                    marginTop: '0.25rem', padding: '0.5rem 1rem', background: '#2563eb', color: '#ffffff',
-                    borderRadius: '8px', textDecoration: 'none', fontWeight: 700, fontSize: '0.82rem',
+                    marginTop: '0.2rem', padding: '0.45rem 0.85rem', background: '#f8fafc', color: '#0f172a',
+                    border: '1px solid #cbd5e1', borderRadius: '8px', textDecoration: 'none', fontWeight: 600, fontSize: '0.82rem',
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', width: 'fit-content'
                   }}
                 >
-                  <Mail style={{ width: 15, height: 15 }} />
-                  support@sakan-egy.com
+                  <Mail style={{ width: 14, height: 14, color: '#2563eb' }} />
+                  <span>support@sakan-egy.com</span>
                 </a>
               </div>
 
-              {/* Channel 3: Business Email (Business & Partnerships) */}
-              <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '14px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {/* Channel 3: Business Email */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '0.95rem', color: '#6b21a8' }}>
-                    <Briefcase style={{ width: 18, height: 18, color: '#9333ea' }} />
-                    <span>استفسارات بزنس وشراكات (بزنس)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700, fontSize: '0.92rem', color: '#0f172a' }}>
+                    <Briefcase style={{ width: 16, height: 16, color: '#475569' }} />
+                    <span>شراكات وأعمال</span>
                   </div>
-                  <span style={{ fontSize: '0.72rem', background: '#f3e8ff', color: '#7e22ce', padding: '0.15rem 0.55rem', borderRadius: '999px', fontWeight: 700 }}>
-                    إيميل البيزنس
+                  <span style={{ fontSize: '0.7rem', background: '#f1f5f9', color: '#475569', padding: '0.15rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0', fontWeight: 600 }}>
+                    البريد التجاري
                   </span>
                 </div>
-                <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.5 }}>
                   لطلبات التعاون وشراكات الأعمال والتوسع السكني الاستثماري.
                 </p>
                 <a
                   href="mailto:business@sakan-egy.com"
                   style={{
-                    marginTop: '0.25rem', padding: '0.5rem 1rem', background: '#9333ea', color: '#ffffff',
-                    borderRadius: '8px', textDecoration: 'none', fontWeight: 700, fontSize: '0.82rem',
+                    marginTop: '0.2rem', padding: '0.45rem 0.85rem', background: '#f8fafc', color: '#0f172a',
+                    border: '1px solid #cbd5e1', borderRadius: '8px', textDecoration: 'none', fontWeight: 600, fontSize: '0.82rem',
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', width: 'fit-content'
                   }}
                 >
-                  <Briefcase style={{ width: 15, height: 15 }} />
-                  business@sakan-egy.com
+                  <Briefcase style={{ width: 14, height: 14, color: '#475569' }} />
+                  <span>business@sakan-egy.com</span>
                 </a>
               </div>
 
