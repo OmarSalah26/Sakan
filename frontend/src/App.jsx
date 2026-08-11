@@ -1628,12 +1628,6 @@ export default function App() {
 
               <div style={{ position: 'relative', zIndex: 2, padding: '3.5rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem', maxWidth: '780px', margin: '0 auto' }}>
                 
-                {/* Brand Pill Badge */}
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.9rem', background: 'rgba(255, 255, 255, 0.08)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255, 255, 255, 0.15)', borderRadius: '999px', fontSize: '0.82rem', fontWeight: 700, color: '#93c5fd' }}>
-                  <Sparkles style={{ width: 14, height: 14, color: '#38bdf8' }} />
-                  منصة الإسكان الطلابي المعتمدة في مصر
-                </div>
-
                 {/* Main Hero Title */}
                 <h1 style={{ fontSize: '2.5rem', fontWeight: 900, lineHeight: 1.25, margin: 0, color: '#ffffff', letterSpacing: '-0.02em' }}>
                   ابحث عن <span style={{ background: 'linear-gradient(135deg, #38bdf8 0%, #818cf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>سكنك الطلابي</span> المثالي
