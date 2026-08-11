@@ -6,12 +6,12 @@ import { useApp } from './context/AppContext';
 import { formatShareText } from './pages/ListingDetailPage';
 
 import { 
-  Bell, BookOpen, Plus, Search, MapPin, CheckCircle, ShieldCheck, 
+  Bell, BookOpen, Plus, Search, MapPin, CheckCircle, CheckCircle2, ShieldCheck, 
   AlertTriangle, Ban, Trash2, StopCircle, Star, Info, Megaphone, 
   User, Home, Briefcase, MessageSquare, Phone, Camera, Send, 
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
   Bed, Check, Clock, Award, Sparkles, Upload, Menu, X, Smartphone,
-  Navigation, Wind, Video
+  Navigation, Wind, Video, ArrowDown, Compass, Building2
 } from 'lucide-react';
 
 
@@ -24,7 +24,7 @@ L.Icon.Default.mergeOptions({
 });
 
 // ---------------------------------------------------------------------------
-// formatAddress — builds a display string from structured address fields
+// formatAddress - builds a display string from structured address fields
 // Falls back to raw address string for old listings
 // ---------------------------------------------------------------------------
 function formatAddress(listing) {
@@ -32,7 +32,7 @@ function formatAddress(listing) {
 }
 
 // ---------------------------------------------------------------------------
-// MapPickerModal — full-screen modal with Leaflet, draggable marker.
+// MapPickerModal - full-screen modal with Leaflet, draggable marker.
 // ---------------------------------------------------------------------------
 function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLng, onConfirm, onClose }) {
   const currentCity = city || cityFallback || governorate || '';
@@ -1618,12 +1618,138 @@ export default function App() {
         {/* TAB 1: BROWSE LISTINGS FEED */}
         {isBrowseTab && (
           <div>
-            <div className="hero-section">
-              <h1 className="hero-title">ابحث عن <span>سكنك الطلابي</span> المثالي</h1>
-              <p className="hero-subtitle">أول منصة متكاملة في مصر لربط الطلاب المغتربين بأفضل الوحدات السكنية المتاحة في جميع المحافظات الجامعية.</p>
-            </div>
+            {/* --- HERO SECTION REDESIGN --- */}
+            <section className="hero-redesign-wrapper" style={{ position: 'relative', borderRadius: '24px', overflow: 'hidden', margin: '0 0 2rem 0', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f2b5c 100%)', color: '#ffffff', boxShadow: '0 12px 32px rgba(15, 23, 42, 0.15)', border: '1px solid #1e293b' }}>
+              {/* Subtle Square Grid Pattern Overlay */}
+              <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px)', backgroundSize: '28px 28px', pointerEvents: 'none' }} />
+              
+              {/* Glow Accents */}
+              <div style={{ position: 'absolute', top: '-20%', left: '-10%', width: '350px', height: '350px', background: 'radial-gradient(circle, rgba(13,99,234,0.35) 0%, transparent 70%)', filter: 'blur(50px)', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', bottom: '-20%', right: '-10%', width: '350px', height: '350px', background: 'radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%)', filter: 'blur(50px)', pointerEvents: 'none' }} />
 
-            <div className="main-layout">
+              <div style={{ position: 'relative', zIndex: 2, padding: '2.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', alignItems: 'center' }}>
+                
+                {/* Left Column: Title, Tagline & In-Page Scroll CTA */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', alignItems: 'flex-start' }}>
+                  {/* Brand Pill Badge */}
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.85rem', background: 'rgba(255, 255, 255, 0.1)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255, 255, 255, 0.18)', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700, color: '#93c5fd' }}>
+                    <Sparkles style={{ width: 14, height: 14, color: '#38bdf8' }} />
+                    منصة الإسكان الطلابي المعتمدة في مصر
+                  </div>
+
+                  {/* Main Hero Title */}
+                  <h1 style={{ fontSize: '2.2rem', fontWeight: 900, lineHeight: 1.25, margin: 0, color: '#ffffff', letterSpacing: '-0.02em' }}>
+                    ابحث عن <span style={{ background: 'linear-gradient(135deg, #38bdf8 0%, #818cf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>سكنك الطلابي</span> المثالي
+                  </h1>
+
+                  {/* Tagline */}
+                  <p style={{ fontSize: '1.15rem', color: '#cbd5e1', fontWeight: 600, margin: 0, lineHeight: 1.5 }}>
+                    سكنك الطلابي، من غير معاناة البحث العشوائي.
+                  </p>
+
+                  {/* Scroll-To CTA Button */}
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      document.getElementById('main-listings-section')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    style={{
+                      marginTop: '0.4rem', padding: '0.85rem 1.75rem', borderRadius: '14px',
+                      background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#ffffff',
+                      border: 'none', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                      boxShadow: '0 8px 24px rgba(37, 99, 235, 0.35)', transition: 'transform 0.2s, box-shadow 0.2s'
+                    }}
+                  >
+                    <span>تصفح العقارات الآن</span>
+                    <ArrowDown style={{ width: 18, height: 18 }} />
+                  </button>
+                </div>
+
+                {/* Right Column: Stylized Egypt Expansion Map & Line-Art Graphics */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: '20px', padding: '1.25rem' }}>
+                  
+                  {/* Map Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.6rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, fontSize: '0.9rem', color: '#f8fafc' }}>
+                      <Compass style={{ width: 18, height: 18, color: '#38bdf8' }} />
+                      خريطة التغطية والتوسع في المحافظات
+                    </div>
+                    <span style={{ fontSize: '0.72rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '0.15rem 0.55rem', borderRadius: '999px', fontWeight: 700 }}>
+                      جمهورية مصر العربية
+                    </span>
+                  </div>
+
+                  {/* Stylized Vector Map SVG Graphic of Nile River & Governorates */}
+                  <div style={{ position: 'relative', width: '100%', height: '140px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px dashed rgba(255, 255, 255, 0.15)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg viewBox="0 0 400 160" style={{ width: '100%', height: '100%', opacity: 0.9 }}>
+                      {/* Nile River Curve Line Graphic */}
+                      <path d="M 280 160 C 270 120, 290 80, 270 50 C 265 40, 250 30, 240 20 L 230 0" fill="none" stroke="#38bdf8" strokeWidth="3" strokeDasharray="4 2" opacity="0.6" />
+                      <path d="M 240 20 L 200 0" fill="none" stroke="#38bdf8" strokeWidth="2" opacity="0.4" />
+
+                      {/* Delta Graphic Polygon */}
+                      <polygon points="210,0 270,0 240,25" fill="rgba(56,189,248,0.12)" stroke="#38bdf8" strokeWidth="1" opacity="0.6" />
+
+                      {/* Live Governorates Nodes (Green Signals) */}
+                      <g>
+                        {/* Damietta (Live) */}
+                        <circle cx="265" cy="12" r="5" fill="#22c55e" />
+                        <circle cx="265" cy="12" r="9" fill="rgba(34,197,94,0.35)" />
+                        <text x="275" y="16" fill="#4ade80" fontSize="10" fontWeight="bold" textAnchor="start">دمياط (مفعلة)</text>
+
+                        {/* Assiut (Live) */}
+                        <circle cx="275" cy="100" r="5" fill="#22c55e" />
+                        <circle cx="275" cy="100" r="9" fill="rgba(34,197,94,0.35)" />
+                        <text x="285" y="104" fill="#4ade80" fontSize="10" fontWeight="bold" textAnchor="start">أسيوط (مفعلة)</text>
+                      </g>
+
+                      {/* Expansion Governorates Nodes (Amber/Purple Signals) */}
+                      <g opacity="0.85">
+                        {/* Cairo */}
+                        <circle cx="242" cy="32" r="3.5" fill="#f59e0b" />
+                        <text x="250" y="35" fill="#fcd34d" fontSize="9" textAnchor="start">القاهرة (قريباً)</text>
+
+                        {/* Giza */}
+                        <circle cx="232" cy="38" r="3.5" fill="#f59e0b" />
+
+                        {/* Alexandria */}
+                        <circle cx="215" cy="12" r="3.5" fill="#a855f7" />
+                        <text x="175" y="15" fill="#c084fc" fontSize="9" textAnchor="start">الإسكندرية (توسع)</text>
+
+                        {/* Daqahlia */}
+                        <circle cx="250" cy="18" r="3.5" fill="#f59e0b" />
+
+                        {/* Monufia */}
+                        <circle cx="236" cy="22" r="3.5" fill="#f59e0b" />
+                      </g>
+                    </svg>
+                  </div>
+
+                  {/* Governorates Legend Badges */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.25)', padding: '0.4rem 0.65rem', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#4ade80', fontWeight: 700 }}>
+                        <CheckCircle2 style={{ width: 14, height: 14 }} />
+                        <span>المحافظات المتاحة حالياً</span>
+                      </div>
+                      <span style={{ fontWeight: 800, color: '#ffffff' }}>دمياط، أسيوط</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.25)', padding: '0.4rem 0.65rem', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#fcd34d', fontWeight: 700 }}>
+                        <Clock style={{ width: 14, height: 14 }} />
+                        <span>توسع قريب جداً</span>
+                      </div>
+                      <span style={{ fontWeight: 700, color: '#cbd5e1' }}>القاهرة، الجيزة، الإسكندرية +22</span>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </section>
+
+            <div className="main-layout" id="main-listings-section">
               {/* Sidebar Filters */}
               <aside className="filter-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                 <h3 style={{ margin: 0, paddingBottom: '0.25rem' }}>
@@ -3272,7 +3398,7 @@ export default function App() {
                         >
                           {authForm.profile_photo_url ? 'تغيير الصورة' : 'رفع صورة شخصية'}
                         </button>
-                        <small style={{ color: 'var(--text-light)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>JPG أو PNG أو WEBP — حد أقصى 10 ميجابايت</small>
+                        <small style={{ color: 'var(--text-light)', fontSize: '0.75rem', display: 'block', marginTop: '0.25rem' }}>JPG أو PNG أو WEBP - حد أقصى 10 ميجابايت</small>
                       </div>
                     </div>
                     <input
@@ -3986,7 +4112,7 @@ export default function App() {
 
                   {/* Photo Upload */}
                   <div className="form-group">
-                    <label>صور الوحدة — {createForm.photo_urls.length} مرفوعة (٥ كحد أدنى، ٣٠ كحد أقصى)</label>
+                    <label>صور الوحدة - {createForm.photo_urls.length} مرفوعة (٥ كحد أدنى، ٣٠ كحد أقصى)</label>
 
                     {/* Thumbnail grid */}
                     {createForm.photo_urls.length > 0 && (
@@ -4072,7 +4198,7 @@ export default function App() {
                     >
                       <Camera style={{ width: 28, height: 28, color: 'var(--text-muted)' }} />
                       <span style={{ fontWeight: 600 }}>اضغط لرفع صور الوحدة السكنية</span>
-                      <span style={{ fontSize: '0.75rem' }}>JPG, PNG, WEBP — حد أقصى 10 ميجابايت لكل صورة</span>
+                      <span style={{ fontSize: '0.75rem' }}>JPG, PNG, WEBP - حد أقصى 10 ميجابايت لكل صورة</span>
                       <input
                         id="listing-photo-input"
                         type="file"

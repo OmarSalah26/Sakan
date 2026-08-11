@@ -108,7 +108,7 @@ export function formatShareText(listing) {
   const locationStr = locationParts.join('، ');
 
   const lines = [
-    `${listing.title} — ${genderStr}`,
+    `${listing.title} - ${genderStr}`,
     locationStr,
     availStr,
     depositStr,
@@ -145,7 +145,7 @@ export default function ListingDetailPage() {
     if (data && data.listing) {
       const l = data.listing;
       const genderStr = l.gender === 'male' ? 'طلاب (شباب)' : 'طالبات (بنات)';
-      const pageTitle = `${l.title} — ${genderStr} | سكن Sakan`;
+      const pageTitle = `${l.title} - ${genderStr} | سكن Sakan`;
       document.title = pageTitle;
 
       const setMeta = (propName, content) => {
@@ -162,11 +162,11 @@ export default function ListingDetailPage() {
       const shareDesc = formatShareText(l);
       const coverPhoto = l.photo_urls?.[0] ? formatImageUrl(l.photo_urls[0]) : "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80";
 
-      setMeta('og:title', `${l.title} — ${genderStr}`);
+      setMeta('og:title', `${l.title} - ${genderStr}`);
       setMeta('og:description', shareDesc);
       setMeta('og:image', coverPhoto);
       setMeta('og:url', `https://sakan-egy.com/listings/${l.id}`);
-      setMeta('twitter:title', `${l.title} — ${genderStr}`);
+      setMeta('twitter:title', `${l.title} - ${genderStr}`);
       setMeta('twitter:description', shareDesc);
       setMeta('twitter:image', coverPhoto);
       setMeta('twitter:card', 'summary_large_image');
