@@ -68,20 +68,33 @@ const OUTDOOR_AMENITIES = [
 
 export function formatShareText(listing) {
   if (!listing) return '';
-  const genderStr = listing.gender === 'male' ? 'طلاب (شباب)' : 'طالبات (بنات)';
+  const genderStr = listing.gender === 'male' ? 'سكن طلاب (شباب)' : 'سكن طالبات (بنات)';
   
-  const configs = listing.room_configurations || [];
+  const configs = Array.isArray(listing.room_configurations) 
+    ? listing.room_configurations 
+    : typeof listing.room_configurations === 'string'
+      ? JSON.parse(listing.room_configurations || '[]')
+      : [];
+
   let totalBeds = 0;
   let servicesInclusive = false;
   let hasInsurance = false;
   let insuranceAmount = null;
+  let unitTotalPrice = 0;
+  const roomTypesList = [];
 
-  if (Array.isArray(configs)) {
+  if (Array.isArray(configs) && configs.length > 0) {
     configs.forEach(c => {
       const roomType = c.room_type || 'single';
-      const bedCount = roomType === 'single' ? 1 : roomType === 'double' ? 2 : roomType === 'triple' ? 3 : 4;
+      const label = roomType === 'single' ? 'فردية' : roomType === 'double' ? 'ثنائية' : roomType === 'triple' ? 'ثلاثية' : 'رباعية';
+      const multiplier = roomType === 'double' ? 2 : roomType === 'triple' ? 3 : roomType === 'quadruple' ? 4 : 1;
       const count = c.count || 1;
-      totalBeds += bedCount * count;
+      const price = c.price_per_person || 0;
+      
+      totalBeds += multiplier * count;
+      unitTotalPrice += (price * count * multiplier);
+      roomTypesList.push(`${count} غرفة ${label}`);
+
       if (c.services_inclusive) servicesInclusive = true;
       if (c.insurance_price) {
         hasInsurance = true;
@@ -93,32 +106,36 @@ export function formatShareText(listing) {
   if (totalBeds === 0) {
     totalBeds = listing.available_beds || 1;
   }
+  if (!unitTotalPrice && listing.price_per_person) {
+    unitTotalPrice = listing.price_per_person;
+  }
 
-  const availStr = `${listing.available_beds} سرير متاح من أصل ${totalBeds}`;
+  const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
+  const locationStr = locationParts.join('، ');
+
+  const availStr = `${listing.available_beds || 1} سرير متاح من أصل ${totalBeds}`;
   let depositStr = 'بدون تأمين';
   if (hasInsurance && insuranceAmount) {
     depositStr = `تأمين: ${insuranceAmount} ج.م`;
   } else if (hasInsurance) {
-    depositStr = 'يوجد تأمين';
+    depositStr = 'يتطلب دفع تأمين';
   }
 
-  const servicesStr = servicesInclusive ? 'شامل الخدمات' : 'الخدمات غير مشمولة';
-  const priceStr = listing.price_per_person ? `السعر: ${listing.price_per_person} ج.م / شهرياً` : '';
-  const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
-  const locationStr = locationParts.join('، ');
+  const servicesStr = servicesInclusive ? 'الخدمات مشمولة' : 'الخدمات غير مشمولة';
 
   const lines = [
-    `${listing.title} - ${genderStr}`,
+    'شوف السكن ده، لقيته على سكن',
+    genderStr,
     locationStr,
+    roomTypesList.length > 0 ? `تكوين الغرف: ${roomTypesList.join('، ')}` : null,
     availStr,
     depositStr,
     servicesStr,
-  ];
-  if (priceStr) lines.push(priceStr);
-
-  lines.push('');
-  lines.push('شاهد التفاصيل الكاملة والأسعار على سكن:');
-  lines.push(`https://sakan-egy.com/listings/${listing.id}`);
+    unitTotalPrice ? `السعر الكلي: ${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : null,
+    '',
+    'التفاصيل والصور على سكن:',
+    `https://sakan-egy.com/listings/${listing.id}`
+  ].filter(Boolean);
 
   return lines.join('\n');
 }

@@ -337,6 +337,41 @@ const OUTDOOR_AMENITIES = [
   { name: "مكتبة", category: "الخدمات اليومية", prechecked: false }
 ];
 
+export function formatAdvertiserShareText(listing) {
+  if (!listing) return '';
+  const genderText = listing.gender === 'male' ? 'طلاب' : 'طالبات';
+  const locationParts = [listing.neighborhood || listing.city, listing.governorate].filter(Boolean);
+  const locationStr = locationParts.join('، ');
+
+  const configs = Array.isArray(listing.room_configurations) 
+    ? listing.room_configurations 
+    : typeof listing.room_configurations === 'string'
+      ? JSON.parse(listing.room_configurations || '[]')
+      : [];
+
+  let totalPrice = 0;
+  if (configs && configs.length > 0) {
+    totalPrice = configs.reduce((sum, c) => {
+      const mult = c.room_type === 'double' ? 2 : c.room_type === 'triple' ? 3 : c.room_type === 'quadruple' ? 4 : 1;
+      return sum + ((c.price_per_person || 0) * (c.count || 1) * mult);
+    }, 0);
+  }
+  if (!totalPrice && listing.price_per_person) {
+    totalPrice = listing.price_per_person;
+  }
+
+  const lines = [
+    `نوع السكن: ${genderText} - ${locationStr}`,
+    totalPrice ? `السعر الكلي: ${totalPrice.toLocaleString()} ج.م/شهرياً` : null,
+    `${listing.available_beds || 1} أسرة متاحة`,
+    '',
+    'شاهد كل التفاصيل على سكن:',
+    `https://sakan-egy.com/listings/${listing.id}`
+  ].filter(Boolean);
+
+  return lines.join('\n');
+}
+
 export default function App() {
   const { user, setUser, showToast } = useApp();
   const navigate = useNavigate();
@@ -4688,26 +4723,26 @@ export default function App() {
         </div>
       )}
 
-      {/* --- POST-PUBLISH SHARE MODAL --- */}
+      {/* --- POST-PUBLISH SHARE MODAL REWORK --- */}
       {isPostPublishModalOpen && postPublishListing && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
-          <div className="modal-content" style={{ maxWidth: '500px', textAlign: 'center', padding: '2rem 1.5rem' }}>
-            <div style={{ background: '#dcfce7', color: '#166534', width: '56px', height: '56px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-              <CheckCircle style={{ width: 32, height: 32 }} />
+          <div className="modal-content" style={{ maxWidth: '480px', textAlign: 'center', padding: '2rem 1.5rem', borderRadius: '20px' }}>
+            <div style={{ background: '#dcfce7', color: '#10b981', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
+              <CheckCircle style={{ width: 36, height: 36, color: '#10b981' }} />
             </div>
 
-            <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-dark)', marginBottom: '0.75rem' }}>
-              تم نشر إعلانك بنجاح
+            <h3 style={{ fontSize: '1.45rem', fontWeight: 900, color: 'var(--text-dark)', marginBottom: '0.5rem' }}>
+              إعلانك جاهز الآن
             </h3>
 
-            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1.5rem' }}>
-              عايز تشاركه في الجروبات وقنواتك التانية؟ دوس وهيبقى معاك نسخة تقدر تعملها لصق في أي مكان.
+            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1.75rem' }}>
+              يمكنك مشاركة إعلانك مباشرة على المجموعات والقنوات لوصول أسرع للطلاب.
             </p>
 
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
               <button 
                 className="btn-outline" 
-                style={{ padding: '0.65rem 1.25rem', fontWeight: 600 }}
+                style={{ padding: '0.65rem 1.25rem', fontWeight: 600, borderRadius: '12px' }}
                 onClick={() => {
                   setIsPostPublishModalOpen(false);
                   setPostPublishListing(null);
@@ -4718,24 +4753,34 @@ export default function App() {
 
               <button 
                 className="btn-primary" 
-                style={{ padding: '0.65rem 1.5rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                style={{ padding: '0.65rem 1.5rem', fontWeight: 800, borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
                 onClick={async () => {
-                  const textToCopy = formatShareText(postPublishListing);
-                  if (navigator.clipboard) {
+                  const shareText = formatAdvertiserShareText(postPublishListing);
+                  const shareUrl = `https://sakan-egy.com/listings/${postPublishListing.id}`;
+                  
+                  if (navigator.share) {
                     try {
-                      await navigator.clipboard.writeText(textToCopy);
-                      showToast('تم نسخ الإعلان بنجاح! جاهز للمشاركة');
-                    } catch {
-                      showToast('تعذر نسخ النص تلقائياً');
+                      await navigator.share({
+                        title: postPublishListing.title,
+                        text: shareText,
+                        url: shareUrl
+                      });
+                      showToast('تمت مشاركة الإعلان بنجاح!');
+                    } catch (err) {
+                      if (err.name !== 'AbortError' && navigator.clipboard) {
+                        await navigator.clipboard.writeText(shareText);
+                        showToast('تم نسخ نص الإعلان جاهزاً للمشاركة!');
+                      }
                     }
-                  } else {
-                    showToast('تم نسخ الإعلان بنجاح! جاهز للمشاركة');
+                  } else if (navigator.clipboard) {
+                    await navigator.clipboard.writeText(shareText);
+                    showToast('تم نسخ نص الإعلان جاهزاً للمشاركة!');
                   }
                   setIsPostPublishModalOpen(false);
                   setPostPublishListing(null);
                 }}
               >
-                <Share2 style={{ width: 18, height: 18 }} /> انسخ الإعلان
+                <Share2 style={{ width: 18, height: 18 }} /> مشاركة الإعلان
               </button>
             </div>
           </div>
