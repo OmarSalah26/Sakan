@@ -366,24 +366,32 @@ def ensure_schema():
             for gname in all_gov_names:
                 gstatus = "live" if gname in live_govs else "waitlist_open"
                 db.add(Governorate(name=gname, status=gstatus))
-            # Ensure default admin account exists with password sakan2026
+            db.commit()
+
+        # Ensure default admin account exists with password sakan2026
+        admin = db.query(User).filter(User.phone == "01000000000").first()
+        if not admin:
             admin = db.query(User).filter(User.account_type == "admin").first()
-            if not admin:
-                admin = User(
-                    phone="01000000000",
-                    name="مسؤول المنصة (Admin)",
-                    account_type="admin",
-                    is_verified=True,
-                    verified_by_sakan=True,
-                    password_hash=hash_password("sakan2026"),
-                    must_change_password=False
-                )
-                db.add(admin)
-                db.commit()
-            else:
-                admin.password_hash = hash_password("sakan2026")
-                admin.must_change_password = False
-                db.commit()
+
+        if not admin:
+            admin = User(
+                phone="01000000000",
+                name="مسؤول المنصة (Admin)",
+                account_type="admin",
+                is_verified=True,
+                verified_by_sakan=True,
+                password_hash=hash_password("sakan2026"),
+                must_change_password=False
+            )
+            db.add(admin)
+            db.commit()
+        else:
+            admin.phone = "01000000000"
+            admin.name = "مسؤول المنصة (Admin)"
+            admin.account_type = "admin"
+            admin.password_hash = hash_password("sakan2026")
+            admin.must_change_password = False
+            db.commit()
     finally:
         db.close()
 
@@ -859,7 +867,7 @@ def register_user(payload: RegisterRequest):
             raise HTTPException(status_code=400, detail="الاسم بالكامل مطلوب لجميع الحسابات")
 
         user = db.query(User).filter(User.phone == payload.phone).first()
-        if user:
+        if user and user.password_hash:
             raise HTTPException(status_code=400, detail="رقم الهاتف مسجل بالفعل، يرجى تسجيل الدخول بدلاً من ذلك")
 
         otp_code = "123456"
@@ -1029,7 +1037,7 @@ def login_password(payload: LoginPasswordRequest):
             raise HTTPException(status_code=404, detail="رقم الهاتف غير مسجل لدينا، يرجى إنشاء حساب جديد")
 
         if not user.password_hash:
-            raise HTTPException(status_code=400, detail="هذا الحساب لا يمتلك كلمة مرور حالياً، يرجى الدخول عبر رمز التحقق OTP")
+            raise HTTPException(status_code=400, detail="هذا الحساب لا يمتلك كلمة مرور حالياً. يرجى استخدام خيار 'إنشاء حساب جديد' لتعيين كلمة مرور لحسابك عبر رمز التحقق OTP.")
 
         if not verify_password(payload.password, user.password_hash):
             raise HTTPException(status_code=401, detail="كلمة المرور غير صحيحة")

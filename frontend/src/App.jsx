@@ -1238,24 +1238,30 @@ export default function App() {
             }
           } catch {}
         }
-        if (authMode === 'register' && data.account_type !== 'student' && (!data.name || data.name === "مستخدم جديد")) {
-          setUser(finalUser);
-          setAuthStep('details');
+        if (authMode === 'register') {
+          setMustChangeUser(finalUser);
+          setAuthStep('change_password');
+          showToast("تم التحقق بنجاح! يرجى تعيين كلمة المرور لحسابك لمتابعة استخدامه");
         } else {
-          setUser(finalUser);
-          setIsAuthOpen(false);
-          showToast(`تم تسجيل الدخول بنجاح! مرحباً بك، ${data.name || ''}`);
-          if (pendingActionRef.current) {
-            const cb = pendingActionRef.current;
-            pendingActionRef.current = null;
-            cb(finalUser);
+          if (data.account_type !== 'student' && (!data.name || data.name === "مستخدم جديد")) {
+            setUser(finalUser);
+            setAuthStep('details');
           } else {
-            if (data.account_type === 'broker' || data.account_type === 'owner') {
-              navigateTo('#/dashboard');
-            } else if (data.account_type === 'admin') {
-              navigateTo('#/admin');
+            setUser(finalUser);
+            setIsAuthOpen(false);
+            showToast(`تم تسجيل الدخول بنجاح! مرحباً بك، ${data.name || ''}`);
+            if (pendingActionRef.current) {
+              const cb = pendingActionRef.current;
+              pendingActionRef.current = null;
+              cb(finalUser);
             } else {
-              navigateTo('#/browse');
+              if (data.account_type === 'broker' || data.account_type === 'owner') {
+                navigateTo('#/dashboard');
+              } else if (data.account_type === 'admin') {
+                navigateTo('#/admin');
+              } else {
+                navigateTo('#/browse');
+              }
             }
           }
         }
