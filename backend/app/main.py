@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text, or_
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 import json
@@ -366,7 +366,7 @@ def ensure_schema():
             for gname in all_gov_names:
                 gstatus = "live" if gname in live_govs else "waitlist_open"
                 db.add(Governorate(name=gname, status=gstatus))
-            # Ensure default admin account exists
+            # Ensure default admin account exists with password sakan2026
             admin = db.query(User).filter(User.account_type == "admin").first()
             if not admin:
                 admin = User(
@@ -374,9 +374,15 @@ def ensure_schema():
                     name="مسؤول المنصة (Admin)",
                     account_type="admin",
                     is_verified=True,
-                    verified_by_sakan=True
+                    verified_by_sakan=True,
+                    password_hash=hash_password("sakan2026"),
+                    must_change_password=False
                 )
                 db.add(admin)
+                db.commit()
+            else:
+                admin.password_hash = hash_password("sakan2026")
+                admin.must_change_password = False
                 db.commit()
     finally:
         db.close()
@@ -1428,7 +1434,17 @@ def list_listings(
         )
 
         if governorate:
-            query = query.filter(Listing.governorate == governorate)
+            gov_clean = governorate.replace("محافظة ", "").strip()
+            base_gov = gov_clean.replace("الجديدة", "").strip()
+            query = query.filter(
+                or_(
+                    Listing.governorate == governorate,
+                    Listing.governorate == gov_clean,
+                    Listing.governorate == base_gov,
+                    Listing.governorate.ilike(f"{base_gov}%"),
+                    Listing.city.ilike(f"%{base_gov}%")
+                )
+            )
         if city:
             query = query.filter(Listing.city == city)
         if neighborhood:

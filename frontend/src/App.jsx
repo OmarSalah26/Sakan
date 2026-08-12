@@ -11,7 +11,8 @@ import {
   User, Home, Briefcase, MessageSquare, Phone, Camera, Send, 
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
   Bed, Check, Clock, Award, Sparkles, Upload, Menu, X, Smartphone,
-  Navigation, Wind, Video, ArrowDown, Compass, Building2, Mail, LogOut
+  Navigation, Wind, Video, ArrowDown, Compass, Building2, Mail, LogOut,
+  Eye, EyeOff
 } from 'lucide-react';
 
 
@@ -547,6 +548,9 @@ export default function App() {
     confirm_password: ''
   });
   const [mustChangeUser, setMustChangeUser] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Advertiser Inbox & Admin Messaging state
   const [advertiserInbox, setAdvertiserInbox] = useState([]);
@@ -963,10 +967,16 @@ export default function App() {
     const raw = newHash.replace('#/', '').replace('#', '');
     const targetTab = raw || 'browse';
     setTab(targetTab);
+    window.scrollTo({ top: 0, left: 0 });
     if (window.location.hash !== newHash) {
       window.location.hash = newHash;
     }
   };
+
+  // Reset scroll to top on tab change
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0 });
+  }, [tab]);
 
 
 
@@ -2341,7 +2351,7 @@ export default function App() {
               </aside>
 
               {/* Listings feed */}
-              <section style={{ flexGrow: 1 }}>
+              <section style={{ flexGrow: 1, width: '100%', minWidth: 0 }}>
                 <div className="section-header" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
                     <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>ترتيب حسب:</span>
                     <select 
@@ -3678,13 +3688,24 @@ export default function App() {
 
                     <div className="form-group">
                       <label>كلمة المرور</label>
-                      <input 
-                        type="password" 
-                        placeholder="أدخل كلمة المرور" 
-                        required 
-                        value={authForm.password || ''}
-                        onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
-                      />
+                      <div style={{ position: 'relative' }}>
+                        <input 
+                          type={showPassword ? "text" : "password"} 
+                          placeholder="أدخل كلمة المرور" 
+                          required 
+                          value={authForm.password || ''}
+                          onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                          style={{ paddingLeft: '2.5rem' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', padding: 0 }}
+                          title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                        >
+                          {showPassword ? <EyeOff style={{ width: 18, height: 18 }} /> : <Eye style={{ width: 18, height: 18 }} />}
+                        </button>
+                      </div>
                     </div>
 
                     <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
@@ -3753,26 +3774,48 @@ export default function App() {
 
                   <div className="form-group">
                     <label>كلمة المرور الجديدة (الحد الأدنى 6 أحرف)</label>
-                    <input 
-                      type="password" 
-                      placeholder="******" 
-                      required 
-                      minLength={6}
-                      value={authForm.new_password || ''}
-                      onChange={(e) => setAuthForm({ ...authForm, new_password: e.target.value })}
-                    />
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type={showNewPassword ? "text" : "password"} 
+                        placeholder="******" 
+                        required 
+                        minLength={6}
+                        value={authForm.new_password || ''}
+                        onChange={(e) => setAuthForm({ ...authForm, new_password: e.target.value })}
+                        style={{ paddingLeft: '2.5rem' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', padding: 0 }}
+                        title={showNewPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                      >
+                        {showNewPassword ? <EyeOff style={{ width: 18, height: 18 }} /> : <Eye style={{ width: 18, height: 18 }} />}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="form-group">
                     <label>تأكيد كلمة المرور الجديدة</label>
-                    <input 
-                      type="password" 
-                      placeholder="******" 
-                      required 
-                      minLength={6}
-                      value={authForm.confirm_password || ''}
-                      onChange={(e) => setAuthForm({ ...authForm, confirm_password: e.target.value })}
-                    />
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type={showConfirmPassword ? "text" : "password"} 
+                        placeholder="******" 
+                        required 
+                        minLength={6}
+                        value={authForm.confirm_password || ''}
+                        onChange={(e) => setAuthForm({ ...authForm, confirm_password: e.target.value })}
+                        style={{ paddingLeft: '2.5rem' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', padding: 0 }}
+                        title={showConfirmPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                      >
+                        {showConfirmPassword ? <EyeOff style={{ width: 18, height: 18 }} /> : <Eye style={{ width: 18, height: 18 }} />}
+                      </button>
+                    </div>
                   </div>
 
                   <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.75rem' }}>
@@ -4002,7 +4045,7 @@ export default function App() {
                       <label>المدينة / المركز</label>
                       <input 
                         type="text" 
-                        placeholder="مثال: أسيوط الجديدة، دمياط الجديدة..." 
+                        placeholder="مثال: القاهرة الجديدة..." 
                         value={createForm.city} 
                         onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })} 
                         required 
