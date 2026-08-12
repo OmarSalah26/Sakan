@@ -339,7 +339,7 @@ const OUTDOOR_AMENITIES = [
   { name: "مكتبة", category: "الخدمات اليومية", prechecked: false }
 ];
 
-export function formatUnifiedShareText(listing) {
+export function formatUnifiedShareText(listing, isAdvertiser = false) {
   if (!listing) return '';
   const genderStr = listing.gender === 'male' ? 'سكن طلاب (شباب)' : 'سكن طالبات (بنات)';
   
@@ -385,8 +385,8 @@ export function formatUnifiedShareText(listing) {
 
   const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
   const locationStr = locationParts.join('، ');
-
   const availStr = `${listing.available_beds || 1} سرير متاح من أصل ${totalBeds}`;
+
   let depositStr = 'بدون تأمين';
   if (hasInsurance && insuranceAmount) {
     depositStr = `تأمين: ${insuranceAmount} ج.م`;
@@ -395,16 +395,34 @@ export function formatUnifiedShareText(listing) {
   }
 
   const servicesStr = servicesInclusive ? 'الخدمات مشمولة' : 'الخدمات غير مشمولة';
+  const priceStr = unitTotalPrice ? `${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : '';
+
+  if (isAdvertiser) {
+    const lines = [
+      `*${listing.title || 'سكن رائع'}*`,
+      `📍 *الموقع:* ${locationStr}`,
+      `👥 *النوع:* ${genderStr}`,
+      `🛏 *الأسرة المتاحة:* ${availStr}`,
+      priceStr ? `💰 *السعر:* ${priceStr}` : null,
+      '',
+      '📱 *التفاصيل والصور كاملة على منصة سكن:*',
+      `https://sakan-egy.com/listings/${listing.id}`
+    ].filter(Boolean);
+    return lines.join('\n');
+  }
 
   const lines = [
-    genderStr,
-    locationStr,
-    roomTypesList.length > 0 ? `تكوين الغرف: ${roomTypesList.join('، ')}` : null,
-    availStr,
-    depositStr,
-    servicesStr,
-    unitTotalPrice ? `السعر الكلي: ${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : null,
-    'التفاصيل والصور على سكن:',
+    `*${listing.title || 'سكن رائع'}*`,
+    `📍 ${locationStr}`,
+    '',
+    `• *النوع:* ${genderStr}`,
+    roomTypesList.length > 0 ? `• *الغرف:* ${roomTypesList.join('، ')}` : null,
+    `• *الأسرة:* ${availStr}`,
+    `• *التأمين:* ${depositStr}`,
+    `• *الخدمات:* ${servicesStr}`,
+    priceStr ? `• *السعر:* ${priceStr}` : null,
+    '',
+    '🔗 *شاهد الصور والتفاصيل كاملة:*',
     `https://sakan-egy.com/listings/${listing.id}`
   ].filter(Boolean);
 
@@ -1778,7 +1796,7 @@ export default function App() {
   };
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Navigation Header */}
       <header className="navbar">
         <div className="nav-brand-wrapper">
@@ -1933,9 +1951,13 @@ export default function App() {
           {user ? (
             <div className="nav-user-info" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
               <div 
-                onClick={() => { setProfileUserId(user.id); navigateTo('#/profile'); setMobileMenuOpen(false); }}
-                style={{ width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid #cbd5e1', cursor: 'pointer' }}
-                title="الملف الشخصي"
+                onClick={() => { 
+                  if (user.account_type !== 'student') {
+                    setProfileUserId(user.id); navigateTo('#/profile'); setMobileMenuOpen(false);
+                  }
+                }}
+                style={{ width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid #cbd5e1', cursor: user.account_type !== 'student' ? 'pointer' : 'default' }}
+                title={user.account_type !== 'student' ? 'الملف الشخصي' : user.name}
               >
                 {user.profile_photo_url ? (
                   <img 
@@ -1984,7 +2006,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="container">
+      <main className="container" style={{ flexGrow: 1 }}>
         
         {/* TAB 1: BROWSE LISTINGS FEED */}
         {isBrowseTab && (
@@ -2320,12 +2342,7 @@ export default function App() {
 
               {/* Listings feed */}
               <section style={{ flexGrow: 1 }}>
-                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span className="section-count" style={{ fontWeight: 700, fontSize: '0.95rem' }}>العقارات المتاحة: {sortedListings.length} إعلان</span>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
                     <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>ترتيب حسب:</span>
                     <select 
                       value={sortBy} 
@@ -2337,7 +2354,6 @@ export default function App() {
                       <option value="price_asc">السعر: من الأقل للأعلى</option>
                       <option value="price_desc">السعر: من الأعلى للأقل</option>
                     </select>
-                  </div>
                 </div>
 
                 {sortedListings.length === 0 ? (
@@ -2469,7 +2485,7 @@ export default function App() {
                             {/* Focal Point 1: Hero Price Summary (Total Unit Rent as Hero) */}
                             <div style={{ background: '#f8fafc', padding: '0.75rem 0.85rem', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
                               <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
-                                <span style={{ fontSize: '1.55rem', fontWeight: 900, color: 'var(--primary-dark)', letterSpacing: '-0.02em' }}>
+                                <span style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--primary-dark)', letterSpacing: '-0.02em' }}>
                                   {totalUnitRent ? totalUnitRent.toLocaleString() : (minPrice ? minPrice.toLocaleString() : '---')} ج.م
                                 </span>
                                 <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>
@@ -3491,6 +3507,14 @@ export default function App() {
 
         {/* TAB 7: PROFILE VIEW PAGE (`#/profile/:id`) */}
         {tab === 'profile' && (
+          user && user.account_type === 'student' && String(profileUserId) === String(user.id) ? (
+            <div style={{ maxWidth: '500px', margin: '2rem auto', textAlign: 'center', padding: '2rem', background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
+              <User style={{ width: 48, height: 48, color: 'var(--text-muted)', margin: '0 auto 1rem' }} />
+              <h3 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>مرحباً، {user.name}</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{user.phone}</p>
+              <p style={{ color: 'var(--text-light)', fontSize: '0.82rem' }}>حسابات الطلاب لا تحتوي على صفحة ملف شخصي.</p>
+            </div>
+          ) : (
           <div style={{ maxWidth: '800px', margin: '0 auto' }}>
             {!profileData ? (
               <div style={{ textAlign: 'center', padding: '3rem', background: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
@@ -3585,6 +3609,7 @@ export default function App() {
               </div>
             )}
           </div>
+          )
         )}
 
       </main>
@@ -5237,7 +5262,7 @@ export default function App() {
                 fontWeight: 600,
                 lineHeight: 1.6
               }}>
-                {formatUnifiedShareText(postPublishListing)}
+                {formatUnifiedShareText(postPublishListing, true)}
               </pre>
             </div>
 
@@ -5257,7 +5282,7 @@ export default function App() {
                 className="btn-primary" 
                 style={{ padding: '0.65rem 1.5rem', fontWeight: 800, borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
                 onClick={async () => {
-                  const shareText = formatUnifiedShareText(postPublishListing);
+                  const shareText = formatUnifiedShareText(postPublishListing, true);
                   const shareUrl = `https://sakan-egy.com/listings/${postPublishListing.id}`;
                   
                   if (navigator.share) {
@@ -5289,7 +5314,7 @@ export default function App() {
         </div>
       )}
       {/* --- FLOATING MOBILE FILTER FAB --- */}
-      {tab === 'browse' && (
+      {tab === 'browse' && !isAuthOpen && !isCreateOpen && !isMobileFilterOpen && !isContactModalOpen && !isPostPublishModalOpen && !isWaitlistOpen && !isAreaGateOpen && !selectedInboxMsg && (
         <button 
           className="mobile-filter-fab"
           style={{
@@ -5300,7 +5325,7 @@ export default function App() {
           }}
           onClick={() => setIsMobileFilterOpen(true)}
         >
-          <Search style={{ width: 18, height: 18 }} /> تصفية النتائج ({sortedListings.length})
+          <Search style={{ width: 18, height: 18 }} /> تصفية النتائج
         </button>
       )}
 

@@ -114,8 +114,8 @@ export function formatShareText(listing) {
 
   const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
   const locationStr = locationParts.join('، ');
-
   const availStr = `${listing.available_beds || 1} سرير متاح من أصل ${totalBeds}`;
+
   let depositStr = 'بدون تأمين';
   if (hasInsurance && insuranceAmount) {
     depositStr = `تأمين: ${insuranceAmount} ج.م`;
@@ -124,16 +124,20 @@ export function formatShareText(listing) {
   }
 
   const servicesStr = servicesInclusive ? 'الخدمات مشمولة' : 'الخدمات غير مشمولة';
+  const priceStr = unitTotalPrice ? `${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : '';
 
   const lines = [
-    genderStr,
-    locationStr,
-    roomTypesList.length > 0 ? `تكوين الغرف: ${roomTypesList.join('، ')}` : null,
-    availStr,
-    depositStr,
-    servicesStr,
-    unitTotalPrice ? `السعر الكلي: ${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : null,
-    'التفاصيل والصور على سكن:',
+    `*${listing.title || 'سكن رائع'}*`,
+    `📍 ${locationStr}`,
+    '',
+    `• *النوع:* ${genderStr}`,
+    roomTypesList.length > 0 ? `• *الغرف:* ${roomTypesList.join('، ')}` : null,
+    `• *الأسرة:* ${availStr}`,
+    `• *التأمين:* ${depositStr}`,
+    `• *الخدمات:* ${servicesStr}`,
+    priceStr ? `• *السعر:* ${priceStr}` : null,
+    '',
+    '🔗 *شاهد الصور والتفاصيل كاملة:*',
     `https://sakan-egy.com/listings/${listing.id}`
   ].filter(Boolean);
 
@@ -255,7 +259,6 @@ export default function ListingDetailPage() {
     e.preventDefault();
     if (!user) {
       showToast('يرجى تسجيل الدخول أولاً لإضافة تقييم');
-      navigate('/?auth=login');
       return;
     }
     const targetType = detailRatingTab === 'property' ? 'property' : 'advertiser';
@@ -295,7 +298,6 @@ export default function ListingDetailPage() {
     e.preventDefault();
     if (!user) {
       showToast('يرجى تسجيل الدخول أولاً لتقديم بلاغ');
-      navigate('/?auth=login');
       return;
     }
     if (complaintInput.description.length < 20) {
@@ -742,7 +744,7 @@ export default function ListingDetailPage() {
                 </div>
 
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
-                  <a href="#/guide" onClick={(e) => { e.preventDefault(); navigateTo('#/guide'); }} style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <a href="#/guide" onClick={(e) => { e.preventDefault(); navigate('/#guide'); }} style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                     الدليل الكامل للسكن الجامعي ←
                   </a>
                 </div>
