@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Info } from 'lucide-react';
 
 const AppContext = createContext(null);
 
@@ -45,26 +47,12 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{ user, setUser, showToast, toastMessage }}>
       {children}
-      {toastMessage && (
-        <div className="alert-toast" style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          zIndex: 99999,
-          background: '#1e293b',
-          color: '#ffffff',
-          padding: '0.85rem 1.4rem',
-          borderRadius: '12px',
-          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
-          fontWeight: 600,
-          fontSize: '0.9rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          animation: 'fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
-        }}>
-          {toastMessage}
-        </div>
+      {toastMessage && createPortal(
+        <div className="alert-toast">
+          <Info style={{ width: 18, height: 18, flexShrink: 0, color: 'var(--primary, #3b82f6)' }} />
+          <span>{toastMessage}</span>
+        </div>,
+        document.body
       )}
     </AppContext.Provider>
   );

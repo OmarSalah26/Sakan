@@ -366,7 +366,7 @@ def ensure_schema():
             for gname in all_gov_names:
                 gstatus = "live" if gname in live_govs else "waitlist_open"
                 db.add(Governorate(name=gname, status=gstatus))
-            # Ensure default admin account exists
+            # Ensure default admin account exists with password sakan2026
             admin = db.query(User).filter(User.account_type == "admin").first()
             if not admin:
                 admin = User(
@@ -374,9 +374,15 @@ def ensure_schema():
                     name="مسؤول المنصة (Admin)",
                     account_type="admin",
                     is_verified=True,
-                    verified_by_sakan=True
+                    verified_by_sakan=True,
+                    password_hash=hash_password("sakan2026"),
+                    must_change_password=False
                 )
                 db.add(admin)
+                db.commit()
+            else:
+                admin.password_hash = hash_password("sakan2026")
+                admin.must_change_password = False
                 db.commit()
     finally:
         db.close()
