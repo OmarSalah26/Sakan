@@ -11,7 +11,7 @@ import {
   User, Home, Briefcase, MessageSquare, Phone, Camera, Send, 
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
   Bed, Check, Clock, Award, Sparkles, Upload, Menu, X, Smartphone,
-  Navigation, Wind, Video, ArrowDown, Compass, Building2, Mail, LogOut
+  Navigation, Wind, Video, ArrowDown, Compass, Building2, Mail, LogOut, Copy
 } from 'lucide-react';
 
 
@@ -579,6 +579,15 @@ export default function App() {
   // Create listing wizard state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createStep, setCreateStep] = useState(1);
+  const wizardBodyRef = useRef(null);
+
+  const handleStepChange = (targetStep) => {
+    setCreateStep(targetStep);
+    window.scrollTo(0, 0);
+    if (wizardBodyRef.current) {
+      wizardBodyRef.current.scrollTop = 0;
+    }
+  };
   const [termsChecked, setTermsChecked] = useState(false);
   const [customAmenity, setCustomAmenity] = useState('');
   const [showMapPicker, setShowMapPicker] = useState(false);
@@ -608,6 +617,35 @@ export default function App() {
   // Post-Publish Share Modal state
   const [postPublishListing, setPostPublishListing] = useState(null);
   const [isPostPublishModalOpen, setIsPostPublishModalOpen] = useState(false);
+  const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    try {
+      setUploadingAvatar(true);
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${API_BASE}/upload/avatar?user_id=${user.id}`, {
+        method: 'POST',
+        body: fd
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(prev => ({ ...prev, profile_photo_url: data.url }));
+        showToast("تم تحديث صورة الملف الشخصي بنجاح");
+      } else {
+        const err = await res.json();
+        showToast(err.detail || "فشل رفع الصورة");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("حدث خطأ في اتصال الشبكة أثناء رفع الصورة");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   // Listing Detail Modal state
   const [selectedListingDetail, setSelectedListingDetail] = useState(null);
@@ -941,6 +979,11 @@ export default function App() {
         const uid = hash.replace('#/profile/', '');
         setProfileUserId(uid);
         setTab('profile');
+      } else if (hash === '#/profile') {
+        if (user) {
+          setProfileUserId(user.id);
+        }
+        setTab('profile');
       } else {
         navigateTo(hash || '#/browse');
       }
@@ -948,7 +991,7 @@ export default function App() {
     handleHashChange();
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (tab === 'profile' && profileUserId) {
@@ -959,10 +1002,23 @@ export default function App() {
     }
   }, [tab, profileUserId]);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [tab, profileUserId]);
+
+  useEffect(() => {
+    if (isCreateOpen) {
+      window.scrollTo(0, 0);
+      const modalBodyEls = document.querySelectorAll('.modal-body');
+      modalBodyEls.forEach(el => { el.scrollTop = 0; });
+    }
+  }, [createStep, isCreateOpen]);
+
   const navigateTo = (newHash) => {
     const raw = newHash.replace('#/', '').replace('#', '');
     const targetTab = raw || 'browse';
     setTab(targetTab);
+    window.scrollTo(0, 0);
     if (window.location.hash !== newHash) {
       window.location.hash = newHash;
     }
@@ -1251,36 +1307,67 @@ export default function App() {
 
   // --- Create Listing wizard flow ---
   const handleOpenCreateFlow = () => {
-    if (user && user.governorates && user.governorates.length > 0) {
-      const liveGov = dbGovernorates.find(g => user.governorates.includes(g.name) && g.status === 'live');
-      if (liveGov) {
-        setCreateForm(prev => ({
-          ...prev,
-          title: '',
-          governorate: liveGov.name,
-          city: '',
-          neighborhood: '',
-          full_address: '',
-          address: '',
-          floor: '',
-          maps_link: '',
-          latitude: null,
-          longitude: null,
-          gender: 'female',
-          available_beds: 1,
-          room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
-          amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
-          photo_urls: [],
-          video_urls: [],
-          description: '',
-          tier: 'regular',
-          min_lease_months: null
-        }));
-        setShowMapPicker(false);
-        setIsCreateOpen(true);
-        setCreateStep(1);
-        setTermsChecked(false);
-        return;
+    let userGovs = [];
+    if (user && user.governorates) {
+      if (Array.isArray(user.governorates)) {
+        userGovs = user.governorates;
+      } else if (typeof user.governorates === 'string') {
+        try {
+          const parsed = JSON.parse(user.governorates);
+          userGovs = Array.isArray(parsed) ? parsed : [user.governorates];
+        } catch {
+          if (user.governorates.trim()) userGovs = [user.governorates.trim()];
+        }
+      }
+    }
+
+    if (user && userGovs && userGovs.length > 0) {
+      const targetGovName = userGovs[0];
+      const matchGov = dbGovernorates.find(g => g.name === targetGovName || userGovs.includes(g.name));
+      if (matchGov) {
+        if (matchGov.status === 'live') {
+          setCreateForm(prev => ({
+            ...prev,
+            title: '',
+            governorate: matchGov.name,
+            city: '',
+            neighborhood: '',
+            full_address: '',
+            address: '',
+            floor: '',
+            maps_link: '',
+            latitude: null,
+            longitude: null,
+            gender: 'female',
+            available_beds: 1,
+            room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
+            amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
+            photo_urls: [],
+            video_urls: [],
+            description: '',
+            tier: 'regular',
+            min_lease_months: null
+          }));
+          setShowMapPicker(false);
+          setIsCreateOpen(true);
+          handleStepChange(1);
+          setTermsChecked(false);
+          return;
+        } else {
+          setWaitlistForm({
+            governorate_id: matchGov.id,
+            governorate_name: matchGov.name,
+            city: '',
+            name: user?.name || '',
+            phone: user?.phone || '',
+            work_volume_range: '1-4',
+            verified_channel: 'whatsapp',
+            otp: ''
+          });
+          setWaitlistStep('form');
+          setIsWaitlistOpen(true);
+          return;
+        }
       }
     }
     setIsAreaGateOpen(true);
@@ -1288,7 +1375,7 @@ export default function App() {
   };
 
   const handleStep2Next = () => {
-    setCreateStep(3);
+    handleStepChange(3);
   };
 
   const handleCreateSubmit = async () => {
@@ -1952,28 +2039,35 @@ export default function App() {
             <div className="nav-user-info" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
               <div 
                 onClick={() => { 
-                  if (user.account_type !== 'student') {
-                    setProfileUserId(user.id); navigateTo('#/profile'); setMobileMenuOpen(false);
+                  if (user.account_type === 'student' || user.account_type === 'admin') {
+                    setIsUserProfileModalOpen(true);
+                    setMobileMenuOpen(false);
+                  } else {
+                    setProfileUserId(user.id); navigateTo(`#/profile/${user.id}`); setMobileMenuOpen(false);
                   }
                 }}
-                style={{ width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid #cbd5e1', cursor: user.account_type !== 'student' ? 'pointer' : 'default' }}
-                title={user.account_type !== 'student' ? 'الملف الشخصي' : user.name}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer' }}
+                title="الملف الشخصي"
               >
-                {user.profile_photo_url ? (
-                  <img 
-                    src={formatImageUrl(user.profile_photo_url)} 
-                    alt="" 
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                ) : (
-                  <User style={{ width: 20, height: 20, color: '#64748b' }} />
-                )}
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.88rem', fontWeight: 700 }}>{user.name}</div>
-                <div style={{ fontSize: '0.73rem', color: 'var(--text-light)' }}>
-                  {isAdmin ? 'مشرف المنصة' : isBroker ? 'وسيط عقاري' : 'مستخدم عادي'}
+                <div 
+                  style={{ width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid #cbd5e1' }}
+                >
+                  {user.profile_photo_url ? (
+                    <img 
+                      src={formatImageUrl(user.profile_photo_url)} 
+                      alt="" 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <User style={{ width: 20, height: 20, color: '#64748b' }} />
+                  )}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 700 }}>{user.name}</div>
+                  <div style={{ fontSize: '0.73rem', color: 'var(--text-light)' }}>
+                    {isAdmin ? 'مشرف المنصة' : isBroker ? 'وسيط عقاري' : 'مستخدم عادي'}
+                  </div>
                 </div>
               </div>
               <button 
@@ -2006,11 +2100,11 @@ export default function App() {
         </div>
       </header>
 
-      <main className="container" style={{ flexGrow: 1 }}>
+      <main className="container" style={{ flexGrow: 1, width: '100%' }}>
         
         {/* TAB 1: BROWSE LISTINGS FEED */}
         {isBrowseTab && (
-          <div>
+          <div style={{ width: '100%' }}>
             {/* --- HERO SECTION (REVERTED TO CLASSIC LIGHT GRADIENT) --- */}
             <div className="hero-section">
               <h1 className="hero-title">ابحث عن <span>سكنك الطلابي</span> المثالي</h1>
@@ -2034,7 +2128,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="main-layout" id="main-listings-section">
+            <div className="main-layout" id="main-listings-section" style={{ width: '100%' }}>
               {/* Sidebar Filters */}
               <aside className="filter-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                 <h3 style={{ margin: 0, paddingBottom: '0.25rem' }}>
@@ -3901,17 +3995,16 @@ export default function App() {
         </div>
       )}
 
-      {/* --- CREATE LISTING WIZARD MODAL (Arabic / 7 Steps) --- */}
+      {/* --- CREATE LISTING WIZARD MODAL (Arabic / 5 Steps) --- */}
       {isCreateOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '600px' }}>
-            <div className="modal-header">
-              <h3>إضافة إعلان سكن طلابي جديد ({createStep} من 5)</h3>
-              <button className="modal-close" onClick={() => setIsCreateOpen(false)}>×</button>
-            </div>
-            
-            <div className="modal-body">
-              <div className="wizard-progress">
+        <div className="modal-overlay" style={{ zIndex: 99999 }}>
+          <div className="modal-content" style={{ maxWidth: '640px', height: '85vh', maxHeight: '720px', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+            <div className="modal-header" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                <h3 style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem' }}>إضافة إعلان سكن طلابي جديد ({createStep} من 5)</h3>
+                <button className="modal-close" onClick={() => setIsCreateOpen(false)}>×</button>
+              </div>
+              <div className="wizard-progress" style={{ margin: 0 }}>
                 <div className="progress-bar-fill" style={{ width: `${(createStep - 1) * 25}%` }} />
                 {[1, 2, 3, 4, 5].map(num => (
                   <span 
@@ -3922,7 +4015,9 @@ export default function App() {
                   </span>
                 ))}
               </div>
-
+            </div>
+            
+            <div className="modal-body wizard-modal-body" ref={wizardBodyRef} style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
               {/* STEP 1: TERMS AND CONDITIONS AGREEMENT */}
               {createStep === 1 && (
                 <div>
@@ -3936,9 +4031,6 @@ export default function App() {
                     <input type="checkbox" checked={termsChecked} onChange={(e) => setTermsChecked(e.target.checked)} />
                     أوافق وأتعهد بالالتزام بشروط نشر العقار المذكورة أعلاه.
                   </label>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-                    <button className="btn-primary" disabled={!termsChecked} onClick={() => setCreateStep(2)}>المتابعة للخطوة التالية</button>
-                  </div>
                 </div>
               )}
 
@@ -4025,7 +4117,7 @@ export default function App() {
                     <label>الدور <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(اختياري)</span></label>
                     <input
                       type="text"
-                      placeholder="مثال: الدور الثاني"
+                      placeholder="مثال: الثاني"
                       value={createForm.floor}
                       onChange={(e) => setCreateForm({ ...createForm, floor: e.target.value })}
                     />
@@ -4142,11 +4234,6 @@ export default function App() {
                         required 
                       />
                     </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifySelf: 'space-between', width: '100%', marginTop: '1rem' }}>
-                    <button className="btn-secondary" onClick={() => setCreateStep(1)}>السابق</button>
-                    <button className="btn-primary" disabled={!createForm.title || !createForm.city || !createForm.full_address} onClick={handleStep2Next}>التالي</button>
                   </div>
                 </div>
               )}
@@ -4446,11 +4533,6 @@ export default function App() {
                   <button className="btn-outline" onClick={addRoomConfig} style={{ width: '100%', marginBottom: '1.25rem' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><Plus style={{ width: 16, height: 16 }} /> إضافة فئة غرفة أخرى</span>
                   </button>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                    <button className="btn-secondary" onClick={() => setCreateStep(2)}>السابق</button>
-                    <button className="btn-primary" onClick={() => setCreateStep(4)}>التالي</button>
-                  </div>
                 </div>
               )}
 
@@ -4536,13 +4618,7 @@ export default function App() {
                         style={{ background: '#ffffff', border: '1.5px solid #94a3b8' }}
                         onChange={(e) => setCustomAmenity(e.target.value)}
                       />
-                      <button type="button" className="btn-secondary" onClick={handleAddCustomAmenity}>إضافة</button>
                     </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '1rem' }}>
-                    <button className="btn-secondary" onClick={() => setCreateStep(3)}>السابق</button>
-                    <button className="btn-primary" onClick={() => setCreateStep(5)}>التالي</button>
                   </div>
                 </div>
               )}
@@ -4739,19 +4815,38 @@ export default function App() {
                     </label>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '1.5rem' }}>
-                    <button className="btn-secondary" onClick={() => setCreateStep(4)}>السابق</button>
-                    <button
-                      className="btn-primary"
-                      onClick={handleCreateSubmit}
-                    >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>نشر الإعلان مباشرة <Send style={{ width: 16, height: 16 }} /></span>
-                    </button>
-                  </div>
                 </div>
               )}
 
             </div>
+
+            {/* FIXED FOOTER WITH IN-PLACE NAVIGATION BUTTONS */}
+            <div className="modal-footer" style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid var(--border)', background: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              {createStep > 1 ? (
+                <button className="btn-secondary" onClick={() => handleStepChange(createStep - 1)}>السابق</button>
+              ) : (
+                <div />
+              )}
+
+              {createStep === 1 && (
+                <button className="btn-primary" disabled={!termsChecked} onClick={() => handleStepChange(2)}>المتابعة للخطوة التالية</button>
+              )}
+              {createStep === 2 && (
+                <button className="btn-primary" disabled={!createForm.title || !createForm.city || !createForm.full_address} onClick={handleStep2Next}>التالي</button>
+              )}
+              {createStep === 3 && (
+                <button className="btn-primary" onClick={() => handleStepChange(4)}>التالي</button>
+              )}
+              {createStep === 4 && (
+                <button className="btn-primary" onClick={() => handleStepChange(5)}>التالي</button>
+              )}
+              {createStep === 5 && (
+                <button className="btn-primary" onClick={handleCreateSubmit}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>نشر الإعلان مباشرة <Send style={{ width: 16, height: 16 }} /></span>
+                </button>
+              )}
+            </div>
+
           </div>
         </div>
       )}
@@ -4852,6 +4947,19 @@ export default function App() {
                   const selectedGov = dbGovernorates.find(g => g.id === areaGateForm.governorate_id);
                   if (!selectedGov) return;
                   setIsAreaGateOpen(false);
+
+                  if (user) {
+                    const newGovs = [selectedGov.name];
+                    setUser(prev => ({ ...prev, governorates: newGovs }));
+                    fetch(`${API_BASE}/users/${user.id}/governorate`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ governorates: newGovs })
+                    })
+                      .then(res => res.ok ? res.json() : null)
+                      .then(data => { if (data) setUser(data); })
+                      .catch(() => {});
+                  }
 
                   if (selectedGov.status === 'live') {
                     // Live path: Proceed to 7-step full listing wizard
@@ -5266,10 +5374,10 @@ export default function App() {
               </pre>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
               <button 
                 className="btn-outline" 
-                style={{ padding: '0.65rem 1.25rem', fontWeight: 600, borderRadius: '12px' }}
+                style={{ padding: '0.65rem 1.1rem', fontWeight: 600, borderRadius: '12px' }}
                 onClick={() => {
                   setIsPostPublishModalOpen(false);
                   setPostPublishListing(null);
@@ -5279,8 +5387,22 @@ export default function App() {
               </button>
 
               <button 
+                className="btn-outline" 
+                style={{ padding: '0.65rem 1.1rem', fontWeight: 700, borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: 'var(--primary)', color: 'var(--primary)' }}
+                onClick={async () => {
+                  const shareText = formatUnifiedShareText(postPublishListing, true);
+                  if (navigator.clipboard) {
+                    await navigator.clipboard.writeText(shareText);
+                    showToast('تم نسخ نص الإعلان جاهزاً للمشاركة!');
+                  }
+                }}
+              >
+                <Copy style={{ width: 16, height: 16 }} /> نسخ الإعلان
+              </button>
+
+              <button 
                 className="btn-primary" 
-                style={{ padding: '0.65rem 1.5rem', fontWeight: 800, borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                style={{ padding: '0.65rem 1.35rem', fontWeight: 800, borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
                 onClick={async () => {
                   const shareText = formatUnifiedShareText(postPublishListing, true);
                   const shareUrl = `https://sakan-egy.com/listings/${postPublishListing.id}`;
@@ -5308,6 +5430,74 @@ export default function App() {
                 }}
               >
                 <Share2 style={{ width: 18, height: 18 }} /> مشاركة الإعلان
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- STUDENT / ADMIN USER PROFILE MODAL --- */}
+      {isUserProfileModalOpen && user && (
+        <div className="modal-overlay" style={{ zIndex: 99999 }}>
+          <div className="modal-content" style={{ maxWidth: '420px', textAlign: 'center', padding: '1.5rem', borderRadius: '20px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <User style={{ width: 20, height: 20, color: 'var(--primary)' }} /> الملف الشخصي
+              </h3>
+              <button className="modal-close" onClick={() => setIsUserProfileModalOpen(false)}>×</button>
+            </div>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+              {/* Profile Avatar Container with Edit Option */}
+              <div style={{ position: 'relative', width: '90px', height: '90px', margin: '0 auto' }}>
+                <div style={{ width: '90px', height: '90px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', border: '3px solid var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                  {user.profile_photo_url ? (
+                    <img src={formatImageUrl(user.profile_photo_url)} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                  ) : (
+                    <User style={{ width: 44, height: 44, color: '#64748b' }} />
+                  )}
+                </div>
+
+                <label 
+                  style={{
+                    position: 'absolute', bottom: '0', right: '0',
+                    background: 'var(--primary)', color: '#ffffff',
+                    width: '30px', height: '30px', borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: uploadingAvatar ? 'wait' : 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                    border: '2px solid #ffffff'
+                  }}
+                  title="تغيير الصورة الشخصية"
+                >
+                  <Camera style={{ width: 15, height: 15 }} />
+                  <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} disabled={uploadingAvatar} />
+                </label>
+              </div>
+
+              {uploadingAvatar && (
+                <span style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 600 }}>جاري رفع الصورة...</span>
+              )}
+
+              {/* Name & Account Type */}
+              <div style={{ textAlign: 'center' }}>
+                <h4 style={{ margin: '0 0 0.25rem', fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-dark)' }}>{user.name}</h4>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: user.account_type === 'admin' ? '#1e40af' : '#475569', background: user.account_type === 'admin' ? '#dbeafe' : '#f1f5f9', padding: '0.25rem 0.75rem', borderRadius: '999px', display: 'inline-block' }}>
+                  {user.account_type === 'admin' ? 'مشرف المنصة' : user.account_type === 'student' ? 'طالب / مستخدم' : user.account_type === 'broker' ? 'وسيط عقاري' : 'مالك عقار'}
+                </span>
+              </div>
+
+              {/* Phone Number Display */}
+              <div style={{ width: '100%', background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '12px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.5rem' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>رقم الهاتف:</span>
+                <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-dark)', direction: 'ltr' }}>{user.phone || 'غير مسجل'}</span>
+              </div>
+
+              <button 
+                className="btn-primary" 
+                style={{ width: '100%', marginTop: '0.5rem', padding: '0.65rem', fontWeight: 700, borderRadius: '12px' }}
+                onClick={() => setIsUserProfileModalOpen(false)}
+              >
+                إغلاق
               </button>
             </div>
           </div>

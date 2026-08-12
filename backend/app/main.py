@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text, or_
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 import json
@@ -991,6 +991,24 @@ def login_user(payload: RegisterRequest):
         db.close()
 
 
+class UpdateUserGovernoratesRequest(BaseModel):
+    governorates: List[str]
+
+@app.patch('/users/{user_id}/governorate', response_model=UserOut)
+def update_user_governorate(user_id: int, payload: UpdateUserGovernoratesRequest):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+        user.governorates = json.dumps(payload.governorates, ensure_ascii=False)
+        db.commit()
+        db.refresh(user)
+        return user_to_user_out(user)
+    finally:
+        db.close()
+
+
 @app.post('/auth/login-password', response_model=UserOut)
 def login_password(payload: LoginPasswordRequest):
     db = SessionLocal()
@@ -1428,7 +1446,19 @@ def list_listings(
         )
 
         if governorate:
-            query = query.filter(Listing.governorate == governorate)
+            gov_clean = governorate.replace("محافظة ", "").strip()
+            base_gov = gov_clean.replace("الجديدة", "").strip()
+            query = query.filter(
+                or_(
+                    Listing.governorate == governorate,
+                    Listing.governorate == gov_clean,
+                    Listing.governorate == base_gov,
+                    Listing.governorate.ilike(f"{base_gov}%"),
+                    Listing.city.ilike(f"%{base_gov}%"),
+                    Listing.neighborhood.ilike(f"%{base_gov}%"),
+                    Listing.address.ilike(f"%{base_gov}%")
+                )
+            )
         if city:
             query = query.filter(Listing.city == city)
         if neighborhood:
@@ -1621,37 +1651,7 @@ def get_listing_detail(listing_id: int):
         ).all()
 
         return {
-            "listing": ListingOut(
-                id=listing.id,
-                title=listing.title,
-                governorate=listing.governorate,
-                city=listing.city,
-                neighborhood=listing.neighborhood,
-                address=listing.address,
-                street=listing.street,
-                building_number=listing.building_number,
-                apartment_number=listing.apartment_number,
-                floor=listing.floor,
-                maps_link=listing.maps_link,
-                latitude=listing.latitude,
-                longitude=listing.longitude,
-                gender=listing.gender,
-                available_beds=listing.available_beds,
-                price_per_person=listing.price_per_person,
-                room_type=listing.room_type,
-                room_configurations=safe_json_loads(listing.room_configurations, []),
-                amenities=parse_amenities_list(listing.amenities),
-                photo_urls=safe_json_loads(listing.photo_urls, []),
-                video_urls=safe_json_loads(listing.video_urls, []),
-                tier=listing.tier,
-                status=listing.status,
-                advertiser_id=listing.advertiser_id,
-                created_at=listing.created_at,
-                view_count=listing.view_count or 0,
-                min_lease_months=int(listing.min_lease_months) if str(listing.min_lease_months or '').isdigit() else None,
-                contact_phone=listing.contact_phone,
-                whatsapp_phone=listing.whatsapp_phone
-            ),
+            "listing": build_listing_out(listing, advertiser),
             "advertiser": {
                 "id": advertiser.id,
                 "name": advertiser.name,

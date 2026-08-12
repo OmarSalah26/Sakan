@@ -9,10 +9,7 @@ export function RouterProvider({ children }) {
     const handlePopState = () => {
       const currentPath = window.location.pathname;
       setPathname(currentPath);
-      const savedScroll = sessionStorage.getItem('scrollPos_' + currentPath);
-      if (savedScroll !== null) {
-        setTimeout(() => window.scrollTo(0, parseInt(savedScroll, 10)), 50);
-      }
+      window.scrollTo(0, 0);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -24,18 +21,9 @@ export function RouterProvider({ children }) {
       return;
     }
     const cleanPathname = typeof to === 'string' ? (to.split('?')[0].split('#')[0] || '/') : '/';
-    // Save current scroll position before navigating away
-    sessionStorage.setItem('scrollPos_' + pathname, window.scrollY.toString());
     window.history.pushState({}, '', to);
     setPathname(cleanPathname);
-    
-    // Restore scroll position if previously saved for target route
-    const savedScroll = sessionStorage.getItem('scrollPos_' + cleanPathname);
-    if (savedScroll !== null) {
-      setTimeout(() => window.scrollTo(0, parseInt(savedScroll, 10)), 50);
-    } else {
-      window.scrollTo(0, 0);
-    }
+    window.scrollTo(0, 0);
   };
 
   return (

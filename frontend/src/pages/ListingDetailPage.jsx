@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from '../router/Router';
 import { 
   MapPin, Bed, FileText, Shield, Zap, Plug, Share2, 
   User, Briefcase, Home, Star, MessageSquare, Phone, 
-  Calendar, PenTool, Send, AlertTriangle, ArrowRight, Check, CheckCircle, Copy,
+  Calendar, PenTool, Send, AlertTriangle, ArrowRight, Check, CheckCircle,
   ChevronLeft, ChevronRight, Play, ShieldCheck, Wind
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -159,6 +159,7 @@ export default function ListingDetailPage() {
   const [complaintInput, setComplaintInput] = useState({ violation_type: 'السعر المطلوب أعلى من المعلن', description: '', evidence_urls: [] });
 
   useEffect(() => {
+    window.scrollTo(0, 0);
     fetchListingDetail();
   }, [id]);
 
@@ -514,7 +515,7 @@ export default function ListingDetailPage() {
           {listing.floor && (
             <div style={{ background: '#f1f5f9', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Home style={{ width: 16, height: 16, color: 'var(--primary)' }} />
-              الدور: {listing.floor}
+              الدور: {String(listing.floor).replace(/^الدور\s*/, '')}
             </div>
           )}
 
@@ -596,14 +597,8 @@ export default function ListingDetailPage() {
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
               العنوان بالتفصيل
             </h3>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
+            <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
               <span style={{ fontWeight: 600, color: 'var(--text-dark)', fontSize: '0.95rem' }}>{listing.address}</span>
-              <button 
-                onClick={() => { navigator.clipboard.writeText(listing.address); showToast('تم نسخ العنوان'); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontWeight: 600, fontSize: '0.8rem' }}
-              >
-                <Copy style={{ width: 14, height: 14 }} /> نسخ
-              </button>
             </div>
 
             {/* Embedded Google Map (only rendered if precise coordinates exist) */}
