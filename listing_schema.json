@@ -1,0 +1,250 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SakanListingSchema",
+  "description": "100% strictly identical and compatible JSON Schema for Sakan (سكن) backend platform listings, Pydantic models (ListingCreate / ListingOut), database entity (Listing), and bulk scraping importer (/listings/bulk).",
+  "type": "object",
+  "required": [
+    "governorate",
+    "city",
+    "neighborhood",
+    "address",
+    "gender",
+    "available_beds"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "default": "سكن طلاب",
+      "description": "Ad title (عنوان الإعلان)."
+    },
+    "governorate": {
+      "type": "string",
+      "description": "Governorate (المحافظة) e.g., 'الجيزة', 'القاهرة', 'دمياط الجديدة'."
+    },
+    "city": {
+      "type": "string",
+      "description": "City or District (المدينة / الحي الرئيسي) e.g., 'الدقي', 'مدينة نصر'."
+    },
+    "neighborhood": {
+      "type": "string",
+      "description": "Neighborhood (المنطقة / المجاورة / الشارع) e.g., 'بجوار جامعة القاهرة'."
+    },
+    "address": {
+      "type": "string",
+      "default": "",
+      "description": "Full street address or detailed location string."
+    },
+    "full_address": {
+      "type": ["string", "null"],
+      "description": "Alias for address (supported by /listings/bulk importer)."
+    },
+    "street": {
+      "type": ["string", "null"],
+      "description": "Street name."
+    },
+    "building_number": {
+      "type": ["string", "null"],
+      "description": "Building / House number."
+    },
+    "apartment_number": {
+      "type": ["string", "null"],
+      "description": "Apartment / Unit number."
+    },
+    "floor": {
+      "type": ["string", "null"],
+      "description": "Floor level string or number."
+    },
+    "maps_link": {
+      "type": ["string", "null"],
+      "description": "Google Maps pin URL."
+    },
+    "latitude": {
+      "type": ["number", "null"],
+      "minimum": -90,
+      "maximum": 90,
+      "description": "Latitude coordinate."
+    },
+    "longitude": {
+      "type": ["number", "null"],
+      "minimum": -180,
+      "maximum": 180,
+      "description": "Longitude coordinate."
+    },
+    "location_precise": {
+      "type": "boolean",
+      "default": false,
+      "description": "Set to true if exact coordinates were pinned via map picker."
+    },
+    "gender": {
+      "type": "string",
+      "enum": ["male", "female"],
+      "description": "Tenant gender: 'male' (شباب) or 'female' (بنات)."
+    },
+    "available_beds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of available vacant beds."
+    },
+    "advertiser_id": {
+      "type": ["integer", "null"],
+      "description": "Sakan User ID of advertiser (auto-resolved by platform if omitted)."
+    },
+    "contact_phone": {
+      "type": ["string", "null"],
+      "description": "Advertiser primary phone number."
+    },
+    "whatsapp_phone": {
+      "type": ["string", "null"],
+      "description": "Advertiser WhatsApp phone number."
+    },
+    "advertiser_name": {
+      "type": ["string", "null"],
+      "description": "Name of the advertiser/broker/owner for auto-account creation."
+    },
+    "room_configurations": {
+      "type": "array",
+      "default": [],
+      "description": "List of room pricing configurations.",
+      "items": {
+        "type": "object",
+        "required": ["room_type", "price_per_person"],
+        "properties": {
+          "room_type": {
+            "type": "string",
+            "enum": ["single", "double", "triple", "quad", "shared"],
+            "description": "Room category."
+          },
+          "price_per_person": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Monthly rent per person in EGP."
+          },
+          "commission": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Fixed commission fee per bed in EGP."
+          },
+          "commission_type": {
+            "type": ["string", "null"],
+            "enum": ["fixed", "range", null],
+            "description": "Commission model ('fixed' or 'range')."
+          },
+          "commission_min": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Minimum commission in EGP."
+          },
+          "commission_max": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Maximum commission in EGP."
+          },
+          "commission_min_pct": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Minimum commission percentage."
+          },
+          "commission_max_pct": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Maximum commission percentage."
+          },
+          "has_ac": {
+            "type": ["boolean", "null"],
+            "description": "Indicates if this room configuration has air conditioning."
+          },
+          "count": {
+            "type": ["integer", "null"],
+            "default": 1,
+            "description": "Number of rooms of this type."
+          },
+          "insurance_price": {
+            "type": ["number", "null"],
+            "description": "Insurance price."
+          },
+          "services_inclusive": {
+            "type": ["boolean", "null"],
+            "default": false
+          }
+        }
+      }
+    },
+    "price_per_person": {
+      "type": ["integer", "number", "null"],
+      "description": "Legacy fallback price per person."
+    },
+    "room_type": {
+      "type": ["string", "null"],
+      "description": "Legacy fallback room type (single, double, triple, shared)."
+    },
+    "amenities": {
+      "type": "array",
+      "default": [],
+      "description": "List of amenities (e.g. ['wifi', 'ac', 'security', 'water', 'electricity', 'elevator', 'washing_machine', 'gas']).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "photo_urls": {
+      "type": "array",
+      "default": [],
+      "description": "List of property photo URLs.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cover_photo_index": {
+      "type": "integer",
+      "default": 0,
+      "description": "Index of the main cover image in photo_urls."
+    },
+    "video_urls": {
+      "type": "array",
+      "default": [],
+      "description": "List of property video URLs.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "description": {
+      "type": "string",
+      "default": "",
+      "description": "Detailed text description of the unit."
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["regular", "featured", "premium"],
+      "default": "regular",
+      "description": "Listing tier in Sakan platform."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "inactive", "expired", "banned"],
+      "default": "active",
+      "description": "Listing status."
+    },
+    "min_lease_months": {
+      "type": ["integer", "null"],
+      "description": "Minimum contract duration in months."
+    },
+    "source": {
+      "type": "string",
+      "default": "scraped",
+      "description": "Source origin tag (e.g. 'scraped', 'bulk', 'normal', 'telegram', 'facebook')."
+    },
+    "full_edit_available": {
+      "type": "boolean",
+      "default": false,
+      "description": "Full edit access permission flag (default: false for scraped ads)."
+    },
+    "edit_token": {
+      "type": ["string", "null"],
+      "description": "Unique secret outreach edit token generated for this ad."
+    },
+    "not_vacant_reports": {
+      "type": "integer",
+      "default": 0,
+      "description": "Counter for not-vacant user reports."
+    }
+  }
+}
