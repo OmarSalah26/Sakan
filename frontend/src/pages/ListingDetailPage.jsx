@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Play, ShieldCheck, Wind
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText } from '../utils/phoneUtils';
+import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay } from '../utils/phoneUtils';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '/api');
 
@@ -16,9 +16,9 @@ function formatImageUrl(url) {
   if (typeof url !== 'string') return url;
 
   let cleanUrl = url.trim();
+  if (!cleanUrl) return null;
   if (cleanUrl.startsWith('blob:') || cleanUrl.startsWith('data:')) return cleanUrl;
-
-  cleanUrl = cleanUrl.replace(/^https?:\/\/[^\/]+/, '');
+  if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) return cleanUrl;
 
   const apiServer = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '');
 
@@ -411,6 +411,7 @@ export default function ListingDetailPage() {
                 src={formatImageUrl(listing.photo_urls[carouselIndex])} 
                 alt={listing.title} 
                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80"; }}
               />
             ) : (
               <video 
@@ -459,7 +460,7 @@ export default function ListingDetailPage() {
                 onClick={() => setCarouselIndex(idx)}
                 style={{ border: carouselIndex === idx ? '2px solid var(--primary)' : '2px solid transparent', borderRadius: '8px', overflow: 'hidden', padding: 0, cursor: 'pointer', flexShrink: 0, width: '70px', height: '50px' }}
               >
-                <img src={formatImageUrl(photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={formatImageUrl(photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"; }} />
               </button>
             ))}
             {listing.video_urls?.map((video, idx) => {
@@ -557,11 +558,11 @@ export default function ListingDetailPage() {
                   <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
                     {(c.commission_type === 'range' || (c.commission_min && c.commission_max)) ? (
                       <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
-                        <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {c.commission_min} - {c.commission_max} ج.م (تفاوضي)
+                        <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {formatCommissionDisplay(c)} (تفاوضي)
                       </span>
                     ) : c.commission != null ? (
                       <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
-                        <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {c.commission} ج.م
+                        <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {formatCommissionDisplay(c)}
                       </span>
                     ) : null}
 

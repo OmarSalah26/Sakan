@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useNavigate } from './router/Router';
 import { useApp } from './context/AppContext';
-import { formatShareText } from './pages/ListingDetailPage';
+import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay } from './utils/phoneUtils';
 
 import { 
   Bell, BookOpen, Plus, Search, MapPin, CheckCircle, CheckCircle2, ShieldCheck, 
@@ -222,9 +222,9 @@ function formatImageUrl(url) {
   if (typeof url !== 'string') return url;
 
   let cleanUrl = url.trim();
+  if (!cleanUrl) return null;
   if (cleanUrl.startsWith('blob:') || cleanUrl.startsWith('data:')) return cleanUrl;
-
-  cleanUrl = cleanUrl.replace(/^https?:\/\/[^\/]+/, '');
+  if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) return cleanUrl;
 
   const apiServer = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '');
 
@@ -1473,7 +1473,9 @@ export default function App() {
       const cleanedConfigs = (createForm.room_configurations || []).map(c => ({
         ...c,
         price_per_person: Number(c.price_per_person) || 0,
-        commission: c.commission !== '' && c.commission !== null ? Number(c.commission) : Math.round((Number(c.price_per_person) || 0) * 0.5),
+        commission: c.commission !== '' && c.commission !== null ? Number(c.commission) : (c.commission_pct ?? 50),
+        commission_min: c.commission_min !== '' && c.commission_min !== null ? Number(c.commission_min) : (c.commission_min_pct ?? 30),
+        commission_max: c.commission_max !== '' && c.commission_max !== null ? Number(c.commission_max) : (c.commission_max_pct ?? 100),
         insurance_price: c.insurance_price !== '' && c.insurance_price !== null ? Number(c.insurance_price) : 0,
         count: Number(c.count) || 1
       }));
@@ -1537,12 +1539,12 @@ export default function App() {
           room_type: 'double',
           price_per_person: 800,
           commission_pct: 50,
-          commission: 400,
+          commission: 50,
           commission_type: 'fixed',
           commission_min_pct: 30,
           commission_max_pct: 100,
-          commission_min: 240,
-          commission_max: 800,
+          commission_min: 30,
+          commission_max: 100,
           count: 1,
           insurance_price: '',
           services_inclusive: false,
@@ -1564,37 +1566,35 @@ export default function App() {
       const updated = [...prev.room_configurations];
       const item = { ...updated[index], [field]: val };
       
-      const price = Number(item.price_per_person) || 0;
-      
       if (field === 'price_per_person') {
         const pct = item.commission_pct ?? 50;
-        item.commission = Math.round(price * (pct / 100));
+        item.commission = pct;
         
         const minPct = item.commission_min_pct ?? 30;
         const maxPct = item.commission_max_pct ?? 100;
-        item.commission_min = Math.round(price * (minPct / 100));
-        item.commission_max = Math.round(price * (maxPct / 100));
+        item.commission_min = minPct;
+        item.commission_max = maxPct;
       } else if (field === 'commission_pct') {
         const pct = Math.max(0, Math.min(200, Number(val) || 0));
         item.commission_pct = pct;
-        item.commission = Math.round(price * (pct / 100));
+        item.commission = pct;
       } else if (field === 'commission_min_pct') {
         const minPct = Math.max(0, Math.min(200, Number(val) || 0));
         item.commission_min_pct = minPct;
-        item.commission_min = Math.round(price * (minPct / 100));
+        item.commission_min = minPct;
       } else if (field === 'commission_max_pct') {
         const maxPct = Math.max(0, Math.min(200, Number(val) || 0));
         item.commission_max_pct = maxPct;
-        item.commission_max = Math.round(price * (maxPct / 100));
+        item.commission_max = maxPct;
       } else if (field === 'commission_type') {
         if (val === 'range') {
           item.commission_min_pct = item.commission_min_pct ?? 30;
           item.commission_max_pct = item.commission_max_pct ?? 100;
-          item.commission_min = Math.round(price * (item.commission_min_pct / 100));
-          item.commission_max = Math.round(price * (item.commission_max_pct / 100));
+          item.commission_min = item.commission_min_pct;
+          item.commission_max = item.commission_max_pct;
         } else {
           item.commission_pct = item.commission_pct ?? 50;
-          item.commission = Math.round(price * (item.commission_pct / 100));
+          item.commission = item.commission_pct;
         }
       }
 
@@ -2594,7 +2594,7 @@ export default function App() {
                           onClick={() => handleCardClick(item.id)}
                         >
                           <div className="card-img-wrapper" style={{ position: 'relative' }}>
-                            <img className="card-img" src={coverImage} alt={item.title} />
+                            <img className="card-img" src={coverImage} alt={item.title} onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"; }} />
                             
                             <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 2, display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
                               <span className={`badge-gender ${item.gender === 'male' ? 'gender-male' : 'gender-female'}`}>
@@ -2700,17 +2700,16 @@ export default function App() {
                                       </div>
 
                                       {/* Room Commission */}
-                                      {isRange ? (
-                                        <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                          <Briefcase style={{ width: 12, height: 12 }} />
-                                          <span>عمولة: {config.commission_min} - {config.commission_max} ج.م (تفاوضي)</span>
-                                        </div>
-                                      ) : config.commission ? (
-                                        <div style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                          <Briefcase style={{ width: 12, height: 12 }} />
-                                          <span>عمولة: {config.commission} ج.م</span>
-                                        </div>
-                                      ) : null}
+                                      {(() => {
+                                        const commText = formatCommissionDisplay(config);
+                                        if (!commText) return null;
+                                        return (
+                                          <div style={{ fontSize: '0.75rem', color: isRange ? '#b45309' : '#475569', fontWeight: isRange ? 700 : 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                            <Briefcase style={{ width: 12, height: 12 }} />
+                                            <span>عمولة: {commText}{isRange ? ' (تفاوضي)' : ''}</span>
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                   );
                                 })
@@ -3466,7 +3465,7 @@ export default function App() {
                   return (
                     <article key={item.id} id={`listing-card-${item.id}`} className="listing-card" onClick={() => handleCardClick(item.id)}>
                       <div className="card-img-wrapper">
-                        <img className="card-img" src={coverImage} alt={item.title} />
+                        <img className="card-img" src={coverImage} alt={item.title} onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"; }} />
                         <button
                           className="bookmark-btn"
                           style={{
@@ -3777,7 +3776,7 @@ export default function App() {
                       {profileData.listings.map(item => (
                         <article key={item.id} id={`listing-card-${item.id}`} className="listing-card" onClick={() => handleCardClick(item.id)}>
                           <div className="card-img-wrapper">
-                            <img className="card-img" src={formatImageUrl(item.photo_urls?.[0])} alt={item.title} />
+                            <img className="card-img" src={formatImageUrl(item.photo_urls?.[0]) || "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"} alt={item.title} onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"; }} />
                           </div>
                           <div className="card-content">
                             <div className="card-location"><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {item.city}، {item.neighborhood}</div>
@@ -4567,7 +4566,7 @@ export default function App() {
                               </div>
                               
                               <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#15803d', marginTop: '0.35rem' }}>
-                                💡 قيمة العمولة التلقائية: {config.commission ?? Math.round(price * 0.5)} جنيه {price > 0 && `(من إيجار ${price} جنيه)`}
+                                نسبة العمولة المحددة: {config.commission_pct ?? config.commission ?? 50}% من الإيجار الشهري
                               </div>
                             </div>
                           ) : (
@@ -4636,13 +4635,13 @@ export default function App() {
                               </div>
 
                               <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0284c7', marginTop: '0.35rem' }}>
-                                💡 نطاق العمولة التلقائي: {config.commission_min ?? Math.round(price * 0.3)} إلى {config.commission_max ?? price} جنيه (قابل للتفاوض)
+                                نطاق نسبة العمولة: {config.commission_min_pct ?? config.commission_min ?? 30}% إلى {config.commission_max_pct ?? config.commission_max ?? 100}% (قابل للتفاوض)
                               </div>
                             </div>
                           )}
 
                           <small style={{ color: 'var(--text-light)', fontSize: '0.72rem', display: 'block', marginTop: '0.4rem' }}>
-                            نسبة العمولة من الإيجار الشهري. يتم حساب وتوليد المبالغ بالجنيه تلقائياً لعرضها على الكروت وسطح الإعلان.
+                            نسبة العمولة من الإيجار الشهري. تظهر العمولة كنسبة مئوية على الكروت وسطح الإعلان.
                           </small>
                         </div>
 

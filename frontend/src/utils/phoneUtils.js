@@ -46,3 +46,38 @@ export function cleanCommissionText(comm) {
   }
   return s;
 }
+
+export function formatCommissionDisplay(config) {
+  if (!config) return null;
+  const isRange = config.commission_type === 'range' || (config.commission_min != null && config.commission_max != null);
+  const price = Number(config.price_per_person) || 0;
+
+  if (isRange) {
+    let minVal = config.commission_min !== null && config.commission_min !== undefined ? config.commission_min : (config.commission_min_pct ?? 30);
+    let maxVal = config.commission_max !== null && config.commission_max !== undefined ? config.commission_max : (config.commission_max_pct ?? 100);
+
+    if (typeof minVal === 'number' && minVal > 100 && price > 0) {
+      minVal = Math.round((minVal / price) * 100);
+    }
+    if (typeof maxVal === 'number' && maxVal > 100 && price > 0) {
+      maxVal = Math.round((maxVal / price) * 100);
+    }
+
+    const minStr = String(minVal).replace(/[^0-9.]/g, '');
+    const maxStr = String(maxVal).replace(/[^0-9.]/g, '');
+    return `${minStr}%-${maxStr}%`;
+  }
+
+  let val = config.commission_pct !== null && config.commission_pct !== undefined ? config.commission_pct : config.commission;
+  if (val !== null && val !== undefined && val !== '') {
+    if (typeof val === 'number' && val > 100 && price > 0) {
+      val = Math.round((val / price) * 100);
+    }
+    const valStr = String(val).replace(/[^0-9.]/g, '');
+    return `${valStr}%`;
+  }
+
+  return null;
+}
+
+
