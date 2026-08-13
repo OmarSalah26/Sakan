@@ -108,6 +108,7 @@ class Listing(Base):
     # Keep original fields for backward compatibility
     price_per_person = Column(Integer, nullable=True)
     room_type = Column(String, nullable=True)
+    total_price = Column(Float, nullable=True)
 
     # Added columns for updated requirements
     room_configurations = Column(String, nullable=True)  # JSON string array of {room_type, price_per_person, commission}
@@ -636,6 +637,8 @@ class ListingCreate(BaseModel):
     # Legacy fields for test compatibility
     price_per_person: Optional[Union[float, int]] = None
     room_type: Optional[str] = None
+    totalPrice: Optional[Union[float, int]] = None
+    total_price: Optional[Union[float, int]] = None
 
 
 class ListingOut(BaseModel):
@@ -656,6 +659,8 @@ class ListingOut(BaseModel):
     available_beds: int
     price_per_person: Optional[Union[float, int]] = None
     room_type: Optional[str] = None
+    totalPrice: Optional[Union[float, int]] = None
+    total_price: Optional[Union[float, int]] = None
     room_configurations: List[dict] = []
     amenities: List[str] = []
     photo_urls: List[str] = []
@@ -729,7 +734,9 @@ def build_listing_out(item: Listing, advertiser: Optional[User] = None) -> Listi
         edit_token=item.edit_token,
         cover_photo_index=safe_int(item.cover_photo_index, 0),
         location_precise=bool(item.location_precise),
-        not_vacant_reports=safe_int(item.not_vacant_reports, 0)
+        not_vacant_reports=safe_int(item.not_vacant_reports, 0),
+        totalPrice=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None),
+        total_price=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None)
     )
 
 
@@ -1183,7 +1190,8 @@ def create_listing(payload: ListingCreate):
             source=payload.source or "normal",
             full_edit_available=False,
             location_precise=payload.location_precise or False,
-            cover_photo_index=payload.cover_photo_index or 0
+            cover_photo_index=payload.cover_photo_index or 0,
+            total_price=payload.totalPrice if payload.totalPrice is not None else payload.total_price
         )
         db.add(listing)
         db.commit()
@@ -1597,43 +1605,7 @@ def list_listings(
                 continue
 
             adv = advertisers.get(item.advertiser_id)
-
-            filtered.append(
-                ListingOut(
-                    id=item.id,
-                    title=item.title,
-                    governorate=item.governorate,
-                    city=item.city,
-                    neighborhood=item.neighborhood,
-                    address=item.address,
-                    street=item.street,
-                    building_number=item.building_number,
-                    apartment_number=item.apartment_number,
-                    floor=item.floor,
-                    maps_link=item.maps_link,
-                    latitude=item.latitude,
-                    longitude=item.longitude,
-                    gender=item.gender,
-                    available_beds=item.available_beds,
-                    price_per_person=item.price_per_person,
-                    room_type=item.room_type,
-                    room_configurations=configs,
-                    amenities=parse_amenities_list(item.amenities),
-                    photo_urls=safe_json_loads(item.photo_urls, []),
-                    video_urls=safe_json_loads(item.video_urls, []),
-                    tier=item.tier,
-                    status=item.status,
-                    advertiser_id=item.advertiser_id,
-                    created_at=item.created_at,
-                    view_count=item.view_count or 0,
-                    min_lease_months=int(item.min_lease_months) if str(item.min_lease_months or '').isdigit() else None,
-                    contact_phone=item.contact_phone,
-                    whatsapp_phone=item.whatsapp_phone,
-                    advertiser_name=adv.name if adv else None,
-                    advertiser_type=adv.account_type if adv else None,
-                    advertiser_verified=adv.verified_by_sakan if adv else False
-                )
-            )
+            filtered.append(build_listing_out(item, adv))
 
         return filtered
     finally:
@@ -2890,6 +2862,9 @@ def update_listing(
             listing.whatsapp_phone = payload.whatsapp_phone
             listing.location_precise = payload.location_precise
             listing.cover_photo_index = payload.cover_photo_index
+            total_val = payload.totalPrice if payload.totalPrice is not None else payload.total_price
+            if total_val is not None:
+                listing.total_price = total_val
 
             # Consume the one-time full edit flag for scraped/bulk ads
             if source != "normal" and full_edit_avail:

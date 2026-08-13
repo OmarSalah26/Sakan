@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useNavigate } from './router/Router';
 import { useApp } from './context/AppContext';
-import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay } from './utils/phoneUtils';
+import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice } from './utils/phoneUtils';
 
 import { 
   Bell, BookOpen, Plus, Search, MapPin, CheckCircle, CheckCircle2, ShieldCheck, 
@@ -2570,19 +2570,8 @@ export default function App() {
                       const hasAc = configs.some(c => c.has_ac);
                       const hasInsurance = configs.some(c => c.insurance_price && c.insurance_price > 0);
 
-                      // Calculate total monthly rent price of the entire unit
-                      let totalUnitRent = 0;
-                      if (configs.length > 0) {
-                        configs.forEach(c => {
-                          const roomType = c.room_type || 'single';
-                          const bedsPerRoom = roomType === 'single' ? 1 : roomType === 'double' ? 2 : roomType === 'triple' ? 3 : 4;
-                          const roomCount = c.count || 1;
-                          const pricePerPerson = c.price_per_person || 0;
-                          totalUnitRent += (roomCount * bedsPerRoom * pricePerPerson);
-                        });
-                      } else {
-                        totalUnitRent = (item.price_per_person || 0) * (item.available_beds || 1);
-                      }
+                      // Calculate total monthly rent price of the entire unit using source-of-truth priority rules
+                      const totalUnitRent = calculateListingTotalPrice(item);
 
                       return (
                         <article 

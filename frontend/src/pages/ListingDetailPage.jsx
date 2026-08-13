@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Play, ShieldCheck, Wind
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay } from '../utils/phoneUtils';
+import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice } from '../utils/phoneUtils';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '/api');
 
@@ -521,12 +521,15 @@ export default function ListingDetailPage() {
             </div>
           )}
 
-          {listing.created_at && (
-            <div style={{ background: '#f1f5f9', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Calendar style={{ width: 16, height: 16, color: 'var(--primary)' }} />
-              نُشر {getTimeAgo(listing.created_at)}
-            </div>
-          )}
+          {(() => {
+            const calculatedTotal = calculateListingTotalPrice(listing);
+            if (!calculatedTotal) return null;
+            return (
+              <div style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                إجمالي إيجار الوحدة: {calculatedTotal.toLocaleString()} ج.م / شهرياً
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -542,57 +545,70 @@ export default function ListingDetailPage() {
               فئات الغرف والأسعار المتاحة
             </h3>
             <div style={{ display: 'grid', gap: '0.85rem' }}>
-              {(listing.room_configurations || [])
-                .filter(c => (c.available_beds !== undefined ? c.available_beds > 0 : true))
-                .map((c, idx) => (
-                <div key={idx} style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>
-                      {c.room_type === 'single' ? 'غرفة فردية' : c.room_type === 'double' ? 'غرفة ثنائية' : c.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية'} ({c.available_beds !== undefined ? c.available_beds : (c.count || 1)} أسرة متوفرة)
-                    </span>
-                    <strong style={{ color: 'var(--primary)', fontSize: '1.2rem', fontWeight: 800 }}>
-                      {c.price_per_person} ج.م <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ شهرياً</span>
+              {(() => {
+                const validConfigs = (listing.room_configurations || []).filter(c => Number(c.price_per_person) > 0);
+                if (validConfigs.length > 0) {
+                  return validConfigs.map((c, idx) => (
+                    <div key={idx} style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontWeight: 700, fontSize: '1rem' }}>
+                          {c.room_type === 'single' ? 'غرفة فردية' : c.room_type === 'double' ? 'غرفة ثنائية' : c.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية'} ({c.available_beds !== undefined ? c.available_beds : (c.count || 1)} أسرة متوفرة)
+                        </span>
+                        <strong style={{ color: 'var(--primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                          {c.price_per_person} ج.م <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ شهرياً</span>
+                        </strong>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {(c.commission_type === 'range' || (c.commission_min && c.commission_max)) ? (
+                          <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
+                            <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {formatCommissionDisplay(c)} (تفاوضي)
+                          </span>
+                        ) : c.commission != null ? (
+                          <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
+                            <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {formatCommissionDisplay(c)}
+                          </span>
+                        ) : null}
+
+                        {c.has_ac && (
+                          <span style={{ background: '#e0f2fe', color: '#0284c7', border: '1px solid #bae6fd', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Wind style={{ width: 14, height: 14 }} /> مكيفة
+                          </span>
+                        )}
+
+                        {c.insurance_price ? (
+                          <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <Shield style={{ width: 13, height: 13 }} /> تأمين: {c.insurance_price} ج.م
+                          </span>
+                        ) : (
+                          <span style={{ background: '#f1f5f9', color: '#475569', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
+                            بدون تأمين
+                          </span>
+                        )}
+                        {c.services_inclusive ? (
+                          <span style={{ background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Zap style={{ width: 13, height: 13 }} /> شامل الخدمات (مياه/كهرباء/إنترنت)
+                          </span>
+                        ) : (
+                          <span style={{ background: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Plug style={{ width: 13, height: 13 }} /> الخدمات غير مشمولة
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ));
+                }
+
+                const totalVal = calculateListingTotalPrice(listing);
+                return (
+                  <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600, marginBottom: '0.35rem' }}>السعر الإجمالي للوحدة / السكن بالكامل</div>
+                    <strong style={{ color: 'var(--primary-dark)', fontSize: '1.4rem', fontWeight: 900 }}>
+                      {totalVal ? totalVal.toLocaleString() : '---'} ج.م <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-muted)' }}>/ شهرياً</span>
                     </strong>
                   </div>
-
-                  <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                    {(c.commission_type === 'range' || (c.commission_min && c.commission_max)) ? (
-                      <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
-                        <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {formatCommissionDisplay(c)} (تفاوضي)
-                      </span>
-                    ) : c.commission != null ? (
-                      <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
-                        <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {formatCommissionDisplay(c)}
-                      </span>
-                    ) : null}
-
-                    {c.has_ac && (
-                      <span style={{ background: '#e0f2fe', color: '#0284c7', border: '1px solid #bae6fd', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <Wind style={{ width: 14, height: 14 }} /> مكيفة
-                      </span>
-                    )}
-
-                    {c.insurance_price ? (
-                      <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                        <Shield style={{ width: 13, height: 13 }} /> تأمين: {c.insurance_price} ج.م
-                      </span>
-                    ) : (
-                      <span style={{ background: '#f1f5f9', color: '#475569', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
-                        بدون تأمين
-                      </span>
-                    )}
-                    {c.services_inclusive ? (
-                      <span style={{ background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <Zap style={{ width: 13, height: 13 }} /> شامل الخدمات (مياه/كهرباء/إنترنت)
-                      </span>
-                    ) : (
-                      <span style={{ background: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <Plug style={{ width: 13, height: 13 }} /> الخدمات غير مشمولة
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })()}
             </div>
           </div>
 

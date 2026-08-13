@@ -80,4 +80,37 @@ export function formatCommissionDisplay(config) {
   return null;
 }
 
+export function calculateListingTotalPrice(item) {
+  if (!item) return 0;
+  const configs = item.room_configurations || [];
+
+  const validConfigs = configs.filter(c => Number(c.price_per_person) > 0);
+  if (validConfigs.length > 0) {
+    let totalFromRooms = 0;
+    validConfigs.forEach(c => {
+      const roomType = c.room_type || 'single';
+      const bedsPerRoom = roomType === 'single' ? 1 : roomType === 'double' ? 2 : roomType === 'triple' ? 3 : 4;
+      const roomCount = c.count || 1;
+      const pricePerPerson = Number(c.price_per_person) || 0;
+      totalFromRooms += (roomCount * bedsPerRoom * pricePerPerson);
+    });
+    return totalFromRooms;
+  }
+
+  const storedTotal = item.totalPrice !== undefined && item.totalPrice !== null 
+    ? Number(item.totalPrice) 
+    : (item.total_price !== undefined && item.total_price !== null ? Number(item.total_price) : null);
+
+  if (storedTotal !== null && !isNaN(storedTotal) && storedTotal > 0) {
+    return storedTotal;
+  }
+
+  if (item.price_per_person && item.available_beds) {
+    return Number(item.price_per_person) * Number(item.available_beds);
+  }
+
+  return 0;
+}
+
+
 
