@@ -1766,6 +1766,32 @@ export default function App() {
     }
   };
 
+  const handlePurgeLiveDatabase = async () => {
+    if (!window.confirm("حذاري! هل أنت متأكد تماماً من رغبتك في تطهير وحذف كافة الإعلانات والحسابات من قاعدة البيانات الحية على السيرفر؟ (سيتم الإبقاء فقط على حساب مسؤول المنصة 01000000000)")) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/admin/purge-all-data`, {
+        method: 'POST',
+        headers: {
+          'x-user-id': user?.id ? String(user.id) : ''
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(data.message || "تم تطهير قاعدة البيانات المباشرة بنجاح");
+        loadListings();
+        if (user?.id) loadUserListings(user.id);
+        if (isAdmin) loadAdminListings();
+      } else {
+        const errData = await res.json();
+        showToast(errData.detail || "فشل تطهير قاعدة البيانات");
+      }
+    } catch (err) {
+      showToast("خطأ أثناء الاتصال بالسيرفر");
+    }
+  };
+
   const handleRepublish = async (listingId, beds) => {
     try {
       const res = await fetch(`${API_BASE}/listings/${listingId}/republish`, {
@@ -2858,9 +2884,20 @@ export default function App() {
         {/* TAB 3: ADMIN MODERATION PANEL */}
         {tab === 'admin' && isAdmin && (
           <div>
-            <h2 className="details-title" style={{ fontSize: '1.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-              لوحة الإشراف والمراقبة للمسؤولين
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+              <h2 className="details-title" style={{ fontSize: '1.75rem', margin: 0 }}>
+                لوحة الإشراف والمراقبة للمسؤولين
+              </h2>
+              <button 
+                className="btn-outline" 
+                onClick={handlePurgeLiveDatabase}
+                style={{ borderColor: '#f87171', color: '#dc2626', background: '#fef2f2', fontWeight: 700, padding: '0.4rem 0.85rem' }}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Trash2 style={{ width: 15, height: 15 }} /> تطهير قاعدة البيانات المباشرة
+                </span>
+              </button>
+            </div>
 
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flexWrap: 'wrap' }}>
               <button className={adminTab === 'complaints' ? 'active-tab' : 'btn-secondary'} onClick={() => setAdminTab('complaints')}>طابور الشكاوى ({adminComplaints.length})</button>

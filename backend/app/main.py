@@ -2244,6 +2244,37 @@ def dismiss_complaint(complaint_id: int, x_user_id: Optional[int] = Query(None),
         db.close()
 
 
+@app.post('/admin/purge-all-data')
+def admin_purge_all_data(x_user_id: Optional[int] = Query(None), x_user_id_header: Optional[int] = Header(None, alias="x-user-id")):
+    db = SessionLocal()
+    try:
+        active_admin_id = x_user_id_header if x_user_id_header is not None else x_user_id
+        verify_admin_user(db, active_admin_id)
+
+        # 1. Delete ratings
+        rating_count = db.query(Rating).delete()
+        # 2. Delete complaints
+        complaint_count = db.query(Complaint).delete()
+        # 3. Delete messages
+        message_count = db.query(AdvertiserMessage).delete()
+        # 4. Delete waitlist entries
+        waitlist_count = db.query(WaitlistEntry).delete()
+        # 5. Delete OTP verifications
+        otp_count = db.query(OTPVerification).delete()
+        # 6. Delete listings
+        listing_count = db.query(Listing).delete()
+        # 7. Delete users except admin (phone = '01000000000')
+        user_count = db.query(User).filter(User.phone != "01000000000").delete()
+
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"تم تطهير وحذف كافة بيانات المنصة بنجاح: تم حذف {listing_count} إعلان و {user_count} حساب غير مسؤول و {rating_count} تقييم و {complaint_count} شكوى. تم الإبقاء على حساب المسؤول الرئيسي (01000000000) فقط."
+        }
+    finally:
+        db.close()
+
+
 @app.get('/admin/users', response_model=List[UserOut])
 def admin_list_users(x_user_id: Optional[int] = None):
     db = SessionLocal()
