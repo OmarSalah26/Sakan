@@ -541,11 +541,13 @@ export default function ListingDetailPage() {
               فئات الغرف والأسعار المتاحة
             </h3>
             <div style={{ display: 'grid', gap: '0.85rem' }}>
-              {listing.room_configurations?.map((c, idx) => (
+              {(listing.room_configurations || [])
+                .filter(c => (c.available_beds !== undefined ? c.available_beds > 0 : true))
+                .map((c, idx) => (
                 <div key={idx} style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                     <span style={{ fontWeight: 700, fontSize: '1rem' }}>
-                      {c.room_type === 'single' ? 'غرفة فردية' : c.room_type === 'double' ? 'غرفة ثنائية' : c.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية'} ({c.count || 1} غرفة متوفرة)
+                      {c.room_type === 'single' ? 'غرفة فردية' : c.room_type === 'double' ? 'غرفة ثنائية' : c.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية'} ({c.available_beds !== undefined ? c.available_beds : (c.count || 1)} أسرة متوفرة)
                     </span>
                     <strong style={{ color: 'var(--primary)', fontSize: '1.2rem', fontWeight: 800 }}>
                       {c.price_per_person} ج.م <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ شهرياً</span>

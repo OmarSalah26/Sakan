@@ -439,6 +439,7 @@ export default function App() {
   const [profileUserId, setProfileUserId] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [listings, setListings] = useState([]);
+  const [userListings, setUserListings] = useState([]);
 
   const handleCardClick = (listingId) => {
     try {
@@ -908,6 +909,19 @@ export default function App() {
     }
   };
 
+  const loadUserListings = async (userId) => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_BASE}/listings/user/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUserListings(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const sortedListings = [...listings].sort((a, b) => {
     if (sortBy === 'newest') return (b.id || 0) - (a.id || 0);
     if (sortBy === 'oldest') return (a.id || 0) - (b.id || 0);
@@ -919,16 +933,19 @@ export default function App() {
   useEffect(() => {
     loadListings();
     loadGovernorates();
+    if (user?.id) loadUserListings(user.id);
   }, [filters]);
 
   useEffect(() => {
     if (user) {
       loadBookmarks();
+      if (user.id) loadUserListings(user.id);
       if (user.account_type === 'admin') {
         loadAdminData();
       }
     } else {
       setBookmarkedIds([]);
+      setUserListings([]);
     }
   }, [user]);
 
@@ -1496,6 +1513,7 @@ export default function App() {
           setTab('browse');
         }
         loadListings();
+        if (currentUser?.id) loadUserListings(currentUser.id);
 
         if (!isEditing && publishedData) {
           setPostPublishListing(publishedData);
@@ -1728,6 +1746,26 @@ export default function App() {
     }
   };
 
+  const handleUpdateRoomBeds = async (listingId, configIndex, newBedCount) => {
+    if (newBedCount < 0) return;
+    try {
+      const res = await fetch(`${API_BASE}/listings/${listingId}/beds`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config_index: configIndex, available_beds: newBedCount })
+      });
+      if (res.ok) {
+        showToast("تم تحديث الأسرة المتاحة للغرفة بنجاح");
+        loadListings();
+        if (user?.id) loadUserListings(user.id);
+      } else {
+        showToast("فشل تحديث الأسرة المتاحة");
+      }
+    } catch (err) {
+      showToast("فشل تحديث البيانات");
+    }
+  };
+
   const handleRepublish = async (listingId, beds) => {
     try {
       const res = await fetch(`${API_BASE}/listings/${listingId}/republish`, {
@@ -1739,6 +1777,7 @@ export default function App() {
         const republishData = await res.json();
         showToast("تم إعادة نشر الإعلان بنجاح");
         loadListings();
+        if (user?.id) loadUserListings(user.id);
 
         if (republishData) {
           setPostPublishListing(republishData);
@@ -1758,6 +1797,7 @@ export default function App() {
       if (res.ok) {
         showToast("تم تغيير حالة الإعلان بنجاح");
         loadListings();
+        if (user?.id) loadUserListings(user.id);
       }
     } catch (err) {
       showToast("فشل في تغيير حالة الإعلان");
@@ -1883,11 +1923,27 @@ export default function App() {
       if (res.ok) {
         showToast("تم إعادة تفعيل العقار بنجاح (تجاوز باقة الاشتراكات)");
         loadAdminData();
-      } else {
-        showToast("فشل تفعيل العقار");
       }
     } catch (err) {
       showToast("فشل تفعيل العقار");
+    }
+  };
+
+  const handleAdminRemoveListing = async (listingId) => {
+    if (!window.confirm("هل أنت تأكد من إيقاف وحذف هذا الإعلان نهائياً من المنصة؟")) return;
+    try {
+      const res = await fetch(`${API_BASE}/admin/listings/${listingId}/remove?x_user_id=${user.id}`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        showToast("تم إيقاف وحذف الإعلان نهائياً من المنصة");
+        loadAdminData();
+        loadListings();
+      } else {
+        showToast("فشل إيقاف الإعلان");
+      }
+    } catch (err) {
+      showToast("خطأ أثناء إيقاف الإعلان");
     }
   };
 
@@ -2613,18 +2669,21 @@ export default function App() {
                             {/* Grouped Per-Room Configurations (Room Type + AC + Price + Commission) */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.1rem' }}>
                               {configs && configs.length > 0 ? (
-                                configs.map((config, idx) => {
-                                  let typeLabel = config.room_type === 'single' ? 'غرفة فردية' : config.room_type === 'double' ? 'غرفة ثنائية' : config.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية';
-                                  const isRange = config.commission_type === 'range' || (config.commission_min && config.commission_max);
+                                configs
+                                  .filter(config => (config.available_beds !== undefined ? config.available_beds > 0 : true))
+                                  .map((config, idx) => {
+                                    let typeLabel = config.room_type === 'single' ? 'غرفة فردية' : config.room_type === 'double' ? 'غرفة ثنائية' : config.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية';
+                                    const isRange = config.commission_type === 'range' || (config.commission_min && config.commission_max);
+                                    const bedsAvail = config.available_beds !== undefined ? config.available_beds : (config.count || 1);
 
-                                  return (
-                                    <div key={idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.55rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                                          <Bed style={{ width: 14, height: 14, color: 'var(--primary)' }} />
-                                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
-                                            ({config.count || 1}) {typeLabel}
-                                          </span>
+                                    return (
+                                      <div key={idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.55rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                            <Bed style={{ width: 14, height: 14, color: 'var(--primary)' }} />
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
+                                              ({bedsAvail} أسرة متوفرة) {typeLabel}
+                                            </span>
                                           
                                           {/* AC Badge tied directly to THIS room */}
                                           {config.has_ac && (
@@ -2704,43 +2763,70 @@ export default function App() {
             </h2>
 
             <div style={{ display: 'grid', gap: '1.5rem' }}>
-              {listings.filter(l => l.advertiser_id === user.id).length === 0 ? (
+              {userListings.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem', background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', marginBottom: '1rem' }}>ليس لديك أي إعلانات سكنية نشطة حتى الآن.</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', marginBottom: '1rem' }}>ليس لديك أي إعلانات سكنية حتى الآن.</p>
                   <button className="btn-primary" onClick={handleOpenCreateFlow}>أضف إعلانك الأول الآن</button>
                 </div>
               ) : (
-                listings.filter(l => l.advertiser_id === user.id).map(item => (
-                  <div key={item.id} style={{ display: 'flex', gap: '1.5rem', background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                userListings.map(item => (
+                  <div key={item.id} style={{ display: 'flex', gap: '1.5rem', background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '1.25rem', flexWrap: 'wrap', alignItems: 'center', opacity: item.status === 'inactive' ? 0.85 : 1 }}>
                     <img 
                       src={item.photo_urls?.[0] || "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"} 
                       style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: 'var(--radius-md)' }} 
                       alt="" 
                     />
                     <div style={{ flexGrow: 1 }}>
-                      <h3 style={{ fontWeight: 700 }}>{item.title}</h3>
-                      <p style={{ color: 'var(--text-light)', fontSize: '0.85rem' }}><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {item.governorate}، {item.city}، {item.neighborhood}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <h3 style={{ fontWeight: 700, margin: 0 }}>{item.title}</h3>
+                        {item.status === 'inactive' && (
+                          <span style={{ fontSize: '0.72rem', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
+                            غير نشط (معطل)
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ color: 'var(--text-light)', fontSize: '0.85rem', marginTop: '0.25rem' }}><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {item.governorate}، {item.city}، {item.neighborhood}</p>
                       <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                        <span>الحالة: <strong style={{ color: item.status === 'active' ? 'var(--primary)' : 'red' }}>
-                          {item.status === 'active' ? 'نشط' : item.status === 'inactive' ? 'غير نشط' : 'محظور'}
+                        <span>الحالة: <strong style={{ color: item.status === 'active' ? 'var(--primary)' : '#ef4444' }}>
+                          {item.status === 'active' ? 'نشط' : 'غير نشط'}
                         </strong></span>
                         <span>الأسرة المتاحة: <strong>{item.available_beds}</strong></span>
                         <span>المشاهدات: <strong>{item.view_count || 0}</strong></span>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        <label style={{ fontSize: '0.75rem' }}>الأسرة الشاغرة</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <button className="btn-secondary" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleUpdateBeds(item.id, item.available_beds - 1)}>-</button>
-                          <span style={{ minWidth: '30px', textAlign: 'center', fontWeight: 'bold' }}>{item.available_beds}</span>
-                          <button className="btn-secondary" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleUpdateBeds(item.id, item.available_beds + 1)}>+</button>
-                        </div>
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', minWidth: '170px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>الأسرة الشاغرة لكل فئة:</label>
+                        {(() => {
+                          const configs = (Array.isArray(item.room_configurations) 
+                            ? item.room_configurations 
+                            : (typeof item.room_configurations === 'string' ? safe_json_loads(item.room_configurations, []) : [])
+                          );
+                          const displayConfigs = configs.length > 0 ? configs : [{ room_type: item.room_type || 'single', available_beds: item.available_beds, count: 1 }];
+
+                          return displayConfigs.map((conf, idx) => {
+                            const roomLabel = conf.room_type === 'single' ? 'فردية' : conf.room_type === 'double' ? 'ثنائية' : conf.room_type === 'triple' ? 'ثلاثية' : 'رباعية';
+                            const currentBeds = conf.available_beds !== undefined ? conf.available_beds : (conf.count || 1);
+
+                            return (
+                              <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: '#f8fafc', padding: '0.25rem 0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1e293b' }}>{roomLabel}:</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <button className="btn-secondary" style={{ padding: '0.15rem 0.4rem', fontSize: '0.75rem' }} onClick={() => handleUpdateRoomBeds(item.id, idx, currentBeds - 1)}>-</button>
+                                  <span style={{ minWidth: '22px', textAlign: 'center', fontWeight: 'bold', fontSize: '0.8rem' }}>{currentBeds}</span>
+                                  <button className="btn-secondary" style={{ padding: '0.15rem 0.4rem', fontSize: '0.75rem' }} onClick={() => handleUpdateRoomBeds(item.id, idx, currentBeds + 1)}>+</button>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
                       </div>
 
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
-                        <button className="btn-secondary" onClick={() => openListingDetail(item.id)}>عرض التفاصيل</button>
+                        <button className="btn-secondary" onClick={() => openListingDetail(item.id)}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>معاينة الإعلان <Eye style={{ width: 14, height: 14 }} /></span>
+                        </button>
                         <button className="btn-primary" style={{ padding: '0.4rem 0.85rem' }} onClick={() => handleOpenEditFlow(item)}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تعديل الإعلان <PenTool style={{ width: 14, height: 14 }} /></span>
                         </button>
@@ -2751,9 +2837,9 @@ export default function App() {
                           style={{ borderColor: item.status === 'active' ? '#f87171' : '#4ade80', color: item.status === 'active' ? '#ef4444' : '#16a34a' }}
                         >
                           {item.status === 'active' ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إيقاف الإعلان <StopCircle style={{ width: 14, height: 14 }} /></span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إلغاء التفعيل <StopCircle style={{ width: 14, height: 14 }} /></span>
                           ) : (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تفعيل الإعلان <Check style={{ width: 14, height: 14 }} /></span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إعادة تفعيل الإعلان <Check style={{ width: 14, height: 14 }} /></span>
                           )}
                         </button>
 
@@ -3001,14 +3087,17 @@ export default function App() {
                           أرسل رابط التعديل للمعلن
                         </button>
                         {l.status === 'active' ? (
-                          <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => handleListingDeactivate(l.id)}>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إلغاء تفعيل <StopCircle style={{ width: 14, height: 14 }} /></span>
+                          <button className="btn-outline" style={{ fontSize: '0.8rem', borderColor: '#f87171', color: '#ef4444' }} onClick={() => handleListingDeactivate(l.id)}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إلغاء التفعيل <StopCircle style={{ width: 14, height: 14 }} /></span>
                           </button>
                         ) : (
                           <button className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => handleAdminListingReactivate(l.id)}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إعادة تفعيل <Check style={{ width: 14, height: 14 }} /></span>
                           </button>
                         )}
+                        <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => handleAdminRemoveListing(l.id)}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إيقاف وحذف الإعلان <Trash2 style={{ width: 14, height: 14 }} /></span>
+                        </button>
                       </div>
                     </div>
                   )))}
@@ -3087,10 +3176,13 @@ export default function App() {
                         </div>
 
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => openListingDetail(l.id)}>عرض</button>
+                          <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => openListingDetail(l.id)}>عرض التفاصيل</button>
                           <button className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => handleOpenEditFlow(l)}>تعديل الإعلان</button>
                           <button className="btn-outline" style={{ fontSize: '0.8rem', color: '#2563eb', borderColor: '#bfdbfe' }} onClick={() => handleGenerateEditLink(l.id)}>
                             أرسل رابط التعديل للمعلن
+                          </button>
+                          <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => handleAdminRemoveListing(l.id)}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إيقاف وحذف الإعلان <Trash2 style={{ width: 14, height: 14 }} /></span>
                           </button>
                         </div>
                       </div>

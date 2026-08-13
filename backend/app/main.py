@@ -720,9 +720,8 @@ def build_listing_out(item: Listing, advertiser: Optional[User] = None) -> Listi
         view_count=safe_int(item.view_count, 0),
         min_lease_months=safe_int(item.min_lease_months, None),
         contact_phone=item.contact_phone,
-        whatsapp_phone=item.whatsapp_phone,
         advertiser_name=advertiser.name if advertiser else None,
-        advertiser_type=advertiser.account_type if advertiser else None,
+        advertiser_type="broker" if advertiser and advertiser.account_type == "admin" else (advertiser.account_type if advertiser else None),
         advertiser_verified=advertiser.verified_by_sakan if advertiser else False,
         source=item.source or "normal",
         full_edit_available=bool(item.full_edit_available),
@@ -1147,6 +1146,11 @@ def create_listing(payload: ListingCreate):
             payload.apartment_number, payload.floor
         ) or payload.address or ""
 
+        if configs:
+            for c in configs:
+                if "available_beds" not in c or c["available_beds"] is None:
+                    c["available_beds"] = safe_int(c.get("count"), 1)
+
         listing = Listing(
             title=payload.title or "سكن طلاب",
             governorate=payload.governorate,
@@ -1480,7 +1484,12 @@ def list_listings(
         if gender:
             query = query.filter(Listing.gender == gender)
         if advertiser_type:
-            query = query.filter(User.account_type == advertiser_type)
+            if advertiser_type == 'broker':
+                query = query.filter(User.account_type.in_(['broker', 'admin']))
+            elif advertiser_type == 'owner':
+                query = query.filter(User.account_type == 'owner')
+            else:
+                query = query.filter(User.account_type == advertiser_type)
 
         listings = query.order_by(Listing.created_at.desc()).all()
 
@@ -1626,6 +1635,17 @@ def list_listings(
             )
 
         return filtered
+    finally:
+        db.close()
+
+
+@app.get('/listings/user/{user_id}', response_model=List[ListingOut])
+def get_user_listings(user_id: int):
+    db = SessionLocal()
+    try:
+        listings = db.query(Listing).filter(Listing.advertiser_id == user_id).order_by(Listing.created_at.desc()).all()
+        advertiser = db.query(User).filter(User.id == user_id).first()
+        return [build_listing_out(item, advertiser) for item in listings]
     finally:
         db.close()
 
@@ -1840,11 +1860,48 @@ def update_available_beds(listing_id: int, payload: dict):
         if beds is None or beds < 0:
             raise HTTPException(status_code=400, detail="عدد الأسرة غير صحيح")
 
-        listing.available_beds = beds
-        if beds == 0:
+        config_index = payload.get("config_index")
+        room_type = payload.get("room_type")
+
+        configs = safe_json_loads(listing.room_configurations, [])
+        if configs:
+            target_idx = None
+            if config_index is not None and isinstance(config_index, int) and 0 <= config_index < len(configs):
+                target_idx = config_index
+            elif room_type:
+                for idx, c in enumerate(configs):
+                    if c.get("room_type") == room_type:
+                        target_idx = idx
+                        break
+
+            if target_idx is not None:
+                configs[target_idx]["available_beds"] = beds
+            else:
+                configs[0]["available_beds"] = beds
+
+            # Ensure all configs have an available_beds field
+            for c in configs:
+                if "available_beds" not in c:
+                    c["available_beds"] = safe_int(c.get("count"), 1)
+
+            listing.room_configurations = json.dumps(configs, ensure_ascii=False)
+            total_beds = sum(safe_int(c.get("available_beds"), 0) for c in configs)
+            listing.available_beds = total_beds
+        else:
+            listing.available_beds = beds
+
+        if listing.available_beds == 0:
             listing.status = "inactive"
+        elif listing.available_beds > 0 and listing.status == "inactive":
+            listing.status = "active"
+
         db.commit()
-        return {"id": listing.id, "available_beds": listing.available_beds, "status": listing.status}
+        return {
+            "id": listing.id,
+            "available_beds": listing.available_beds,
+            "room_configurations": safe_json_loads(listing.room_configurations, []),
+            "status": listing.status
+        }
     finally:
         db.close()
 
@@ -1877,6 +1934,43 @@ def republish_listing(listing_id: int, payload: dict):
         return {"id": listing.id, "status": listing.status, "available_beds": listing.available_beds}
     finally:
         db.close()
+
+
+@app.post('/listings/{listing_id}/deactivate')
+def deactivate_listing(listing_id: int):
+    db = SessionLocal()
+    try:
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        listing.status = "inactive"
+        db.commit()
+        return {"id": listing.id, "status": listing.status}
+    finally:
+        db.close()
+
+
+@app.post('/listings/{listing_id}/toggle-status')
+def toggle_listing_status(listing_id: int):
+    db = SessionLocal()
+    try:
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        if listing.status == "active":
+            listing.status = "inactive"
+        else:
+            listing.status = "active"
+            if listing.available_beds == 0:
+                listing.available_beds = 1
+
+        db.commit()
+        return {"id": listing.id, "status": listing.status, "available_beds": listing.available_beds}
+    finally:
+        db.close()
+
 
 @app.post('/listings/{listing_id}/reactivate')
 def reactivate_listing(listing_id: int, payload: Optional[dict] = None):
@@ -2262,9 +2356,11 @@ def admin_remove_listing(listing_id: int, x_user_id: Optional[int] = None):
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
 
-        listing.status = "inactive"  # Soft delete
+        db.query(Rating).filter(Rating.listing_id == listing_id).delete()
+        db.query(Complaint).filter(Complaint.listing_id == listing_id).delete()
+        db.delete(listing)
         db.commit()
-        return {"id": listing.id, "status": listing.status}
+        return {"id": listing_id, "status": "deleted"}
     finally:
         db.close()
 
