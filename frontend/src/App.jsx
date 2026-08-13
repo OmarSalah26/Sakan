@@ -834,7 +834,11 @@ export default function App() {
       min_lease_months: item.min_lease_months || null,
       source: item.source || 'normal',
       full_edit_available: item.full_edit_available || false,
-      location_precise: item.location_precise || false
+      location_precise: item.location_precise || false,
+      contact_phone: item.contact_phone || item.phone || '',
+      whatsapp_phone: item.whatsapp_phone || item.contact_phone || item.phone || '',
+      no_whatsapp: Boolean(item.whatsapp_phone && item.contact_phone && item.whatsapp_phone !== item.contact_phone),
+      contact_verified: true
     });
     setShowMapPicker(false);
     setIsCreateOpen(true);
@@ -992,6 +996,9 @@ export default function App() {
               const item = data.listing || data;
               if (item && item.id) {
                 handleOpenEditFlow(item);
+                if (window.history && window.history.replaceState) {
+                  window.history.replaceState({}, '', window.location.pathname + '#/browse');
+                }
               }
             })
             .catch(() => {});
