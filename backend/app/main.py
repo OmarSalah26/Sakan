@@ -720,6 +720,7 @@ def build_listing_out(item: Listing, advertiser: Optional[User] = None) -> Listi
         view_count=safe_int(item.view_count, 0),
         min_lease_months=safe_int(item.min_lease_months, None),
         contact_phone=item.contact_phone,
+        whatsapp_phone=item.whatsapp_phone,
         advertiser_name=advertiser.name if advertiser else None,
         advertiser_type="broker" if advertiser and advertiser.account_type == "admin" else (advertiser.account_type if advertiser else None),
         advertiser_verified=advertiser.verified_by_sakan if advertiser else False,
