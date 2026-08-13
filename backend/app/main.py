@@ -6,7 +6,7 @@ import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 from fastapi import FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,7 +21,7 @@ import urllib.request
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -634,7 +634,7 @@ class ListingCreate(BaseModel):
     not_vacant_reports: int = 0
 
     # Legacy fields for test compatibility
-    price_per_person: Optional[int] = None
+    price_per_person: Optional[Union[float, int]] = None
     room_type: Optional[str] = None
 
 
@@ -654,7 +654,7 @@ class ListingOut(BaseModel):
     longitude: Optional[float] = None
     gender: str
     available_beds: int
-    price_per_person: Optional[int] = None
+    price_per_person: Optional[Union[float, int]] = None
     room_type: Optional[str] = None
     room_configurations: List[dict] = []
     amenities: List[str] = []
@@ -2240,37 +2240,6 @@ def dismiss_complaint(complaint_id: int, x_user_id: Optional[int] = Query(None),
         complaint.actioned_at = datetime.utcnow()
         db.commit()
         return {'id': complaint.id, 'status': complaint.status}
-    finally:
-        db.close()
-
-
-@app.post('/admin/purge-all-data')
-def admin_purge_all_data(x_user_id: Optional[int] = Query(None), x_user_id_header: Optional[int] = Header(None, alias="x-user-id")):
-    db = SessionLocal()
-    try:
-        active_admin_id = x_user_id_header if x_user_id_header is not None else x_user_id
-        verify_admin_user(db, active_admin_id)
-
-        # 1. Delete ratings
-        rating_count = db.query(Rating).delete()
-        # 2. Delete complaints
-        complaint_count = db.query(Complaint).delete()
-        # 3. Delete messages
-        message_count = db.query(AdvertiserMessage).delete()
-        # 4. Delete waitlist entries
-        waitlist_count = db.query(WaitlistEntry).delete()
-        # 5. Delete OTP verifications
-        otp_count = db.query(OTPVerification).delete()
-        # 6. Delete listings
-        listing_count = db.query(Listing).delete()
-        # 7. Delete users except admin (phone = '01000000000')
-        user_count = db.query(User).filter(User.phone != "01000000000").delete()
-
-        db.commit()
-        return {
-            "status": "success",
-            "message": f"تم تطهير وحذف كافة بيانات المنصة بنجاح: تم حذف {listing_count} إعلان و {user_count} حساب غير مسؤول و {rating_count} تقييم و {complaint_count} شكوى. تم الإبقاء على حساب المسؤول الرئيسي (01000000000) فقط."
-        }
     finally:
         db.close()
 
