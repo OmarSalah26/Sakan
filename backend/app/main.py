@@ -319,6 +319,8 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE listings ADD COLUMN location_precise BOOLEAN DEFAULT 0"))
             if "not_vacant_reports" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN not_vacant_reports INTEGER DEFAULT 0"))
+            if "total_price" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN total_price REAL"))
 
         # Check ratings table
         if "ratings" in inspector.get_table_names():
