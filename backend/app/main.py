@@ -35,7 +35,13 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_FILE = BASE_DIR / "sakan.db"
 DATABASE_URL = os.environ.get("DATABASE_URL") or f"sqlite:///{DB_FILE}"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+if "sqlite" in DATABASE_URL:
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -874,7 +880,7 @@ def register_user(payload: RegisterRequest):
             raise HTTPException(status_code=400, detail="الاسم بالكامل مطلوب لجميع الحسابات")
 
         user = db.query(User).filter(User.phone == payload.phone).first()
-        if user and user.password_hash:
+        if user and (user.is_verified or user.password_hash):
             raise HTTPException(status_code=400, detail="رقم الهاتف مسجل بالفعل، يرجى تسجيل الدخول بدلاً من ذلك")
 
         otp_code = "123456"
