@@ -1468,7 +1468,7 @@ def list_listings(
     try:
         # Base query: active listings, advertiser not banned
         query = db.query(Listing).join(User, Listing.advertiser_id == User.id).filter(
-            Listing.status == 'active',
+            or_(Listing.status == 'active', Listing.status == 'available'),
             User.is_banned == False
         )
 
