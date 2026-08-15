@@ -4,9 +4,13 @@ import json
 import os
 import shutil
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Literal, Optional, Union
+
+IS_TESTING = False
+OTP_EXPIRATION_MINUTES = 10
+
 from fastapi import FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,13 +35,120 @@ from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 import hashlib
 import os
+import random
+import json
+import urllib.request
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+def _load_dotenv():
+    env_file = BASE_DIR / ".env"
+    if env_file.exists():
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip("'").strip('"'))
+
+_load_dotenv()
+
 DB_FILE = BASE_DIR / "sakan.db"
 DATABASE_URL = os.environ.get("DATABASE_URL") or f"sqlite:///{DB_FILE}"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+
+def format_phone_e164(phone: str) -> str:
+    cleaned = ''.join(c for c in (phone or '') if c.isdigit())
+    if cleaned.startswith("20"):
+        return f"+{cleaned}"
+    elif cleaned.startswith("0"):
+        return f"+20{cleaned[1:]}"
+    elif len(cleaned) == 10:
+        return f"+20{cleaned}"
+    elif cleaned:
+        return f"+{cleaned}"
+    return phone
+
+
+def solve_akedly_pow(challenge: str, difficulty: int = 3) -> str:
+    target = "0" * difficulty
+    nonce = 0
+    while True:
+        cand = f"{challenge}:{nonce}"
+        h = hashlib.sha256(cand.encode('utf-8')).hexdigest()
+        if h.startswith(target):
+            return str(nonce)
+        nonce += 1
+
+
+def send_akedly_otp(phone: str, otp_code: str) -> dict:
+    if IS_TESTING or os.environ.get("TESTING") == "true":
+        return {"status": "mock", "message": "Test mode mock OTP"}
+
+    api_key = os.environ.get("AKEDLY_API_KEY", "").strip()
+    pipeline_id = os.environ.get("AKEDLY_PIPELINE_ID", "").strip()
+    if not api_key or not pipeline_id:
+        print("[AKEDLY] Credentials missing in environment, falling back to local mode.")
+        return {"status": "mock", "message": "Akedly credentials missing"}
+
+    formatted_phone = format_phone_e164(phone)
+    headers = {"Content-Type": "application/json"}
+
+    try:
+        # Step 1: Fetch V1.2 Challenge with 5s timeout
+        url_chal = f"https://api.akedly.io/api/v1.2/transactions/challenge?APIKey={api_key}&pipelineID={pipeline_id}"
+        req_chal = urllib.request.Request(url_chal)
+        with urllib.request.urlopen(req_chal, timeout=5) as r1:
+            res_chal = json.loads(r1.read().decode("utf-8"))
+
+        data_chal = res_chal.get("data", {})
+        challenge = data_chal.get("challenge")
+        difficulty = data_chal.get("difficulty", 3)
+        token = data_chal.get("challengeToken")
+
+        # Step 2: Solve PoW
+        nonce = solve_akedly_pow(challenge, difficulty)
+
+        # Step 3: Send OTP via Akedly V1.2 with 5s timeout
+        payload = {
+            "APIKey": api_key,
+            "pipelineID": pipeline_id,
+            "powSolution": {
+                "challengeToken": token,
+                "nonce": nonce
+            },
+            "verificationAddress": {
+                "phoneNumber": formatted_phone
+            },
+            "otp": otp_code
+        }
+        req_send = urllib.request.Request(
+            "https://api.akedly.io/api/v1.2/transactions/send",
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST"
+        )
+        with urllib.request.urlopen(req_send, timeout=5) as r2:
+            resp_body = json.loads(r2.read().decode("utf-8"))
+            print(f"[AKEDLY SUCCESS] OTP {otp_code} sent to {formatted_phone}: {resp_body}")
+            return {"status": "success", "data": resp_body}
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8")
+        try:
+            err_json = json.loads(err_body)
+            msg = err_json.get("message") or err_json.get("code") or err_body
+        except Exception:
+            msg = err_body
+        print(f"[AKEDLY HTTP ERROR] {e.code} sending OTP to {formatted_phone}: {msg}")
+        return {"status": "error", "error": msg}
+    except Exception as e:
+        print(f"[AKEDLY ERROR] Failed sending OTP to {formatted_phone}: {e}")
+        return {"status": "error", "error": str(e)}
+
+
 
 
 def hash_password(password: str, salt: str = None) -> str:
@@ -81,6 +192,7 @@ class User(Base):
     verified_channel = Column(String, nullable=True)  # "whatsapp", "telegram", "sms", "email"
     password_hash = Column(String, nullable=True)
     must_change_password = Column(Boolean, default=False)
+    auth_token = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     listings = relationship("Listing", back_populates="advertiser")
@@ -259,6 +371,27 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE users ADD COLUMN password_hash TEXT"))
             if "must_change_password" not in user_cols:
                 connection.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))
+            if "auth_token" not in user_cols:
+                connection.execute(text("ALTER TABLE users ADD COLUMN auth_token VARCHAR"))
+
+        # Reassign legacy/scraped listings to matching advertiser user by phone number if advertiser_id == 1 or null
+        if "listings" in inspector.get_table_names() and "users" in inspector.get_table_names():
+            connection.execute(text("""
+                UPDATE listings 
+                SET advertiser_id = (
+                    SELECT id FROM users 
+                    WHERE users.phone = listings.contact_phone 
+                       OR users.phone = listings.whatsapp_phone 
+                    LIMIT 1
+                )
+                WHERE (advertiser_id IS NULL OR advertiser_id = 1) 
+                  AND (contact_phone IS NOT NULL OR whatsapp_phone IS NOT NULL)
+                  AND EXISTS (
+                    SELECT 1 FROM users 
+                    WHERE users.phone = listings.contact_phone 
+                       OR users.phone = listings.whatsapp_phone
+                  )
+            """))
 
         # Check listings table
         if "listings" in inspector.get_table_names():
@@ -504,12 +637,66 @@ def process_photo_urls(urls: List[str]) -> List[str]:
     return processed
 
 
-def verify_admin_user(db, x_user_id: Optional[int]):
-    if x_user_id is None:
-        raise HTTPException(status_code=403, detail="مطلوب تسجيل الدخول كمسؤول للوصول لهذه الخدمة")
-    admin = db.query(User).filter(User.id == x_user_id).first()
+def get_authenticated_user(
+    db,
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
+    x_user_id: Optional[int] = Header(None, alias="x-user-id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id_q: Optional[int] = Query(None, alias="x_user_id")
+) -> Optional[User]:
+    token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+    elif x_auth_token:
+        token = x_auth_token.strip()
+    elif auth_token:
+        token = auth_token.strip()
+
+    if token:
+        user = db.query(User).filter(User.auth_token == token).first()
+        if user and not user.is_banned:
+            return user
+
+    user_id_val = None
+    for candidate in [x_user_id, x_user_id_q]:
+        if isinstance(candidate, int):
+            user_id_val = candidate
+            break
+        elif isinstance(candidate, str) and candidate.isdigit():
+            user_id_val = int(candidate)
+            break
+
+    if user_id_val is not None:
+        user = db.query(User).filter(User.id == user_id_val).first()
+        if user and not user.is_banned:
+            if not user.auth_token:
+                user.auth_token = uuid.uuid4().hex
+                try:
+                    db.commit()
+                except Exception:
+                    pass
+            return user
+    return None
+
+
+def verify_admin_user(
+    db, 
+    x_user_id: Optional[int] = None,
+    authorization: Optional[str] = None,
+    x_auth_token: Optional[str] = None,
+    auth_token: Optional[str] = None
+):
+    admin = get_authenticated_user(
+        db, 
+        authorization=authorization, 
+        x_auth_token=x_auth_token, 
+        x_user_id=x_user_id, 
+        auth_token=auth_token
+    )
     if not admin or admin.account_type != "admin":
         raise HTTPException(status_code=403, detail="غير مصرح بالدخول لغير المسؤولين")
+    return admin
 
 
 # --- Pydantic Schemas ---
@@ -550,10 +737,22 @@ class UserOut(BaseModel):
     created_at: Optional[datetime] = None
     must_change_password: bool = False
     has_password: bool = False
+    auth_token: Optional[str] = None
 
 
 def user_to_user_out(u: User) -> UserOut:
     govs = safe_json_loads(u.governorates, [])
+    if not u.auth_token:
+        u.auth_token = uuid.uuid4().hex
+        db = SessionLocal()
+        try:
+            db_u = db.query(User).filter(User.id == u.id).first()
+            if db_u and not db_u.auth_token:
+                db_u.auth_token = u.auth_token
+                db.commit()
+        finally:
+            db.close()
+
     return UserOut(
         id=u.id,
         phone=u.phone,
@@ -569,7 +768,8 @@ def user_to_user_out(u: User) -> UserOut:
         verified_channel=u.verified_channel,
         created_at=u.created_at,
         must_change_password=bool(u.must_change_password),
-        has_password=bool(u.password_hash)
+        has_password=bool(u.password_hash),
+        auth_token=u.auth_token
     )
 
 
@@ -861,6 +1061,14 @@ def upload_listing_photo(file: UploadFile = File(...)):
     return {"url": f"/static/uploads/listings/{filename}"}
 
 
+@app.post('/webhook')
+@app.post('/api/webhooks/akedly')
+def akedly_webhook(payload: dict = {}):
+    """Callback endpoint for Akedly real-time delivery logs & status updates."""
+    print(f"[AKEDLY WEBHOOK] Received event log: {payload}")
+    return {"status": "ok"}
+
+
 @app.post('/auth/register')
 def register_user(payload: RegisterRequest):
     db = SessionLocal()
@@ -874,10 +1082,11 @@ def register_user(payload: RegisterRequest):
             raise HTTPException(status_code=400, detail="الاسم بالكامل مطلوب لجميع الحسابات")
 
         user = db.query(User).filter(User.phone == payload.phone).first()
-        if user and user.password_hash:
+        if user and (user.is_verified or user.password_hash):
             raise HTTPException(status_code=400, detail="رقم الهاتف مسجل بالفعل، يرجى تسجيل الدخول بدلاً من ذلك")
 
-        otp_code = "123456"
+        otp_code = f"{random.randint(100000, 999999)}"
+
         otp_verify = db.query(OTPVerification).filter(OTPVerification.phone == payload.phone).first()
         if not otp_verify:
             otp_verify = OTPVerification(phone=payload.phone)
@@ -885,8 +1094,21 @@ def register_user(payload: RegisterRequest):
         otp_verify.otp_code = otp_code
         otp_verify.name = payload.name
         otp_verify.account_type = payload.account_type
+        otp_verify.created_at = datetime.utcnow()
         db.commit()
-        return {'message': 'otp sent', 'otp_code': otp_code, 'phone': payload.phone}
+
+        # Trigger Akedly OTP Delivery
+        akedly_res = send_akedly_otp(payload.phone, otp_code)
+        if akedly_res.get('status') == 'error':
+            err_msg = akedly_res.get('error', 'فشل إرسال كود التحقق عبر Akedly')
+            if 'quota' in str(err_msg).lower():
+                err_msg = "رصيد حساب Akedly غير كافٍ لإرسال الرسائل (Insufficient quota). يرجى شحن الرصيد في Akedly.io."
+            raise HTTPException(status_code=400, detail=err_msg)
+
+        res = {'message': 'otp sent', 'phone': payload.phone, 'akedly_status': akedly_res.get('status')}
+        if IS_TESTING or akedly_res.get('status') == 'mock':
+            res['otp_code'] = otp_code
+        return res
     finally:
         db.close()
 
@@ -903,7 +1125,8 @@ def login_otp(payload: LoginOTPRequest):
         if not user:
             raise HTTPException(status_code=404, detail="رقم الهاتف غير مسجل، يرجى إنشاء حساب جديد أولاً")
 
-        otp_code = "123456"
+        otp_code = f"{random.randint(100000, 999999)}"
+
         otp_verify = db.query(OTPVerification).filter(OTPVerification.phone == payload.phone).first()
         if not otp_verify:
             otp_verify = OTPVerification(phone=payload.phone)
@@ -911,9 +1134,21 @@ def login_otp(payload: LoginOTPRequest):
         otp_verify.otp_code = otp_code
         otp_verify.name = user.name
         otp_verify.account_type = user.account_type
+        otp_verify.created_at = datetime.utcnow()
         db.commit()
 
-        return {'message': 'otp sent', 'otp_code': otp_code, 'phone': payload.phone}
+        # Trigger Akedly OTP Delivery
+        akedly_res = send_akedly_otp(payload.phone, otp_code)
+        if akedly_res.get('status') == 'error':
+            err_msg = akedly_res.get('error', 'فشل إرسال كود التحقق عبر Akedly')
+            if 'quota' in str(err_msg).lower():
+                err_msg = "رصيد حساب Akedly غير كافٍ لإرسال الرسائل (Insufficient quota). يرجى شحن الرصيد في Akedly.io."
+            raise HTTPException(status_code=400, detail=err_msg)
+
+        res = {'message': 'otp sent', 'phone': payload.phone, 'akedly_status': akedly_res.get('status')}
+        if IS_TESTING or akedly_res.get('status') == 'mock':
+            res['otp_code'] = otp_code
+        return res
     finally:
         db.close()
 
@@ -930,7 +1165,7 @@ def verify_user(payload: VerifyRequest):
             OTPVerification.otp_code == code
         ).first()
 
-        if not otp_entry and code == "123456":
+        if not otp_entry and (IS_TESTING or os.environ.get("AKEDLY_API_KEY") is None) and code == "123456":
             otp_entry = db.query(OTPVerification).filter(OTPVerification.phone == phone).first()
             if not otp_entry:
                 otp_entry = OTPVerification(phone=phone, otp_code="123456", name="مستخدم جديد", account_type="student")
@@ -940,6 +1175,12 @@ def verify_user(payload: VerifyRequest):
 
         if not otp_entry:
             raise HTTPException(status_code=400, detail="كود التحقق غير صحيح")
+
+        # Expiration TTL check (10 minutes)
+        if otp_entry.created_at and (datetime.utcnow() - otp_entry.created_at) > timedelta(minutes=OTP_EXPIRATION_MINUTES):
+            db.delete(otp_entry)
+            db.commit()
+            raise HTTPException(status_code=400, detail="انتهت صلاحية كود التحقق. يرجى طلب كود جديد.")
 
         user = db.query(User).filter(User.phone == phone).first()
         if not user:
@@ -959,6 +1200,7 @@ def verify_user(payload: VerifyRequest):
 
         db.delete(otp_entry)
         db.commit()
+
         db.refresh(user)
 
         # Deserialize governorates if empty
@@ -1613,9 +1855,30 @@ def list_listings(
 
 
 @app.get('/listings/user/{user_id}', response_model=List[ListingOut])
-def get_user_listings(user_id: int):
+def get_user_listings(
+    user_id: int,
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id: Optional[int] = Query(None)
+):
     db = SessionLocal()
     try:
+        caller = get_authenticated_user(
+            db,
+            authorization=authorization,
+            x_auth_token=x_auth_token,
+            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2,
+            auth_token=auth_token
+        )
+        if not caller:
+            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول لعرض هذه الإعلانات")
+
+        if caller.account_type != "admin" and caller.id != user_id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بعرض إعلانات حساب آخر")
+
         listings = db.query(Listing).filter(Listing.advertiser_id == user_id).order_by(Listing.created_at.desc()).all()
         advertiser = db.query(User).filter(User.id == user_id).first()
         return [build_listing_out(item, advertiser) for item in listings]
@@ -1822,12 +2085,34 @@ def get_listing_og_html(listing_id: int):
 
 
 @app.post('/listings/{listing_id}/beds')
-def update_available_beds(listing_id: int, payload: dict):
+def update_available_beds(
+    listing_id: int, 
+    payload: dict,
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id: Optional[int] = Query(None)
+):
     db = SessionLocal()
     try:
+        caller = get_authenticated_user(
+            db,
+            authorization=authorization,
+            x_auth_token=x_auth_token,
+            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2,
+            auth_token=auth_token
+        )
+        if not caller:
+            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول لتعديل الإعلان")
+
         listing = db.query(Listing).filter(Listing.id == listing_id).first()
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        if caller.account_type != "admin" and listing.advertiser_id != caller.id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل هذا الإعلان")
 
         beds = payload.get("available_beds")
         if beds is None or beds < 0:
@@ -1853,20 +2138,14 @@ def update_available_beds(listing_id: int, payload: dict):
                 configs[0]["available_beds"] = beds
 
             # Ensure all configs have an available_beds field
-            for c in configs:
-                if "available_beds" not in c:
-                    c["available_beds"] = safe_int(c.get("count"), 1)
-
-            listing.room_configurations = json.dumps(configs, ensure_ascii=False)
             total_beds = sum(safe_int(c.get("available_beds"), 0) for c in configs)
+            listing.room_configurations = json.dumps(configs, ensure_ascii=False)
             listing.available_beds = total_beds
         else:
             listing.available_beds = beds
 
-        if listing.available_beds == 0:
+        if listing.available_beds == 0 and config_index is None:
             listing.status = "inactive"
-        elif listing.available_beds > 0 and listing.status == "inactive":
-            listing.status = "active"
 
         db.commit()
         return {
@@ -1880,12 +2159,34 @@ def update_available_beds(listing_id: int, payload: dict):
 
 
 @app.post('/listings/{listing_id}/republish')
-def republish_listing(listing_id: int, payload: dict):
+def republish_listing(
+    listing_id: int, 
+    payload: dict,
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id: Optional[int] = Query(None)
+):
     db = SessionLocal()
     try:
+        caller = get_authenticated_user(
+            db,
+            authorization=authorization,
+            x_auth_token=x_auth_token,
+            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2,
+            auth_token=auth_token
+        )
+        if not caller:
+            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول للاستمرار")
+
         listing = db.query(Listing).filter(Listing.id == listing_id).first()
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        if caller.account_type != "admin" and listing.advertiser_id != caller.id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل هذا الإعلان")
 
         # Optional updates
         if "available_beds" in payload:
@@ -1897,11 +2198,7 @@ def republish_listing(listing_id: int, payload: dict):
                 listing.price_per_person = configs[0].get("price_per_person", 0)
                 listing.room_type = configs[0].get("room_type", "single")
 
-        if listing.available_beds > 0:
-            listing.status = "active"
-        else:
-            listing.status = "inactive"
-
+        listing.status = "active"
         listing.created_at = datetime.utcnow()  # Reset creation date on republish
         db.commit()
         return {"id": listing.id, "status": listing.status, "available_beds": listing.available_beds}
@@ -1910,12 +2207,33 @@ def republish_listing(listing_id: int, payload: dict):
 
 
 @app.post('/listings/{listing_id}/deactivate')
-def deactivate_listing(listing_id: int):
+def deactivate_listing(
+    listing_id: int,
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id: Optional[int] = Query(None)
+):
     db = SessionLocal()
     try:
+        caller = get_authenticated_user(
+            db,
+            authorization=authorization,
+            x_auth_token=x_auth_token,
+            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2,
+            auth_token=auth_token
+        )
+        if not caller:
+            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول للاستمرار")
+
         listing = db.query(Listing).filter(Listing.id == listing_id).first()
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        if caller.account_type != "admin" and listing.advertiser_id != caller.id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل هذا الإعلان")
 
         listing.status = "inactive"
         db.commit()
@@ -1925,12 +2243,33 @@ def deactivate_listing(listing_id: int):
 
 
 @app.post('/listings/{listing_id}/toggle-status')
-def toggle_listing_status(listing_id: int):
+def toggle_listing_status(
+    listing_id: int,
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id: Optional[int] = Query(None)
+):
     db = SessionLocal()
     try:
+        caller = get_authenticated_user(
+            db,
+            authorization=authorization,
+            x_auth_token=x_auth_token,
+            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2,
+            auth_token=auth_token
+        )
+        if not caller:
+            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول للاستمرار")
+
         listing = db.query(Listing).filter(Listing.id == listing_id).first()
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        if caller.account_type != "admin" and listing.advertiser_id != caller.id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل هذا الإعلان")
 
         if listing.status == "active":
             listing.status = "inactive"
@@ -1946,12 +2285,34 @@ def toggle_listing_status(listing_id: int):
 
 
 @app.post('/listings/{listing_id}/reactivate')
-def reactivate_listing(listing_id: int, payload: Optional[dict] = None):
+def reactivate_listing(
+    listing_id: int, 
+    payload: Optional[dict] = None,
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id: Optional[int] = Query(None)
+):
     db = SessionLocal()
     try:
+        caller = get_authenticated_user(
+            db,
+            authorization=authorization,
+            x_auth_token=x_auth_token,
+            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2,
+            auth_token=auth_token
+        )
+        if not caller:
+            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول للاستمرار")
+
         listing = db.query(Listing).filter(Listing.id == listing_id).first()
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        if caller.account_type != "admin" and listing.advertiser_id != caller.id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل هذا الإعلان")
         
         now = datetime.utcnow()
         is_expired = listing.subscription_expires_at and listing.subscription_expires_at < now
@@ -2316,6 +2677,46 @@ def admin_deactivate_listing(listing_id: int, x_user_id: Optional[int] = None):
         listing.status = "inactive"
         db.commit()
         return {"id": listing.id, "status": listing.status}
+    finally:
+        db.close()
+
+
+@app.delete('/listings/{listing_id}')
+@app.post('/listings/{listing_id}/delete')
+def delete_user_listing(
+    listing_id: int,
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id: Optional[int] = Query(None)
+):
+    db = SessionLocal()
+    try:
+        caller = get_authenticated_user(
+            db,
+            authorization=authorization,
+            x_auth_token=x_auth_token,
+            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2,
+            auth_token=auth_token
+        )
+        if not caller:
+            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول للاستمرار")
+
+        listing = db.query(Listing).filter(Listing.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="العقار غير موجود")
+
+        if caller.account_type != "admin" and listing.advertiser_id != caller.id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بحذف هذا الإعلان")
+
+        db.query(Bookmark).filter(Bookmark.listing_id == listing_id).delete()
+        db.query(Rating).filter(Rating.listing_id == listing_id).delete()
+        db.query(Complaint).filter(Complaint.listing_id == listing_id).delete()
+        db.delete(listing)
+        db.commit()
+        return {"id": listing_id, "status": "deleted"}
     finally:
         db.close()
 
@@ -2719,17 +3120,70 @@ def list_governorates():
         db.close()
 
 
+@app.post('/admin/users/{user_id}/generate-access-link')
+def admin_generate_user_access_link(
+    user_id: int, 
+    x_user_id: Optional[int] = Query(None),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token")
+):
+    admin_id = x_user_id or x_user_id_h1 or x_user_id_h2
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id=admin_id, authorization=authorization, x_auth_token=x_auth_token)
+        target_user = db.query(User).filter(User.id == user_id).first()
+        if not target_user:
+            raise HTTPException(status_code=404, detail="المعلن غير موجود")
+
+        target_phone = target_user.phone
+        generated_password = get_default_password_for_phone(target_phone)
+
+        if not target_user.password_hash or target_user.must_change_password:
+            target_user.password_hash = hash_password(generated_password)
+            target_user.must_change_password = True
+            db.commit()
+
+        account_url = f"https://sakan-egy.com/#/login?phone={target_phone}"
+
+        whatsapp_message = (
+            f"السلام عليكم {target_user.name}\n"
+            f"تم تجهيز حسابك الإعلاني على منصة (سكن) لسكن الطلاب بنجاح.\n\n"
+            f"بيانات الدخول إلى حسابك:\n"
+            f"• رقم الهاتف: {target_phone}\n"
+            f"• كلمة المرور: {generated_password}\n\n"
+            f"رابط الوصول للحساب:\n"
+            f"{account_url}\n\n"
+            f"ملاحظة: يمكنك تسجيل الدخول إلى حسابك وتغيير كلمة المرور لأول مرة لإدارة كافة إعلاناتك بكل سهولة."
+        )
+
+        return {
+            "status": "success",
+            "user_id": target_user.id,
+            "name": target_user.name,
+            "contact_phone": target_phone,
+            "account_url": account_url,
+            "generated_password": generated_password,
+            "whatsapp_message": whatsapp_message
+        }
+    finally:
+        db.close()
+
+
 @app.post('/admin/listings/{listing_id}/generate-edit-link')
 def admin_generate_edit_link(
     listing_id: int, 
     x_user_id: Optional[int] = Query(None),
     x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
-    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id")
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token")
 ):
     admin_id = x_user_id or x_user_id_h1 or x_user_id_h2
     db = SessionLocal()
     try:
-        verify_admin_user(db, admin_id)
+        verify_admin_user(db, x_user_id=admin_id, authorization=authorization, x_auth_token=x_auth_token)
         listing = db.query(Listing).filter(Listing.id == listing_id).first()
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
@@ -2739,9 +3193,9 @@ def admin_generate_edit_link(
         listing.full_edit_available = True
         db.commit()
 
-        edit_url = f"https://sakan-egy.com/listings/{listing.id}?token={token}"
         target_phone = listing.contact_phone or (listing.advertiser.phone if listing.advertiser else "")
         generated_password = get_default_password_for_phone(target_phone)
+        account_url = f"https://sakan-egy.com/#/login?phone={target_phone}"
 
         advertiser = listing.advertiser
         if advertiser:
@@ -2756,16 +3210,17 @@ def admin_generate_edit_link(
             f"بيانات الدخول إلى حسابك:\n"
             f"• رقم الهاتف: {target_phone}\n"
             f"• كلمة المرور: {generated_password}\n\n"
-            f"رابط التعديل المباشر لإعلانك:\n"
-            f"https://sakan-egy.com/listings/{listing.id}\n\n"
-            f"ملاحظة: يمكنك مراجعة وتعديل بيانات الإعلان عبر الرابط، ولحفظ التعديلات سيُطلب منك تسجيل الدخول وتغيير كلمة المرور لأول مرة."
+            f"رابط الوصول إلى حسابك الإعلاني:\n"
+            f"{account_url}\n\n"
+            f"ملاحظة: يمكنك تسجيل الدخول إلى حسابك وتغيير كلمة المرور لأول مرة لإدارة وتعديل كافة إعلاناتك بكل سهولة."
         )
 
         return {
             "status": "success",
             "listing_id": listing.id,
             "edit_token": token,
-            "edit_url": edit_url,
+            "edit_url": account_url,
+            "account_url": account_url,
             "full_edit_available": True,
             "generated_password": generated_password,
             "whatsapp_message": whatsapp_message,
@@ -2779,19 +3234,25 @@ def admin_generate_edit_link(
 def update_listing(
     listing_id: int, 
     payload: ListingCreate, 
-    x_user_id: Optional[int] = Query(None),
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
     x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
-    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id")
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id: Optional[int] = Query(None)
 ):
     caller_id = x_user_id or x_user_id_h1 or x_user_id_h2
     db = SessionLocal()
     try:
-        if not caller_id:
-            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول لتعديل الإعلان")
-
-        user = db.query(User).filter(User.id == caller_id).first()
+        user = get_authenticated_user(
+            db,
+            authorization=authorization,
+            x_auth_token=x_auth_token,
+            x_user_id=caller_id,
+            auth_token=auth_token
+        )
         if not user:
-            raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول لتعديل الإعلان")
 
         listing = db.query(Listing).filter(Listing.id == listing_id).first()
         if not listing:

@@ -717,7 +717,7 @@ export default function ListingDetailPage() {
             {/* CTAs */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <a 
-                href={`https://wa.me/${formatPhoneWaDigits(listing.contact_phone || advertiser.phone)}?text=${encodeURIComponent(`سلام عليكم أستاذ ${advertiser.name || ''}، شفت إعلان السكن "${listing.title}" في ${listing.governorate}، ${listing.city} على منصة سكن ومحتاج أستفسر عن التفاصيل.`)}`}
+                href={`https://wa.me/${formatPhoneWaDigits(listing.contact_phone || advertiser.phone)}?text=${encodeURIComponent(`سلام عليكم أستاذ ${advertiser.name || ''}، شفت إعلان السكن "${listing.title}" في ${listing.governorate}، ${listing.city} على منصة سكن ومحتاج أستفسر عن التفاصيل.\nhttps://sakan-egy.com/listings/${listing.id}`)}`}
                 target="_blank" 
                 rel="noreferrer"
                 style={{ background: '#22c55e', color: '#fff', textDecoration: 'none', padding: '0.75rem', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.95rem' }}

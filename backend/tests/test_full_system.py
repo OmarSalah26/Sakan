@@ -23,7 +23,8 @@ import app.main as main_module
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi.testclient import TestClient
-from app.main import app, PhoneBlocklist
+from datetime import datetime, timedelta
+from app.main import app, PhoneBlocklist, OTPVerification
 
 # ──────────────────────────────────────────────
 #  Test client & DB reset before every test
@@ -118,6 +119,20 @@ class TestRegistration:
         _register("01000000005", "Test", "student")
         v = _verify("01000000005", "000000")
         assert v.status_code == 400
+
+    def test_expired_otp_is_rejected(self):
+        r = _register("01000000099", "ExpiredUser", "student")
+        otp = r.json()["otp_code"]
+        db = main_module.SessionLocal()
+        entry = db.query(OTPVerification).filter(OTPVerification.phone == "01000000099").first()
+        assert entry is not None
+        entry.created_at = datetime.utcnow() - timedelta(minutes=15)
+        db.commit()
+        db.close()
+        v = _verify("01000000099", otp)
+        assert v.status_code == 400
+        assert "صلاحية" in v.json()["detail"]
+
 
     def test_duplicate_registration_is_rejected(self):
         _register_and_verify("01000000006", "User", "student")
@@ -285,23 +300,26 @@ class TestBedsAndRepublish:
 
     def test_update_available_beds(self):
         broker = _register_and_verify("01066600001", "سمسار", "broker")
+        headers = {"Authorization": f"Bearer {broker.get('auth_token')}"} if broker.get("auth_token") else {"x-user-id": str(broker["id"])}
         listing = _create_listing(broker["id"]).json()
-        r = client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 5})
+        r = client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 5}, headers=headers)
         assert r.status_code == 200
         assert r.json()["available_beds"] == 5
 
     def test_beds_to_zero_marks_listing_inactive(self):
         broker = _register_and_verify("01066600002", "سمسار", "broker")
+        headers = {"Authorization": f"Bearer {broker.get('auth_token')}"} if broker.get("auth_token") else {"x-user-id": str(broker["id"])}
         listing = _create_listing(broker["id"]).json()
-        r = client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 0})
+        r = client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 0}, headers=headers)
         assert r.status_code == 200
         assert r.json()["status"] == "inactive"
 
     def test_republish_reactivates_listing(self):
         broker = _register_and_verify("01066600003", "سمسار", "broker")
+        headers = {"Authorization": f"Bearer {broker.get('auth_token')}"} if broker.get("auth_token") else {"x-user-id": str(broker["id"])}
         listing = _create_listing(broker["id"]).json()
-        client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 0})
-        r = client.post(f"/listings/{listing['id']}/republish", json={"available_beds": 3})
+        client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 0}, headers=headers)
+        r = client.post(f"/listings/{listing['id']}/republish", json={"available_beds": 3}, headers=headers)
         assert r.status_code == 200
         assert r.json()["status"] == "active"
         assert r.json()["available_beds"] == 3

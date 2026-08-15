@@ -12,7 +12,7 @@ import {
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
   Bed, Check, Clock, Award, Sparkles, Upload, Menu, X, Smartphone,
   Navigation, Wind, Video, ArrowDown, Compass, Building2, Mail, LogOut, Copy,
-  Eye, EyeOff
+  Eye, EyeOff, Loader2
 } from 'lucide-react';
 
 
@@ -151,26 +151,26 @@ function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLn
   };
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 99999,
-      background: '#ffffff',
-      display: 'flex', flexDirection: 'column',
-      width: '100vw', height: '100vh'
-    }}>
+    <div className="map-picker-modal-root">
       {/* Header */}
-      <div style={{ padding: '0.85rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ffffff', zIndex: 10, flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div>
-          <h3 style={{ fontWeight: 700, margin: 0, fontSize: '1.1rem' }}>
-            <MapPin style={{ width: 18, height: 18, display: 'inline', verticalAlign: 'middle', color: 'var(--primary)', marginLeft: '0.25rem' }} /> 
-            تحديد موقع العقار على الخريطة {currentCity ? `(${currentCity})` : ''}
-          </h3>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>
-            اسحب الدبوس الأحمر أو اضغط على الخريطة لضبط الموقع بدقة.
-          </p>
+      <div className="map-picker-header">
+        <div className="map-picker-header-top">
+          <div className="map-picker-title">
+            <h3 style={{ fontWeight: 700, margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <MapPin style={{ width: 18, height: 18, flexShrink: 0, color: 'var(--primary)' }} /> 
+              <span>تحديد موقع العقار على الخريطة {currentCity ? `(${currentCity})` : ''}</span>
+            </h3>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.15rem 0 0' }}>
+              اسحب الدبوس الأحمر أو اضغط على الخريطة لضبط الموقع بدقة.
+            </p>
+          </div>
+          <button className="modal-close" style={{ fontSize: '1.5rem', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem 0.5rem', flexShrink: 0 }} onClick={onClose}>×</button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+
+        <div className="map-picker-controls">
           <button 
             type="button"
+            className="map-picker-location-btn"
             onClick={handleGetCurrentLocation}
             style={{ fontSize: '0.85rem', padding: '0.4rem 0.75rem', borderRadius: 'var(--r-md)', border: '1px solid var(--primary)', background: '#eff6ff', fontWeight: 700, color: 'var(--primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
           >
@@ -179,13 +179,12 @@ function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLn
           <select 
             value={mapType}
             onChange={(e) => handleMapTypeChange(e.target.value)}
-            style={{ fontSize: '0.85rem', padding: '0.4rem 0.75rem', borderRadius: 'var(--r-md)', border: '1px solid var(--border)', background: 'var(--primary-light)', fontWeight: 700, color: 'var(--primary)', cursor: 'pointer' }}
+            className="map-picker-select"
           >
             {Object.entries(MAP_PROVIDERS).map(([key, provider]) => (
               <option key={key} value={key}>{provider.name}</option>
             ))}
           </select>
-          <button className="modal-close" style={{ fontSize: '1.5rem', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem 0.5rem' }} onClick={onClose}>×</button>
         </div>
       </div>
 
@@ -193,21 +192,21 @@ function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLn
       <div ref={containerRef} style={{ width: '100%', flex: 1, minHeight: 0 }} />
 
       {/* Footer */}
-      <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', zIndex: 10 }}>
-        <span style={{ fontSize: '0.85rem', color: pending.lat ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 600 }}>
+      <div className="map-picker-footer">
+        <span className="map-picker-coords-text" style={{ fontSize: '0.85rem', color: pending.lat ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 600 }}>
           {pending.lat
             ? `إحداثيات الموقع المحدد: (${pending.lat.toFixed(5)}, ${pending.lng.toFixed(5)})`
             : 'اضغط في أي مكان على الخريطة لوضع الدبوس'}
         </span>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div className="map-picker-footer-btns">
           <button className="btn-secondary" style={{ padding: '0.5rem 1.25rem' }} onClick={onClose}>إلغاء</button>
           <button
             className="btn-primary"
-            style={{ padding: '0.5rem 1.5rem' }}
+            style={{ padding: '0.5rem 1.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
             disabled={!pending.lat}
             onClick={() => onConfirm(pending.lat, pending.lng)}
           >
-            تأكيد الموقع والعودة للإعلان <Check style={{ width: 16, height: 16, display: 'inline', marginRight: '0.25rem' }} />
+            <span>تأكيد الموقع والعودة للإعلان</span> <Check style={{ width: 16, height: 16 }} />
           </button>
         </div>
       </div>
@@ -552,6 +551,8 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+
   
   // Advertiser Inbox & Admin Messaging state
   const [advertiserInbox, setAdvertiserInbox] = useState([]);
@@ -609,7 +610,7 @@ export default function App() {
     latitude: null,
     longitude: null,
     gender: 'female',
-    available_beds: 1,
+    available_beds: 0,
     room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
     amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
     photo_urls: [],
@@ -618,6 +619,52 @@ export default function App() {
     tier: 'regular',
     min_lease_months: null
   });
+
+  // Progressive Media Upload state & handler
+  const [uploadingPhotoCount, setUploadingPhotoCount] = useState(0);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+
+  const handleProgressivePhotoUpload = async (files) => {
+    if (!files || !files.length) return;
+    const remaining = 30 - createForm.photo_urls.length;
+    const toUpload = files.slice(0, remaining);
+    if (!toUpload.length) {
+      showToast('تم الوصول للحد الأقصى للصور (30 صورة)');
+      return;
+    }
+
+    setUploadingPhotoCount(prev => prev + toUpload.length);
+    showToast('جاري رفع الصور...');
+
+    let successCount = 0;
+    let failCount = 0;
+
+    await Promise.all(toUpload.map(async (file) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const res = await fetch(`${API_BASE}/upload/listing-photo`, { method: 'POST', body: fd });
+        if (res.ok) {
+          const data = await res.json();
+          const formattedUrl = formatImageUrl(data.url);
+          setCreateForm(prev => ({ ...prev, photo_urls: [...prev.photo_urls, formattedUrl] }));
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch {
+        failCount++;
+      } finally {
+        setUploadingPhotoCount(prev => Math.max(0, prev - 1));
+      }
+    }));
+
+    if (successCount > 0 && failCount === 0) {
+      showToast('تم اكتمال رفع الصور بنجاح');
+    } else if (failCount > 0) {
+      showToast('تعذر رفع بعض الصور، يرجى إعادة المحاولة');
+    }
+  };
 
   // Post-Publish Share Modal state
   const [postPublishListing, setPostPublishListing] = useState(null);
@@ -797,6 +844,51 @@ export default function App() {
     }
   };
 
+  const handleGenerateUserAccessLink = async (targetUserId) => {
+    if (!user) return;
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-id': String(user.id),
+        'x_user_id': String(user.id)
+      };
+      if (user.auth_token) {
+        headers['Authorization'] = `Bearer ${user.auth_token}`;
+      }
+      const res = await fetch(`${API_BASE}/admin/users/${targetUserId}/generate-access-link?x_user_id=${user.id}`, {
+        method: 'POST',
+        headers
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setOutreachModalData(data);
+
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(data.whatsapp_message);
+          }
+        } catch {}
+
+        let phone = (data.contact_phone || '').replace(/\D/g, '');
+        if (phone.startsWith('01') && phone.length === 11) {
+          phone = '2' + phone;
+        }
+
+        const waUrl = phone 
+          ? `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(data.whatsapp_message)}`
+          : `https://api.whatsapp.com/send?text=${encodeURIComponent(data.whatsapp_message)}`;
+
+        window.open(waUrl, '_blank');
+        showToast('تم نسخ نص الرسالة وفتح الواتساب مباشرة!');
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'فشل توليد رابط الوصول للحساب');
+      }
+    } catch {
+      showToast('خطأ في الاتصال بالخادم');
+    }
+  };
+
   const handleOpenEditFlow = (item) => {
     setEditingListing(item);
     const parseArr = (v) => {
@@ -916,7 +1008,11 @@ export default function App() {
   const loadUserListings = async (userId) => {
     if (!userId) return;
     try {
-      const res = await fetch(`${API_BASE}/listings/user/${userId}`);
+      const headers = { 'x-user-id': String(userId) };
+      if (user?.auth_token) {
+        headers['Authorization'] = `Bearer ${user.auth_token}`;
+      }
+      const res = await fetch(`${API_BASE}/listings/user/${userId}`, { headers });
       if (res.ok) {
         const data = await res.json();
         setUserListings(Array.isArray(data) ? data : []);
@@ -1083,7 +1179,13 @@ export default function App() {
   }, [user]);
 
   // --- Auth logic ---
+  const closeAuthModal = () => {
+    setIsAuthOpen(false);
+    setAuthSubmitting(false);
+  };
+
   const handleStartAuth = (mode, overrideType = null, callback = null, initialPhone = '') => {
+    setAuthSubmitting(false);
     setAuthMode(mode);
     setAuthLoginMethod('password');
     const defaultGovs = (createForm.governorate && GOVERNORATES.includes(createForm.governorate)) 
@@ -1193,6 +1295,7 @@ export default function App() {
 
   const handlePhoneSubmit = async (e) => {
     e.preventDefault();
+    if (authSubmitting) return;
     const cleanPhone = (authForm.phone || '').trim();
     const cleanName = (authForm.name || '').trim();
     if (cleanPhone.length < 8) {
@@ -1203,6 +1306,9 @@ export default function App() {
       showToast("يرجى إدخال الاسم بالكامل (مطلوب لجميع الحسابات)");
       return;
     }
+    setAuthSubmitting(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
     try {
       const endpoint = authMode === 'register' ? 'register' : 'login-otp';
       const validAccountType = ['student', 'owner', 'broker', 'admin'].includes(authForm.account_type) ? authForm.account_type : 'student';
@@ -1219,25 +1325,46 @@ export default function App() {
       const res = await fetch(`${API_BASE}/auth/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
+      clearTimeout(timer);
       const data = await res.json();
       if (res.ok) {
-        setAuthForm(prev => ({ ...prev, otp: data.otp_code }));
+        setAuthForm(prev => ({ ...prev, otp: '' }));
         setAuthStep('otp');
-        showToast(`تم إرسال كود التحقق (كود تجريبي: ${data.otp_code})`);
+        if (data.otp_code) {
+          showToast(`تم إرسال كود التحقق (كود تجريبي: ${data.otp_code})`);
+        } else {
+          showToast(`تم إرسال رمز التحقق إلى WhatsApp/SMS على الرقم ${cleanPhone}`);
+        }
       } else {
         showToast(data.detail || "خطأ أثناء إرسال الطلب");
       }
     } catch (err) {
-      showToast("عذراً، فشل الاتصال بالخادم");
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        showToast("استغرقت عملية الإرسال وقت أطول من المتوقع، يرجى المحاولة مرة أخرى");
+      } else {
+        showToast("عذراً، فشل الاتصال بالخادم");
+      }
+    } finally {
+      setAuthSubmitting(false);
     }
   };
 
   const handleOtpVerify = async (e) => {
     e.preventDefault();
+    if (authSubmitting) return;
     const cleanPhone = (authForm.phone || '').trim();
     const cleanOtp = (authForm.otp || '').trim();
+    if (!cleanOtp) {
+      showToast("يرجى إدخال رمز التحقق");
+      return;
+    }
+    setAuthSubmitting(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
     try {
       const res = await fetch(`${API_BASE}/auth/verify`, {
         method: 'POST',
@@ -1245,8 +1372,10 @@ export default function App() {
         body: JSON.stringify({
           phone: cleanPhone,
           otp_code: cleanOtp
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timer);
       const data = await res.json();
       if (res.ok) {
         // Upload avatar if user selected a file during registration
@@ -1293,7 +1422,14 @@ export default function App() {
         showToast(data.detail || "كود التحقق غير صحيح");
       }
     } catch (err) {
-      showToast("فشل التحقق من الكود");
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        showToast("استغرقت عملية التحقق وقت أطول من المتوقع، يرجى المحاولة مرة أخرى");
+      } else {
+        showToast("فشل التحقق من الكود");
+      }
+    } finally {
+      setAuthSubmitting(false);
     }
   };
 
@@ -1378,7 +1514,7 @@ export default function App() {
             latitude: null,
             longitude: null,
             gender: 'female',
-            available_beds: 1,
+            available_beds: 0,
             room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
             amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
             photo_urls: [],
@@ -1756,17 +1892,30 @@ export default function App() {
   const handleUpdateRoomBeds = async (listingId, configIndex, newBedCount) => {
     if (newBedCount < 0) return;
     try {
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (user) {
+        headers['x-user-id'] = String(user.id);
+        headers['x_user_id'] = String(user.id);
+        if (user.auth_token) headers['Authorization'] = `Bearer ${user.auth_token}`;
+      }
+
       const res = await fetch(`${API_BASE}/listings/${listingId}/beds`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ config_index: configIndex, available_beds: newBedCount })
       });
       if (res.ok) {
         showToast("تم تحديث الأسرة المتاحة للغرفة بنجاح");
         loadListings();
         if (user?.id) loadUserListings(user.id);
+        if (selectedListingDetail?.listing?.id === listingId) {
+          openListingDetail(listingId);
+        }
       } else {
-        showToast("فشل تحديث الأسرة المتاحة");
+        const err = await res.json();
+        showToast(err.detail || "فشل تحديث الأسرة المتاحة");
       }
     } catch (err) {
       showToast("فشل تحديث البيانات");
@@ -1775,9 +1924,18 @@ export default function App() {
 
   const handleRepublish = async (listingId, beds) => {
     try {
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (user) {
+        headers['x-user-id'] = String(user.id);
+        headers['x_user_id'] = String(user.id);
+        if (user.auth_token) headers['Authorization'] = `Bearer ${user.auth_token}`;
+      }
+
       const res = await fetch(`${API_BASE}/listings/${listingId}/republish`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ available_beds: beds > 0 ? beds : 1 })
       });
       if (res.ok) {
@@ -1790,24 +1948,76 @@ export default function App() {
           setPostPublishListing(republishData);
           setIsPostPublishModalOpen(true);
         }
+      } else {
+        const err = await res.json();
+        showToast(err.detail || "خطأ في إعادة النشر");
       }
     } catch (err) {
-      showToast("خطأ في إعادة النشر");
+      showToast("خطأ في الاتصال بالخادم");
     }
   };
 
   const handleToggleStatus = async (listingId) => {
     try {
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (user) {
+        headers['x-user-id'] = String(user.id);
+        headers['x_user_id'] = String(user.id);
+        if (user.auth_token) headers['Authorization'] = `Bearer ${user.auth_token}`;
+      }
+
       const res = await fetch(`${API_BASE}/listings/${listingId}/toggle-status`, {
-        method: 'POST'
+        method: 'POST',
+        headers
       });
       if (res.ok) {
-        showToast("تم تغيير حالة الإعلان بنجاح");
+        const data = await res.json();
+        showToast(data.status === 'active' ? "تم تغيير الحالة إلى: متاح" : "تم تغيير الحالة إلى: ممتلئ بالكامل");
         loadListings();
         if (user?.id) loadUserListings(user.id);
+        if (selectedListingDetail?.listing?.id === listingId) {
+          openListingDetail(listingId);
+        }
+      } else {
+        const err = await res.json();
+        showToast(err.detail || "فشل في تغيير حالة الإعلان");
       }
     } catch (err) {
       showToast("فشل في تغيير حالة الإعلان");
+    }
+  };
+
+  const handleDeleteListing = async (listingId) => {
+    if (!user) return;
+    if (!window.confirm('هل أنت تأكد من رغبتك في حذف هذا الإعلان بشكل نهائي؟')) return;
+
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-id': String(user.id),
+        'x_user_id': String(user.id)
+      };
+      if (user.auth_token) {
+        headers['Authorization'] = `Bearer ${user.auth_token}`;
+      }
+
+      const res = await fetch(`${API_BASE}/listings/${listingId}`, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (res.ok) {
+        showToast("تم حذف الإعلان بنجاح");
+        loadListings();
+        if (user?.id) loadUserListings(user.id);
+      } else {
+        const err = await res.json();
+        showToast(err.detail || "فشل حذف الإعلان");
+      }
+    } catch (err) {
+      showToast("خطأ في الاتصال بالخادم");
     }
   };
 
@@ -2121,7 +2331,8 @@ export default function App() {
                     setIsUserProfileModalOpen(true);
                     setMobileMenuOpen(false);
                   } else {
-                    setProfileUserId(user.id); navigateTo(`#/profile/${user.id}`); setMobileMenuOpen(false);
+                    navigateTo('#/dashboard');
+                    setMobileMenuOpen(false);
                   }
                 }}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer' }}
@@ -2750,18 +2961,76 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: ADVERTISER DASHBOARD */}
+        {/* TAB 2: ADVERTISER DASHBOARD (COMBINED PROFILE & CONTROL PANEL) */}
         {tab === 'dashboard' && (isBroker || isAdmin) && (
-          <div>
-            <h2 className="details-title" style={{ fontSize: '1.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
-              إدارة إعلاناتي السكنية
-            </h2>
+          <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+            {/* 1. Combined Profile Header Card */}
+            {user && (
+              <div style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '1.5rem', marginBottom: '2rem', display: 'flex', gap: '1.5rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ width: '70px', height: '70px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', border: '2px solid var(--border-color)' }}>
+                    {user.profile_photo_url ? (
+                      <img src={formatImageUrl(user.profile_photo_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                    ) : (
+                      <User style={{ width: 32, height: 32, color: '#64748b' }} />
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <h2 style={{ margin: 0, fontWeight: 700, fontSize: '1.4rem' }}>{user.name}</h2>
+                      {user.verified_by_sakan && (
+                        <span style={{ fontSize: '0.75rem', background: '#dbeafe', color: '#1e40af', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <Check style={{ width: 14, height: 14 }} /> موثق من سكن
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', marginTop: '0.25rem', margin: 0 }}>
+                      {user.account_type === 'owner' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Home style={{ width: 14, height: 14 }} /> مالك عقار مباشر</span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Briefcase style={{ width: 14, height: 14 }} /> وسيط عقاري</span>
+                      )}
+                      <span style={{ margin: '0 0.5rem' }}>•</span>
+                      <span>{user.phone}</span>
+                    </p>
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      <span>إجمالي الإعلانات: <strong>{userListings.length}</strong></span>
+                      <span>متاح: <strong style={{ color: 'var(--primary)' }}>{userListings.filter(l => l.status === 'active').length}</strong></span>
+                      <span>ممتلئ بالكامل: <strong style={{ color: '#b45309' }}>{userListings.filter(l => l.status === 'inactive' || l.status === 'fully_booked').length}</strong></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <button 
+                    className="btn-outline" 
+                    onClick={() => setIsUserProfileModalOpen(true)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}
+                  >
+                    <PenTool style={{ width: 14, height: 14 }} /> تعديل بياني الشخصية
+                  </button>
+                  <button 
+                    className="btn-primary" 
+                    onClick={handleOpenCreateFlow}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}
+                  >
+                    <Plus style={{ width: 16, height: 16 }} /> إضافة إعلان جديد
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 2. Listings Control Panel */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h3 style={{ fontSize: '1.3rem', fontWeight: 700, margin: 0 }}>
+                إدارة وحداتي السكنية ({userListings.length})
+              </h3>
+            </div>
 
             <div style={{ display: 'grid', gap: '1.5rem' }}>
               {userListings.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem', background: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', marginBottom: '1rem' }}>ليس لديك أي إعلانات سكنية حتى الآن.</p>
-                  <button className="btn-primary" onClick={handleOpenCreateFlow}>أضف إعلانك الأول الآن</button>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', margin: 0 }}>ليس لديك أي إعلانات سكنية حتى الآن.</p>
                 </div>
               ) : (
                 userListings.map(item => (
@@ -2774,16 +3043,20 @@ export default function App() {
                     <div style={{ flexGrow: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <h3 style={{ fontWeight: 700, margin: 0 }}>{item.title}</h3>
-                        {item.status === 'inactive' && (
-                          <span style={{ fontSize: '0.72rem', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
-                            غير نشط (معطل)
+                        {item.status === 'active' ? (
+                          <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#166534', border: '1px solid #86efac', padding: '0.15rem 0.55rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <Check style={{ width: 12, height: 12 }} /> متاح
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '0.15rem 0.55rem', borderRadius: '999px', fontWeight: 700 }}>
+                            ممتلئ بالكامل
                           </span>
                         )}
                       </div>
                       <p style={{ color: 'var(--text-light)', fontSize: '0.85rem', marginTop: '0.25rem' }}><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {item.governorate}، {item.city}، {item.neighborhood}</p>
                       <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                        <span>الحالة: <strong style={{ color: item.status === 'active' ? 'var(--primary)' : '#ef4444' }}>
-                          {item.status === 'active' ? 'نشط' : 'غير نشط'}
+                        <span>الحالة: <strong style={{ color: item.status === 'active' ? '#16a34a' : '#b45309' }}>
+                          {item.status === 'active' ? 'متاح' : 'ممتلئ بالكامل'}
                         </strong></span>
                         <span>الأسرة المتاحة: <strong>{item.available_beds}</strong></span>
                         <span>المشاهدات: <strong>{item.view_count || 0}</strong></span>
@@ -2820,27 +3093,35 @@ export default function App() {
 
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
                         <button className="btn-secondary" onClick={() => openListingDetail(item.id)}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>معاينة الإعلان <Eye style={{ width: 14, height: 14 }} /></span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>معاينة <Eye style={{ width: 14, height: 14 }} /></span>
                         </button>
                         <button className="btn-primary" style={{ padding: '0.4rem 0.85rem' }} onClick={() => handleOpenEditFlow(item)}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تعديل الإعلان <PenTool style={{ width: 14, height: 14 }} /></span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تعديل <PenTool style={{ width: 14, height: 14 }} /></span>
                         </button>
                         
                         <button 
                           className="btn-outline" 
                           onClick={() => handleToggleStatus(item.id)}
-                          style={{ borderColor: item.status === 'active' ? '#f87171' : '#4ade80', color: item.status === 'active' ? '#ef4444' : '#16a34a' }}
+                          style={{ 
+                            borderColor: item.status === 'active' ? '#f59e0b' : '#22c55e', 
+                            color: item.status === 'active' ? '#b45309' : '#15803d',
+                            background: item.status === 'active' ? '#fffbe6' : '#f0fdf4'
+                          }}
                         >
                           {item.status === 'active' ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إلغاء التفعيل <StopCircle style={{ width: 14, height: 14 }} /></span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تعيين كـ ممتلئ بالكامل <StopCircle style={{ width: 14, height: 14 }} /></span>
                           ) : (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إعادة تفعيل الإعلان <Check style={{ width: 14, height: 14 }} /></span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تغيير إلى: متاح <Check style={{ width: 14, height: 14 }} /></span>
                           )}
                         </button>
 
-                        <div style={{ background: '#f0fdfa', border: '1px solid #ccfbf1', padding: '0.5rem', borderRadius: 'var(--radius-sm)', color: '#0f766e', fontSize: '0.75rem', fontWeight: 600, width: '100%', marginTop: '0.5rem' }}>
-                          <Info style={{ width: 14, height: 14, display: 'inline', color: '#0f766e' }} /> تذكير: لا تنسَ طلب التقييم من الطلاب عند إتمام التعاقد لتحسين ترتيب إعلاناتك!
-                        </div>
+                        <button 
+                          className="btn-danger" 
+                          onClick={() => handleDeleteListing(item.id)}
+                          style={{ padding: '0.4rem 0.85rem' }}
+                        >
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>حذف الإعلان <Trash2 style={{ width: 14, height: 14 }} /></span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -3043,13 +3324,22 @@ export default function App() {
                           </td>
                           <td style={{ padding: '0.75rem' }}>
                             {u.account_type !== 'admin' && (
-                              <button 
-                                className={u.is_banned ? 'btn-outline' : 'btn-danger'} 
-                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
-                                onClick={() => handleUserBanToggle(u.id, u.is_banned)}
-                              >
-                                {u.is_banned ? 'إلغاء الحظر' : 'حظر دائم'}
-                              </button>
+                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <button 
+                                  className="btn-outline" 
+                                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', color: '#2563eb', borderColor: '#bfdbfe' }}
+                                  onClick={() => handleGenerateUserAccessLink(u.id)}
+                                >
+                                  أرسل رابط الوصول للحساب
+                                </button>
+                                <button 
+                                  className={u.is_banned ? 'btn-outline' : 'btn-danger'} 
+                                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                                  onClick={() => handleUserBanToggle(u.id, u.is_banned)}
+                                >
+                                  {u.is_banned ? 'إلغاء الحظر' : 'حظر دائم'}
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -3078,9 +3368,6 @@ export default function App() {
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => openListingDetail(l.id)}>عرض</button>
-                        <button className="btn-outline" style={{ fontSize: '0.8rem', color: '#2563eb', borderColor: '#bfdbfe' }} onClick={() => handleGenerateEditLink(l.id)}>
-                          أرسل رابط التعديل للمعلن
-                        </button>
                         {l.status === 'active' ? (
                           <button className="btn-outline" style={{ fontSize: '0.8rem', borderColor: '#f87171', color: '#ef4444' }} onClick={() => handleListingDeactivate(l.id)}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إلغاء التفعيل <StopCircle style={{ width: 14, height: 14 }} /></span>
@@ -3173,9 +3460,6 @@ export default function App() {
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => openListingDetail(l.id)}>عرض التفاصيل</button>
                           <button className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => handleOpenEditFlow(l)}>تعديل الإعلان</button>
-                          <button className="btn-outline" style={{ fontSize: '0.8rem', color: '#2563eb', borderColor: '#bfdbfe' }} onClick={() => handleGenerateEditLink(l.id)}>
-                            أرسل رابط التعديل للمعلن
-                          </button>
                           <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => handleAdminRemoveListing(l.id)}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إيقاف وحذف الإعلان <Trash2 style={{ width: 14, height: 14 }} /></span>
                           </button>
@@ -3853,7 +4137,7 @@ export default function App() {
                     : 'تسجيل الدخول'
                 }
               </h3>
-              <button className="modal-close" onClick={() => setIsAuthOpen(false)}>×</button>
+              <button className="modal-close" onClick={closeAuthModal}>×</button>
             </div>
             <div className="modal-body">
 
@@ -3936,8 +4220,8 @@ export default function App() {
                         onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
                       />
                     </div>
-                    <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>إرسال كود تسجيل الحساب <MessageSquare style={{ width: 16, height: 16 }} /></span>
+                    <button type="submit" className="btn-primary" disabled={authSubmitting} style={{ width: '100%', marginTop: '0.5rem', opacity: authSubmitting ? 0.7 : 1 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>{authSubmitting ? 'جاري الإرسال...' : 'إرسال كود تسجيل الحساب'} <MessageSquare style={{ width: 16, height: 16 }} /></span>
                     </button>
 
                     <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
@@ -4014,10 +4298,10 @@ export default function App() {
               {authStep === 'otp' && (
                 <form onSubmit={handleOtpVerify}>
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem', textAlign: 'center' }}>
-                    تم إرسال كود تحقق تجريبي إلى الرقم <br /><strong>{authForm.phone}</strong>
+                    تم إرسال رمز التحقق عبر الواتساب/SMS إلى الرقم <br /><strong>{authForm.phone}</strong>
                   </p>
                   <div className="form-group">
-                    <label>كود التحقق (أدخل الكود: 123456)</label>
+                    <label>كود التحقق</label>
                     <input 
                       type="text" 
                       placeholder="xxxxxx" 
@@ -4027,8 +4311,8 @@ export default function App() {
                       style={{ letterSpacing: '0.5rem', textAlign: 'center', fontSize: '1.25rem' }}
                     />
                   </div>
-                  <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '0.5rem' }}>
-                    {authMode === 'register' ? 'تأكيد الكود وتفعيل الحساب' : 'تحقق ودخول الحساب'}
+                  <button type="submit" className="btn-primary" disabled={authSubmitting} style={{ width: '100%', marginTop: '0.5rem', opacity: authSubmitting ? 0.7 : 1 }}>
+                    {authSubmitting ? 'جاري التحقق...' : (authMode === 'register' ? 'تأكيد الكود وتفعيل الحساب' : 'تحقق ودخول الحساب')}
                   </button>
                   <button type="button" className="btn-secondary" style={{ width: '100%', marginTop: '0.5rem' }} onClick={() => setAuthStep('phone')}>تغيير الهاتف</button>
                 </form>
@@ -4361,13 +4645,52 @@ export default function App() {
 
                     <div className="form-group">
                       <label>عدد الأسرّة الكلي المتاح حالياً</label>
-                      <input 
-                        type="number" 
-                        value={createForm.available_beds} 
-                        onChange={(e) => setCreateForm({ ...createForm, available_beds: Number(e.target.value) })} 
-                        min="1" 
-                        required 
-                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%' }}>
+                        <button 
+                          type="button" 
+                          className="btn-secondary" 
+                          style={{ minWidth: '40px', height: '42px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.2rem', borderRadius: 'var(--radius-md)', flexShrink: 0, cursor: (Number(createForm.available_beds) || 0) <= 0 ? 'not-allowed' : 'pointer' }}
+                          onClick={() => setCreateForm(prev => ({ ...prev, available_beds: Math.max(0, (Number(prev.available_beds) || 0) - 1) }))}
+                          disabled={(Number(createForm.available_beds) || 0) <= 0}
+                          aria-label="إنقاص عدد الأسرة"
+                        >
+                          -
+                        </button>
+                        <input 
+                          type="number" 
+                          inputMode="numeric"
+                          min="0" 
+                          value={createForm.available_beds === '' ? '' : createForm.available_beds}
+                          placeholder="0"
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '') {
+                              setCreateForm(prev => ({ ...prev, available_beds: '' }));
+                            } else {
+                              const num = parseInt(val, 10);
+                              if (!isNaN(num)) {
+                                setCreateForm(prev => ({ ...prev, available_beds: Math.max(0, num) }));
+                              }
+                            }
+                          }}
+                          onBlur={() => {
+                            if (createForm.available_beds === '' || createForm.available_beds === null || createForm.available_beds === undefined) {
+                              setCreateForm(prev => ({ ...prev, available_beds: 0 }));
+                            }
+                          }}
+                          style={{ textAlign: 'center', fontWeight: 700, fontSize: '1rem', height: '42px', flex: 1, minWidth: '60px' }}
+                        />
+                        <button 
+                          type="button" 
+                          className="btn-secondary" 
+                          style={{ minWidth: '40px', height: '42px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.2rem', borderRadius: 'var(--radius-md)', flexShrink: 0, cursor: 'pointer' }}
+                          onClick={() => setCreateForm(prev => ({ ...prev, available_beds: (Number(prev.available_beds) || 0) + 1 }))}
+                          aria-label="زيادة عدد الأسرة"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4677,20 +5000,6 @@ export default function App() {
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>المرافق والخدمات المتوفرة</h4>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>حدد الخدمات المتواجدة داخل الوحدة السكنية وخارجها لتسهيل وصول الباحثين إليها.</p>
 
-                  <div className="form-group" style={{ background: '#ffffff', padding: '0.85rem 1rem', border: '1.5px solid #94a3b8', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem' }}>
-                    <label style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--primary)', marginBottom: '0.35rem', display: 'block' }}>إجمالي عدد الأسرة الشاغرة المتاحة حالياً</label>
-                    <input 
-                      type="number"
-                      inputMode="numeric"
-                      min="1"
-                      value={createForm.available_beds === 0 ? '' : createForm.available_beds}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => setCreateForm({ ...createForm, available_beds: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)) })}
-                      placeholder="عدد الأسرة المتاحة"
-                      style={{ fontWeight: 700, fontSize: '1rem', background: '#ffffff', border: '1.5px solid #94a3b8' }}
-                    />
-                  </div>
-
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                     <h5 style={{ fontWeight: 700, color: 'var(--primary)', margin: 0 }}>مرافق سكنية داخلية (Indoor)</h5>
                     <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -4768,8 +5077,8 @@ export default function App() {
                   <div className="form-group">
                     <label>صور الوحدة - {createForm.photo_urls.length} مرفوعة (٥ كحد أدنى، ٣٠ كحد أقصى)</label>
 
-                    {/* Thumbnail grid */}
-                    {createForm.photo_urls.length > 0 && (
+                    {/* Thumbnail grid with uploaded photos + uploading placeholder tiles */}
+                    {(createForm.photo_urls.length > 0 || uploadingPhotoCount > 0) && (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
                         {createForm.photo_urls.map((url, idx) => (
                           <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-muted)', border: idx === 0 ? '2px solid var(--primary)' : '1px solid var(--border)' }}>
@@ -4809,6 +5118,14 @@ export default function App() {
                             >×</button>
                           </div>
                         ))}
+
+                        {/* In-progress uploading placeholders */}
+                        {Array.from({ length: uploadingPhotoCount }).map((_, slotIdx) => (
+                          <div key={`uploading-${slotIdx}`} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', border: '1.5px dashed #3b82f6', background: '#eff6ff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', color: 'var(--primary)' }}>
+                            <Loader2 className="spin-loader" style={{ width: 22, height: 22 }} />
+                            <span style={{ fontSize: '0.68rem', fontWeight: 700 }}>جاري الرفع...</span>
+                          </div>
+                        ))}
                       </div>
                     )}
 
@@ -4817,68 +5134,43 @@ export default function App() {
                       htmlFor="listing-photo-input"
                       style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        justifyContent: 'center', border: '2px dashed #94a3b8',
-                        borderRadius: '12px', padding: '1.5rem 1rem', cursor: 'pointer',
-                        background: '#ffffff', color: 'var(--text-muted)',
+                        justifyContent: 'center', border: uploadingPhotoCount > 0 ? '2px dashed var(--primary)' : '2px dashed #94a3b8',
+                        borderRadius: '12px', padding: '1.5rem 1rem', cursor: uploadingPhotoCount > 0 ? 'wait' : 'pointer',
+                        background: uploadingPhotoCount > 0 ? '#f0f9ff' : '#ffffff', color: 'var(--text-muted)',
                         fontSize: '0.875rem', gap: '0.4rem', transition: 'border-color 0.2s',
                       }}
                       onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = '#94a3b8'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = uploadingPhotoCount > 0 ? 'var(--primary)' : '#94a3b8'}
                       onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = 'var(--primary)'; }}
-                      onDragLeave={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = '#94a3b8'; }}
+                      onDragLeave={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = uploadingPhotoCount > 0 ? 'var(--primary)' : '#94a3b8'; }}
                       onDrop={async e => {
                         e.preventDefault(); e.stopPropagation();
                         e.currentTarget.style.borderColor = '#94a3b8';
                         const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
-                        if (!files.length) return;
-                        const remaining = 30 - createForm.photo_urls.length;
-                        const toUpload = files.slice(0, remaining);
-                        showToast(`جاري رفع ${toUpload.length} صورة...`);
-                        const newUrls = [];
-                        for (const file of toUpload) {
-                          const fd = new FormData();
-                          fd.append('file', file);
-                          try {
-                            const res = await fetch(`${API_BASE}/upload/listing-photo`, { method: 'POST', body: fd });
-                            if (res.ok) {
-                              const data = await res.json();
-                              newUrls.push(formatImageUrl(data.url));
-                            }
-                          } catch {}
-                        }
-                        setCreateForm(prev => ({ ...prev, photo_urls: [...prev.photo_urls, ...newUrls] }));
-                        if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح`);
+                        handleProgressivePhotoUpload(files);
                       }}
                     >
-                      <Camera style={{ width: 28, height: 28, color: 'var(--text-muted)' }} />
-                      <span style={{ fontWeight: 600 }}>اضغط لرفع صور الوحدة السكنية</span>
-                      <span style={{ fontSize: '0.75rem' }}>JPG, PNG, WEBP - حد أقصى 10 ميجابايت لكل صورة</span>
+                      {uploadingPhotoCount > 0 ? (
+                        <>
+                          <Loader2 className="spin-loader" style={{ width: 28, height: 28, color: 'var(--primary)' }} />
+                          <span style={{ fontWeight: 700, color: 'var(--primary)' }}>جاري رفع الصور...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Camera style={{ width: 28, height: 28, color: 'var(--text-muted)' }} />
+                          <span style={{ fontWeight: 600 }}>اضغط لرفع صور الوحدة السكنية</span>
+                          <span style={{ fontSize: '0.75rem' }}>JPG, PNG, WEBP - حد أقصى 10 ميجابايت لكل صورة</span>
+                        </>
+                      )}
                       <input
                         id="listing-photo-input"
                         type="file"
                         accept="image/jpeg,image/png,image/webp"
                         multiple
                         style={{ display: 'none' }}
-                        onChange={async (e) => {
+                        onChange={(e) => {
                           const files = Array.from(e.target.files || []);
-                          if (!files.length) return;
-                          const remaining = 30 - createForm.photo_urls.length;
-                          const toUpload = files.slice(0, remaining);
-                          showToast(`جاري رفع ${toUpload.length} صورة...`);
-                          const newUrls = [];
-                          for (const file of toUpload) {
-                            const fd = new FormData();
-                            fd.append('file', file);
-                            try {
-                              const res = await fetch(`${API_BASE}/upload/listing-photo`, { method: 'POST', body: fd });
-                              if (res.ok) {
-                                const data = await res.json();
-                                newUrls.push(formatImageUrl(data.url));
-                              }
-                            } catch {}
-                          }
-                          setCreateForm(prev => ({ ...prev, photo_urls: [...prev.photo_urls, ...newUrls] }));
-                          if (newUrls.length) showToast(`تم رفع ${newUrls.length} صورة بنجاح`);
+                          handleProgressivePhotoUpload(files);
                           e.target.value = '';
                         }}
                       />
@@ -4890,6 +5182,13 @@ export default function App() {
                     <label style={{ fontWeight: 600 }}>فيديو المعاينة المرئية للوحدة السكنية</label>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>قم برفع فيديو من جهازك بمساحة حتى 150 ميجابايت (MP4, MOV, AVI, WEBM, MKV).</p>
                     
+                    {isUploadingVideo && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#eff6ff', border: '1.5px dashed #3b82f6', color: '#1d4ed8', padding: '0.85rem 1rem', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem' }}>
+                        <Loader2 className="spin-loader" style={{ width: 20, height: 20, flexShrink: 0 }} />
+                        <span>جاري رفع الفيديو...</span>
+                      </div>
+                    )}
+
                     {createForm.video_urls.length > 0 && (
                       <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {createForm.video_urls.map((vurl, vidx) => (
@@ -4910,15 +5209,25 @@ export default function App() {
                       htmlFor="listing-video-input"
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-                        border: '1.5px dashed #0284c7', borderRadius: '10px', padding: '0.85rem 1rem',
-                        cursor: 'pointer', background: '#f0f9ff', color: '#0369a1', fontSize: '0.85rem', fontWeight: 600
+                        border: isUploadingVideo ? '1.5px dashed #3b82f6' : '1.5px dashed #0284c7', borderRadius: '10px', padding: '0.85rem 1rem',
+                        cursor: isUploadingVideo ? 'wait' : 'pointer', background: isUploadingVideo ? '#eff6ff' : '#f0f9ff', color: '#0369a1', fontSize: '0.85rem', fontWeight: 600
                       }}
                     >
-                      <Video style={{ width: 18, height: 18 }} />
-                      <span>اختر ملف فيديو من جهازك لرفعه</span>
+                      {isUploadingVideo ? (
+                        <>
+                          <Loader2 className="spin-loader" style={{ width: 18, height: 18 }} />
+                          <span>جاري رفع الفيديو...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Video style={{ width: 18, height: 18 }} />
+                          <span>اختر ملف فيديو من جهازك لرفعه</span>
+                        </>
+                      )}
                       <input
                         id="listing-video-input"
                         type="file"
+                        disabled={isUploadingVideo}
                         accept="video/mp4,video/quicktime,video/x-msvideo,video/webm,video/x-matroska"
                         style={{ display: 'none' }}
                         onChange={async (e) => {
@@ -4928,6 +5237,7 @@ export default function App() {
                             showToast('حجم الفيديو كبير جداً. الحد الأقصى 150 ميجابايت.');
                             return;
                           }
+                          setIsUploadingVideo(true);
                           showToast('جاري رفع الفيديو...');
                           try {
                             const fd = new FormData();
@@ -4935,7 +5245,8 @@ export default function App() {
                             const res = await fetch(`${API_BASE}/upload/listing-video`, { method: 'POST', body: fd });
                             if (res.ok) {
                               const data = await res.json();
-                              setCreateForm(prev => ({ ...prev, video_urls: [...prev.video_urls, formatImageUrl(data.url)] }));
+                              const formattedUrl = formatImageUrl(data.url);
+                              setCreateForm(prev => ({ ...prev, video_urls: [...prev.video_urls, formattedUrl] }));
                               showToast('تم رفع الفيديو بنجاح!');
                             } else {
                               const err = await res.json();
@@ -4943,6 +5254,8 @@ export default function App() {
                             }
                           } catch {
                             showToast('خطأ أثناء رفع الفيديو');
+                          } finally {
+                            setIsUploadingVideo(false);
                           }
                           e.target.value = '';
                         }}
@@ -5110,7 +5423,7 @@ export default function App() {
                       latitude: null,
                       longitude: null,
                       gender: 'female',
-                      available_beds: 1,
+                      available_beds: 0,
                       room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
                       amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
                       photo_urls: [...PRESETS_PROPERTY_IMAGES],
