@@ -1698,7 +1698,9 @@ export default function App() {
         room_configurations: cleanedConfigs,
         contact_phone: targetContact,
         whatsapp_phone: createForm.no_whatsapp ? (createForm.whatsapp_phone || targetContact) : targetContact,
-        advertiser_id: currentUser.id
+        advertiser_id: currentUser.id,
+        near_university: Boolean(createForm.near_university),
+        near_transit: Boolean(createForm.near_transit)
       };
 
       const url = isEditing ? `${API_BASE}/listings/${editingListing.id}?x_user_id=${currentUser.id}` : `${API_BASE}/listings`;
@@ -2072,17 +2074,23 @@ export default function App() {
         headers['Authorization'] = `Bearer ${user.auth_token}`;
       }
 
-      const res = await fetch(`${API_BASE}/listings/${listingId}`, {
+      let res = await fetch(`${API_BASE}/listings/${listingId}`, {
         method: 'DELETE',
         headers
       });
+      if (!res.ok && res.status === 405) {
+        res = await fetch(`${API_BASE}/listings/${listingId}/delete`, {
+          method: 'POST',
+          headers
+        });
+      }
 
       if (res.ok) {
         showToast("تم حذف الإعلان بنجاح");
         loadListings();
         if (user?.id) loadUserListings(user.id);
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         showToast(err.detail || "فشل حذف الإعلان");
       }
     } catch (err) {
@@ -2216,17 +2224,37 @@ export default function App() {
   };
 
   const handleAdminRemoveListing = async (listingId) => {
+    if (!user) return;
     if (!window.confirm("هل أنت تأكد من إيقاف وحذف هذا الإعلان نهائياً من المنصة؟")) return;
     try {
-      const res = await fetch(`${API_BASE}/admin/listings/${listingId}/remove?x_user_id=${user.id}`, {
-        method: 'POST'
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-id': String(user.id),
+        'x_user_id': String(user.id)
+      };
+      if (user.auth_token) {
+        headers['Authorization'] = `Bearer ${user.auth_token}`;
+      }
+
+      let res = await fetch(`${API_BASE}/admin/listings/${listingId}/remove?x_user_id=${user.id}`, {
+        method: 'POST',
+        headers
       });
+      if (!res.ok && res.status === 405) {
+        res = await fetch(`${API_BASE}/admin/listings/${listingId}`, {
+          method: 'DELETE',
+          headers
+        });
+      }
+
       if (res.ok) {
         showToast("تم إيقاف وحذف الإعلان نهائياً من المنصة");
         loadAdminData();
         loadListings();
+        if (user?.id) loadUserListings(user.id);
       } else {
-        showToast("فشل إيقاف الإعلان");
+        const err = await res.json().catch(() => ({}));
+        showToast(err.detail || "فشل إيقاف الإعلان");
       }
     } catch (err) {
       showToast("خطأ أثناء إيقاف الإعلان");
@@ -5620,6 +5648,8 @@ export default function App() {
                       available_beds: 0,
                       room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
                       amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
+                      near_university: false,
+                      near_transit: false,
                       photo_urls: [...PRESETS_PROPERTY_IMAGES],
                       video_urls: [...PRESETS_PROPERTY_VIDEOS],
                       description: '',

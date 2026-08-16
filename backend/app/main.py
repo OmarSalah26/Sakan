@@ -1422,19 +1422,16 @@ def create_listing(payload: ListingCreate):
         legacy_price = configs[0]["price_per_person"] if configs else (payload.price_per_person or 0)
         legacy_room_type = configs[0]["room_type"] if configs else (payload.room_type or "single")
 
-        # Auto-compute address from structured fields if provided
-        def build_address(street, building, apartment, floor):
+        # Select user-provided address or build fallback from structured location parts (excluding floor-only)
+        user_addr = (payload.full_address or payload.address or "").strip()
+        if user_addr:
+            computed_address = user_addr
+        else:
             parts = []
-            if building: parts.append(f"مبنى {building}")
-            if apartment: parts.append(f"شقة {apartment}")
-            if floor: parts.append(f"الدور {floor}")
-            if street: parts.append(f"شارع {street}")
-            return "، ".join(parts)
-
-        computed_address = build_address(
-            payload.street, payload.building_number,
-            payload.apartment_number, payload.floor
-        ) or payload.address or ""
+            if payload.building_number: parts.append(f"مبنى {payload.building_number}")
+            if payload.apartment_number: parts.append(f"شقة {payload.apartment_number}")
+            if payload.street: parts.append(f"شارع {payload.street}")
+            computed_address = "، ".join(parts)
 
         if configs:
             for c in configs:
@@ -1473,8 +1470,8 @@ def create_listing(payload: ListingCreate):
             full_edit_available=False,
             location_precise=payload.location_precise or False,
             cover_photo_index=payload.cover_photo_index or 0,
-            near_university=payload.near_university or False,
-            near_transit=payload.near_transit or False,
+            near_university=bool(payload.near_university),
+            near_transit=bool(payload.near_transit),
             total_price=payload.totalPrice if payload.totalPrice is not None else payload.total_price
         )
         db.add(listing)
@@ -2781,15 +2778,33 @@ def delete_user_listing(
         db.close()
 
 
+@app.delete('/admin/listings/{listing_id}')
+@app.delete('/admin/listings/{listing_id}/remove')
 @app.post('/admin/listings/{listing_id}/remove')
-def admin_remove_listing(listing_id: int, x_user_id: Optional[int] = None):
+@app.post('/admin/listings/{listing_id}/delete')
+def admin_remove_listing(
+    listing_id: int,
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id: Optional[int] = Query(None)
+):
     db = SessionLocal()
     try:
-        verify_admin_user(db, x_user_id)
+        admin = verify_admin_user(
+            db,
+            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2,
+            authorization=authorization,
+            x_auth_token=x_auth_token,
+            auth_token=auth_token
+        )
         listing = db.query(Listing).filter(Listing.id == listing_id).first()
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
 
+        db.query(Bookmark).filter(Bookmark.listing_id == listing_id).delete()
         db.query(Rating).filter(Rating.listing_id == listing_id).delete()
         db.query(Complaint).filter(Complaint.listing_id == listing_id).delete()
         db.delete(listing)
@@ -3343,18 +3358,17 @@ def update_listing(
                     "commission": None
                 }]
 
-            def build_address(street, building, apartment, floor):
+            user_addr = (payload.full_address or payload.address or "").strip()
+            if user_addr:
+                computed_address = user_addr
+            elif payload.street or payload.building_number or payload.apartment_number:
                 parts = []
-                if building: parts.append(f"مبنى {building}")
-                if apartment: parts.append(f"شقة {apartment}")
-                if floor: parts.append(f"الدور {floor}")
-                if street: parts.append(f"شارع {street}")
-                return "، ".join(parts)
-
-            computed_address = build_address(
-                payload.street, payload.building_number,
-                payload.apartment_number, payload.floor
-            ) or payload.address or listing.address or ""
+                if payload.building_number: parts.append(f"مبنى {payload.building_number}")
+                if payload.apartment_number: parts.append(f"شقة {payload.apartment_number}")
+                if payload.street: parts.append(f"شارع {payload.street}")
+                computed_address = "، ".join(parts)
+            else:
+                computed_address = (listing.address or "").strip()
 
             listing.title = payload.title or listing.title
             listing.governorate = payload.governorate
@@ -3383,8 +3397,8 @@ def update_listing(
             listing.whatsapp_phone = payload.whatsapp_phone
             listing.location_precise = payload.location_precise
             listing.cover_photo_index = payload.cover_photo_index
-            listing.near_university = payload.near_university
-            listing.near_transit = payload.near_transit
+            listing.near_university = bool(payload.near_university)
+            listing.near_transit = bool(payload.near_transit)
             total_val = payload.totalPrice if payload.totalPrice is not None else payload.total_price
             if total_val is not None:
                 listing.total_price = total_val

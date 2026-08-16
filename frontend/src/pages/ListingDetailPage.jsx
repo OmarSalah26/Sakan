@@ -640,42 +640,54 @@ export default function ListingDetailPage() {
           </div>
 
           {/* Full Address */}
-          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
-              العنوان بالتفصيل
-            </h3>
-            <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-dark)', fontSize: '0.95rem' }}>{listing.address}</span>
-            </div>
+          {(() => {
+            const rawAddr = (listing.address || '').trim();
+            const rawFloor = (listing.floor || '').toString().trim();
+            const floorPattern = rawFloor ? new RegExp(`^(الدور\\s*)?${rawFloor}$`, 'i') : null;
+            const isFloorOnly = floorPattern ? floorPattern.test(rawAddr) : false;
+            const displayAddress = (!rawAddr || isFloorOnly) ? '' : rawAddr;
 
-            {/* Embedded Google Map (only rendered if precise coordinates exist) */}
-            {hasCoords && (listing.location_precise || listing.location_precise === undefined) && (() => {
-              const { latitude, longitude } = listing;
-              const gmSrc = `https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`;
-              const osmSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${longitude-0.006},${latitude-0.004},${longitude+0.006},${latitude+0.004}&layer=mapnik&marker=${latitude},${longitude}`;
-              return (
-                <div style={{ marginTop: '1rem', width: '100%', height: '228px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
-                  <iframe
-                    key={gmSrc}
-                    src={gmSrc}
-                    width="100%"
-                    height={195}
-                    style={{ border: 0, display: 'block', flex: '0 0 195px' }}
-                    allowFullScreen=""
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    title="Listing Location Map"
-                    onError={(e) => { e.target.src = osmSrc; }}
-                  />
-                  <div style={{ height: '33px', flex: '0 0 33px', background: '#f8fafc', fontSize: '0.8rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border)' }}>
-                    <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                      فتح الموقع في خرائط جوجل <MapPin style={{ width: 14, height: 14 }} />
-                    </a>
-                  </div>
+            return (
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                  العنوان بالتفصيل
+                </h3>
+                <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-dark)', fontSize: '0.95rem' }}>
+                    {displayAddress || 'لم يتم إضافة عنوان تفصيلي'}
+                  </span>
                 </div>
-              );
-            })()}
-          </div>
+
+                {/* Embedded Google Map (only rendered if precise coordinates exist) */}
+                {hasCoords && (listing.location_precise || listing.location_precise === undefined) && (() => {
+                  const { latitude, longitude } = listing;
+                  const gmSrc = `https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`;
+                  const osmSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${longitude-0.006},${latitude-0.004},${longitude+0.006},${latitude+0.004}&layer=mapnik&marker=${latitude},${longitude}`;
+                  return (
+                    <div style={{ marginTop: '1rem', width: '100%', height: '228px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+                      <iframe
+                        key={gmSrc}
+                        src={gmSrc}
+                        width="100%"
+                        height={195}
+                        style={{ border: 0, display: 'block', flex: '0 0 195px' }}
+                        allowFullScreen=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        title="Listing Location Map"
+                        onError={(e) => { e.target.src = osmSrc; }}
+                      />
+                      <div style={{ height: '33px', flex: '0 0 33px', background: '#f8fafc', fontSize: '0.8rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border)' }}>
+                        <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                          فتح الموقع في خرائط جوجل <MapPin style={{ width: 14, height: 14 }} />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            );
+          })()}
 
           {/* Description */}
           {listing.description && (
