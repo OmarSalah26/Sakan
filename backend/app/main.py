@@ -246,6 +246,8 @@ class Listing(Base):
     cover_photo_index = Column(Integer, default=0)         # cover photo index
     location_precise = Column(Boolean, default=False)      # True only if set via map picker
     not_vacant_reports = Column(Integer, default=0)        # count of not vacant reports
+    near_university = Column(Boolean, default=False)       # True if near university
+    near_transit = Column(Boolean, default=False)          # True if near public transit
 
     advertiser = relationship("User", back_populates="listings")
     ratings = relationship("Rating", back_populates="listing")
@@ -446,6 +448,10 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE listings ADD COLUMN location_precise BOOLEAN DEFAULT 0"))
             if "not_vacant_reports" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN not_vacant_reports INTEGER DEFAULT 0"))
+            if "near_university" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN near_university BOOLEAN DEFAULT 0"))
+            if "near_transit" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN near_transit BOOLEAN DEFAULT 0"))
 
         # Check ratings table
         if "ratings" in inspector.get_table_names():
@@ -833,6 +839,8 @@ class ListingCreate(BaseModel):
     cover_photo_index: int = 0
     location_precise: bool = False
     not_vacant_reports: int = 0
+    near_university: bool = False
+    near_transit: bool = False
 
     # Legacy fields for test compatibility
     price_per_person: Optional[Union[float, int]] = None
@@ -883,6 +891,8 @@ class ListingOut(BaseModel):
     cover_photo_index: int = 0
     location_precise: bool = False
     not_vacant_reports: int = 0
+    near_university: bool = False
+    near_transit: bool = False
 
 
 def safe_int(val, default=None):
@@ -935,6 +945,8 @@ def build_listing_out(item: Listing, advertiser: Optional[User] = None) -> Listi
         cover_photo_index=safe_int(item.cover_photo_index, 0),
         location_precise=bool(item.location_precise),
         not_vacant_reports=safe_int(item.not_vacant_reports, 0),
+        near_university=bool(item.near_university),
+        near_transit=bool(item.near_transit),
         totalPrice=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None),
         total_price=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None)
     )
@@ -1433,6 +1445,8 @@ def create_listing(payload: ListingCreate):
             full_edit_available=False,
             location_precise=payload.location_precise or False,
             cover_photo_index=payload.cover_photo_index or 0,
+            near_university=payload.near_university or False,
+            near_transit=payload.near_transit or False,
             total_price=payload.totalPrice if payload.totalPrice is not None else payload.total_price
         )
         db.add(listing)
@@ -3323,6 +3337,8 @@ def update_listing(
             listing.whatsapp_phone = payload.whatsapp_phone
             listing.location_precise = payload.location_precise
             listing.cover_photo_index = payload.cover_photo_index
+            listing.near_university = payload.near_university
+            listing.near_transit = payload.near_transit
             total_val = payload.totalPrice if payload.totalPrice is not None else payload.total_price
             if total_val is not None:
                 listing.total_price = total_val

@@ -51,6 +51,11 @@ function extractAmenityName(amenity) {
   if (typeof amenity === 'string') {
     const trimmed = amenity.trim();
     if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.map(extractAmenityName);
+        if (parsed && typeof parsed === 'object') return parsed.name || parsed.title || '';
+      } catch {}
       const match = trimmed.match(/'name':\s*'([^']+)'/) || trimmed.match(/"name":\s*"([^"]+)"/);
       if (match && match[1]) return match[1];
     }
@@ -59,14 +64,36 @@ function extractAmenityName(amenity) {
   return String(amenity);
 }
 
+const AMENITY_ALIASES = {
+  "تكييف": "مكيفة",
+  "مراوح": "مروحة",
+  "مياه ساخنة": "سخان",
+  "سخان مياه": "سخان",
+  "منشر": "منشر ملابس",
+  "أدوات مطبخ": "أجهزة مطبخ",
+  "فلتر مياه": "أجهزة مطبخ",
+  "صالة جلوس مشتركة": "غرفة معيشة مفروشة",
+  "غرفة مذاكرة": "غرفة معيشة مفروشة",
+  "أمن 24 ساعة": "حارس عقار",
+  "عيادة طبية": "مستشفى",
+  "واي فاي مجاني": "واي فاي",
+  "جيم (Gym)": "جيم",
+  "بوتاجاز / ميكروويف": "بوتاجاز",
+  "سرير إضافي": "تجهيزات الشقة"
+};
+
 const INDOOR_AMENITIES = [
-  "واي فاي مجاني", "تكييف", "مراوح", "سخان مياه", "ثلاجة", 
-  "غسالة", "بوتاجاز / ميكروويف", "فلتر مياه", "سرير إضافي", "مكتب للمذاكرة", "دولاب ملابس"
+  "واي فاي", "واي فاي مجاني", "تكييف", "مراوح", "مياه ساخنة", "سخان مياه",
+  "مولد كهرباء / كهرباء احتياطية", "ثلاجة", "بوتاجاز", "ميكروويف", "بوتاجاز / ميكروويف",
+  "فلتر مياه", "أدوات مطبخ", "مكتب للمذاكرة", "كرسي مكتب", "دولاب ملابس", "سرير إضافي",
+  "غسالة", "منشر", "مكواة", "كاميرات مراقبة", "أمن 24 ساعة", "تنظيف دوري",
+  "صيانة", "مصعد", "غرفة مذاكرة", "صالة جلوس مشتركة", "بلكونة"
 ];
 
 const OUTDOOR_AMENITIES = [
-  "قريب من الجامعة", "قريب من المواصلات العامة", "سوبر ماركت", 
-  "مطاعم", "كافيهات", "صيدلية", "عيادة طبية", "جيم (Gym)", "ماكينة صراف آلي (ATM)"
+  "قريب من الجامعة", "قريب من المواصلات العامة", "سوبر ماركت", "مخبز",
+  "مطاعم", "كافيهات", "صيدلية", "مستشفى", "عيادة طبية", "جيم", "جيم (Gym)",
+  "مسجد", "كنيسة", "ماكينة صراف آلي (ATM)", "بنك", "محل طباعة وتصوير", "مكتبة"
 ];
 
 export function formatShareText(listing) {
@@ -777,49 +804,138 @@ export default function ListingDetailPage() {
           الخدمات والمرافق المتوفرة
         </h3>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-          {(() => {
-            const cleanAmenities = (listing.amenities || []).map(extractAmenityName).filter(Boolean);
-            const hasAcRoom = listing.room_configurations?.some(c => c.has_ac);
-            if (hasAcRoom && !cleanAmenities.some(a => a.includes('تكييف') || a.includes('مكيفة'))) {
-              cleanAmenities.push('❄️ مكيفة');
-            }
-            const indoorList = cleanAmenities.filter(a => INDOOR_AMENITIES.includes(a) || a.includes('مكيفة'));
-            const outdoorList = cleanAmenities.filter(a => OUTDOOR_AMENITIES.includes(a));
-            const otherList = cleanAmenities.filter(a => !INDOOR_AMENITIES.includes(a) && !OUTDOOR_AMENITIES.includes(a) && !a.includes('مكيفة'));
+        {(() => {
+          const rawList = Array.isArray(listing.amenities)
+            ? listing.amenities
+            : typeof listing.amenities === 'string'
+              ? (() => {
+                  try {
+                    const p = JSON.parse(listing.amenities || '[]');
+                    return Array.isArray(p) ? p : [listing.amenities];
+                  } catch {
+                    return [listing.amenities];
+                  }
+                })()
+              : [];
 
-            return (
-              <>
-                <div>
-                  <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق سكنية داخلية</h4>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    {indoorList.map((amen, i) => (
-                      <span key={i} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                        {amen}
+          const cleanAmenities = rawList.flatMap(extractAmenityName).filter(Boolean);
+          
+          const hasNearUniv = Boolean(listing.near_university || cleanAmenities.includes('قريب من الجامعة'));
+          const hasNearTransit = Boolean(listing.near_transit || cleanAmenities.includes('قريب من المواصلات العامة'));
+
+          const filteredAmenities = cleanAmenities
+            .filter(a => a !== 'قريب من الجامعة' && a !== 'قريب من المواصلات العامة')
+            .map(a => AMENITY_ALIASES[a] || a);
+
+          const hasAcRoom = listing.room_configurations?.some(c => c.has_ac);
+          if (hasAcRoom && !filteredAmenities.some(a => a.includes('تكييف') || a.includes('مكيفة'))) {
+            filteredAmenities.push('مكيفة');
+          }
+
+          const uniqueAmenities = Array.from(new Set(filteredAmenities));
+
+          const INDOOR_GROUPS = [
+            { title: "تجهيزات الشقة", items: ["مكيفة", "مروحة", "تلفزيون", "مكتب للمذاكرة", "كرسي مكتب", "دولاب ملابس", "سخان", "غسالة", "منشر ملابس", "مكواة", "واي فاي"] },
+            { title: "المطبخ", items: ["مطبخ", "ثلاجة", "بوتاجاز", "ميكروويف", "أجهزة مطبخ", "أطباق وأدوات مائدة"] },
+            { title: "أخرى / خدمات", items: ["بلكونة", "غرفة معيشة مفروشة", "مولد كهرباء / كهرباء احتياطية", "مصعد", "تنظيف دوري", "صيانة", "كاميرات مراقبة", "حارس عقار"] }
+          ];
+
+          const OUTDOOR_GROUPS = [
+            { title: "الخدمات الأساسية القريبة", items: ["سوبر ماركت", "مخبز", "صيدلية", "مستشفى", "بنك", "ماكينة صراف آلي (ATM)"] },
+            { title: "الأماكن والأنشطة القريبة", items: ["مطاعم", "كافيهات", "جيم", "مسجد", "كنيسة", "محل طباعة وتصوير", "مكتبة"] }
+          ];
+
+          const allDefinedIndoor = INDOOR_GROUPS.flatMap(g => g.items);
+          const allDefinedOutdoor = OUTDOOR_GROUPS.flatMap(g => g.items);
+
+          const unclassified = uniqueAmenities.filter(a => !allDefinedIndoor.includes(a) && !allDefinedOutdoor.includes(a));
+
+          return (
+            <div>
+              {/* 1. Location Features (Green Badges ABOVE all amenities) */}
+              {(hasNearUniv || hasNearTransit) && (
+                <div style={{ marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+                  <h4 style={{ fontWeight: 700, color: '#15803d', marginBottom: '0.6rem', fontSize: '0.95rem' }}>مميزات موقع العقار</h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+                    {hasNearUniv && (
+                      <span style={{ background: '#dcfce7', color: '#15803d', border: '1.5px solid #86efac', padding: '0.45rem 0.9rem', borderRadius: '999px', fontSize: '0.88rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <CheckCircle style={{ width: 16, height: 16, color: '#16a34a' }} /> قريب من الجامعة
                       </span>
-                    ))}
-                    {otherList.map((amen, i) => (
-                      <span key={`oth-${i}`} style={{ background: '#f8fafc', color: '#475569', border: '1px solid var(--border)', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                        {amen}
+                    )}
+                    {hasNearTransit && (
+                      <span style={{ background: '#dcfce7', color: '#15803d', border: '1.5px solid #86efac', padding: '0.45rem 0.9rem', borderRadius: '999px', fontSize: '0.88rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <CheckCircle style={{ width: 16, height: 16, color: '#16a34a' }} /> قريب من المواصلات العامة
                       </span>
-                    ))}
+                    )}
                   </div>
                 </div>
+              )}
 
-                <div>
-                  <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق وخدمات مجاورة</h4>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    {outdoorList.map((amen, i) => (
-                      <span key={`out-${i}`} style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                        {amen}
-                      </span>
-                    ))}
+              {/* 2. خدمات داخلية */}
+              {INDOOR_GROUPS.some(g => g.items.some(i => uniqueAmenities.includes(i))) || unclassified.length > 0 ? (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h4 style={{ fontWeight: 800, color: 'var(--primary)', marginBottom: '0.85rem', fontSize: '1rem', borderBottom: '2px solid #e0f2fe', paddingBottom: '0.4rem' }}>
+                    خدمات داخلية
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                    {INDOOR_GROUPS.map(grp => {
+                      const groupItems = grp.items.filter(i => uniqueAmenities.includes(i));
+                      if (grp.title === "أخرى / خدمات" && unclassified.length > 0) {
+                        groupItems.push(...unclassified);
+                      }
+                      if (!groupItems.length) return null;
+                      return (
+                        <div key={grp.title} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+                          <h5 style={{ fontWeight: 700, color: '#334155', fontSize: '0.88rem', marginBottom: '0.6rem' }}>{grp.title}</h5>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                            {groupItems.map((amen, i) => (
+                              <span key={i} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '0.3rem 0.65rem', borderRadius: '999px', fontSize: '0.82rem', fontWeight: 600 }}>
+                                {amen}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </>
-            );
-          })()}
-        </div>
+              ) : null}
+
+              {/* 3. خدمات مجاورة */}
+              {OUTDOOR_GROUPS.some(g => g.items.some(i => uniqueAmenities.includes(i))) ? (
+                <div>
+                  <h4 style={{ fontWeight: 800, color: '#0369a1', marginBottom: '0.85rem', fontSize: '1rem', borderBottom: '2px solid #bae6fd', paddingBottom: '0.4rem' }}>
+                    خدمات مجاورة
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                    {OUTDOOR_GROUPS.map(grp => {
+                      const groupItems = grp.items.filter(i => uniqueAmenities.includes(i));
+                      if (!groupItems.length) return null;
+                      return (
+                        <div key={grp.title} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+                          <h5 style={{ fontWeight: 700, color: '#334155', fontSize: '0.88rem', marginBottom: '0.6rem' }}>{grp.title}</h5>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                            {groupItems.map((amen, i) => (
+                              <span key={i} style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.3rem 0.65rem', borderRadius: '999px', fontSize: '0.82rem', fontWeight: 600 }}>
+                                {amen}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {!uniqueAmenities.length && !hasNearUniv && !hasNearTransit && (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>
+                  لم يتم إضافة مرافق أو خدمات محددة في هذا الإعلان.
+                </p>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ─── Ratings & Trust Section ─── */}

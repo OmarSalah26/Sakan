@@ -293,51 +293,101 @@ const PRESETS_PROPERTY_VIDEOS = [
   "https://www.w3schools.com/html/mov_bbb.mp4"
 ];
 
-const INDOOR_AMENITIES = [
-  { name: "واي فاي", category: "الإنترنت والمرافق", prechecked: false },
-  { name: "تكييف", category: "الإنترنت والمرافق", prechecked: false },
-  { name: "مراوح", category: "الإنترنت والمرافق", prechecked: true },
-  { name: "مياه ساخنة", category: "الإنترنت والمرافق", prechecked: true },
-  { name: "مولد كهرباء / كهرباء احتياطية", category: "الإنترنت والمرافق", prechecked: false },
-  { name: "ثلاجة", category: "المطبخ", prechecked: true },
-  { name: "بوتاجاز", category: "المطبخ", prechecked: true },
-  { name: "ميكروويف", category: "المطبخ", prechecked: false },
-  { name: "فلتر مياه", category: "المطبخ", prechecked: true },
-  { name: "أدوات مطبخ", category: "المطبخ", prechecked: false },
-  { name: "مكتب للمذاكرة", category: "الغرفة", prechecked: true },
-  { name: "كرسي مكتب", category: "الغرفة", prechecked: false },
-  { name: "دولاب ملابس", category: "الغرفة", prechecked: false },
-  { name: "غسالة", category: "الغرفة", prechecked: true },
-  { name: "منشر", category: "الغرفة", prechecked: false },
-  { name: "مكواة", category: "الغرفة", prechecked: false },
-  { name: "كاميرات مراقبة", category: "الأمن والخدمات", prechecked: false },
-  { name: "أمن 24 ساعة", category: "الأمن والخدمات", prechecked: false },
-  { name: "تنظيف دوري", category: "الأمن والخدمات", prechecked: false },
-  { name: "صيانة", category: "الأمن والخدمات", prechecked: false },
-  { name: "مصعد", category: "المبنى", prechecked: false },
-  { name: "غرفة مذاكرة", category: "مساحات مشتركة", prechecked: false },
-  { name: "صالة جلوس مشتركة", category: "مساحات مشتركة", prechecked: false },
-  { name: "بلكونة", category: "مساحات مشتركة", prechecked: false }
+const INDOOR_AMENITY_GROUPS = [
+  {
+    title: "تجهيزات الشقة",
+    items: [
+      { name: "مكيفة", prechecked: false },
+      { name: "مروحة", prechecked: true },
+      { name: "تلفزيون", prechecked: false },
+      { name: "مكتب للمذاكرة", prechecked: true },
+      { name: "كرسي مكتب", prechecked: false },
+      { name: "دولاب ملابس", prechecked: false },
+      { name: "سخان", prechecked: true },
+      { name: "غسالة", prechecked: true },
+      { name: "منشر ملابس", prechecked: false },
+      { name: "مكواة", prechecked: false },
+      { name: "واي فاي", prechecked: false }
+    ]
+  },
+  {
+    title: "المطبخ",
+    items: [
+      { name: "مطبخ", prechecked: false },
+      { name: "ثلاجة", prechecked: true },
+      { name: "بوتاجاز", prechecked: true },
+      { name: "ميكروويف", prechecked: false },
+      { name: "أجهزة مطبخ", prechecked: true },
+      { name: "أطباق وأدوات مائدة", prechecked: false }
+    ]
+  },
+  {
+    title: "أخرى / خدمات",
+    items: [
+      { name: "بلكونة", prechecked: false },
+      { name: "غرفة معيشة مفروشة", prechecked: false },
+      { name: "مولد كهرباء / كهرباء احتياطية", prechecked: false },
+      { name: "مصعد", prechecked: false },
+      { name: "تنظيف دوري", prechecked: false },
+      { name: "صيانة", prechecked: false },
+      { name: "كاميرات مراقبة", prechecked: false },
+      { name: "حارس عقار", prechecked: false }
+    ]
+  }
 ];
 
-const OUTDOOR_AMENITIES = [
-  { name: "قريب من الجامعة", category: "التعليم", prechecked: false },
-  { name: "قريب من المواصلات العامة", category: "المواصلات", prechecked: false },
-  { name: "سوبر ماركت", category: "التسوق", prechecked: false },
-  { name: "مخبز", category: "التسوق", prechecked: false },
-  { name: "مطاعم", category: "الطعام", prechecked: false },
-  { name: "كافيهات", category: "الطعام", prechecked: false },
-  { name: "صيدلية", category: "الصحة", prechecked: false },
-  { name: "مستشفى", category: "الصحة", prechecked: false },
-  { name: "عيادة طبية", category: "الصحة", prechecked: false },
-  { name: "جيم", category: "الرياضة", prechecked: false },
-  { name: "مسجد", category: "خدمات عامة", prechecked: false },
-  { name: "كنيسة", category: "خدمات عامة", prechecked: false },
-  { name: "ماكينة صراف آلي (ATM)", category: "خدمات عامة", prechecked: false },
-  { name: "بنك", category: "خدمات عامة", prechecked: false },
-  { name: "محل طباعة وتصوير", category: "الخدمات اليومية", prechecked: false },
-  { name: "مكتبة", category: "الخدمات اليومية", prechecked: false }
+const OUTDOOR_AMENITY_GROUPS = [
+  {
+    title: "الخدمات الأساسية القريبة",
+    items: [
+      { name: "سوبر ماركت", prechecked: false },
+      { name: "مخبز", prechecked: false },
+      { name: "صيدلية", prechecked: false },
+      { name: "مستشفى", prechecked: false },
+      { name: "بنك", prechecked: false },
+      { name: "ماكينة صراف آلي (ATM)", prechecked: false }
+    ]
+  },
+  {
+    title: "الأماكن والأنشطة القريبة",
+    items: [
+      { name: "مطاعم", prechecked: false },
+      { name: "كافيهات", prechecked: false },
+      { name: "جيم", prechecked: false },
+      { name: "مسجد", prechecked: false },
+      { name: "كنيسة", prechecked: false },
+      { name: "محل طباعة وتصوير", prechecked: false },
+      { name: "مكتبة", prechecked: false }
+    ]
+  }
 ];
+
+const INDOOR_AMENITIES = INDOOR_AMENITY_GROUPS.flatMap(g => g.items.map(i => ({ ...i, category: g.title })));
+const OUTDOOR_AMENITIES = OUTDOOR_AMENITY_GROUPS.flatMap(g => g.items.map(i => ({ ...i, category: g.title })));
+
+const AMENITY_ALIASES = {
+  "تكييف": "مكيفة",
+  "مراوح": "مروحة",
+  "مياه ساخنة": "سخان",
+  "سخان مياه": "سخان",
+  "منشر": "منشر ملابس",
+  "أدوات مطبخ": "أجهزة مطبخ",
+  "فلتر مياه": "أجهزة مطبخ",
+  "صالة جلوس مشتركة": "غرفة معيشة مفروشة",
+  "غرفة مذاكرة": "غرفة معيشة مفروشة",
+  "أمن 24 ساعة": "حارس عقار",
+  "عيادة طبية": "مستشفى",
+  "واي فاي مجاني": "واي فاي",
+  "جيم (Gym)": "جيم",
+  "بوتاجاز / ميكروويف": "بوتاجاز",
+  "سرير إضافي": "تجهيزات الشقة"
+};
+
+function normalizeAmenityName(name) {
+  if (!name) return '';
+  const trimmed = String(name).trim();
+  return AMENITY_ALIASES[trimmed] || trimmed;
+}
 
 export function formatUnifiedShareText(listing, isAdvertiser = false) {
   if (!listing) return '';
@@ -612,7 +662,9 @@ export default function App() {
     gender: 'female',
     available_beds: 0,
     room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
-    amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
+    amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name),
+    near_university: false,
+    near_transit: false,
     photo_urls: [],
     video_urls: [],
     description: '',
@@ -900,9 +952,18 @@ export default function App() {
     };
 
     const roomConfigs = parseArr(item.room_configurations);
-    const amenitiesList = parseArr(item.amenities);
+    const rawAmenitiesList = parseArr(item.amenities);
     const photoUrlsList = parseArr(item.photo_urls);
     const videoUrlsList = parseArr(item.video_urls);
+
+    const nearUniv = Boolean(item.near_university || rawAmenitiesList.includes('قريب من الجامعة'));
+    const nearTrans = Boolean(item.near_transit || rawAmenitiesList.includes('قريب من المواصلات العامة'));
+    const normalizedAmenities = Array.from(new Set(
+      rawAmenitiesList
+        .filter(a => a !== 'قريب من الجامعة' && a !== 'قريب من المواصلات العامة')
+        .map(normalizeAmenityName)
+        .filter(Boolean)
+    ));
 
     setCreateForm({
       title: item.title || '',
@@ -918,7 +979,9 @@ export default function App() {
       gender: item.gender || 'female',
       available_beds: item.available_beds || 1,
       room_configurations: roomConfigs.length > 0 ? roomConfigs : [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
-      amenities: amenitiesList,
+      amenities: normalizedAmenities,
+      near_university: nearUniv,
+      near_transit: nearTrans,
       photo_urls: photoUrlsList,
       video_urls: videoUrlsList,
       description: item.description || '',
@@ -1516,7 +1579,9 @@ export default function App() {
             gender: 'female',
             available_beds: 0,
             room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
-            amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
+            amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name),
+            near_university: false,
+            near_transit: false,
             photo_urls: [],
             video_urls: [],
             description: '',
@@ -4585,6 +4650,29 @@ export default function App() {
                     />
                   )}
 
+                  {/* Location Features */}
+                  <div className="form-group" style={{ background: '#f8fafc', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', marginBottom: '1rem' }}>
+                    <label style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem', display: 'block' }}>مميزات موقع العقار</label>
+                    <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                      <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.88rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={createForm.near_university || false}
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, near_university: e.target.checked }))}
+                        />
+                        قريب من الجامعة
+                      </label>
+                      <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.88rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={createForm.near_transit || false}
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, near_transit: e.target.checked }))}
+                        />
+                        قريب من المواصلات العامة
+                      </label>
+                    </div>
+                  </div>
+
                   <div className="form-group" style={{ background: '#f8fafc', padding: '1rem', borderRadius: 'var(--r-md)', border: '1px solid var(--border)', marginBottom: '1rem' }}>
                     <label style={{ fontWeight: 700 }}>رقم الهاتف للتواصل <span style={{ color: 'var(--danger)' }}>*</span></label>
                     <input 
@@ -5000,56 +5088,111 @@ export default function App() {
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>المرافق والخدمات المتوفرة</h4>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>حدد الخدمات المتواجدة داخل الوحدة السكنية وخارجها لتسهيل وصول الباحثين إليها.</p>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <h5 style={{ fontWeight: 700, color: 'var(--primary)', margin: 0 }}>مرافق سكنية داخلية (Indoor)</h5>
-                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <input 
-                        type="checkbox"
-                        checked={INDOOR_AMENITIES.map(a => a.name).every(name => createForm.amenities.includes(name))}
-                        onChange={() => {
-                          const allNames = INDOOR_AMENITIES.map(a => a.name);
-                          const allSelected = allNames.every(name => createForm.amenities.includes(name));
-                          setCreateForm(prev => {
-                            const withoutIndoor = prev.amenities.filter(a => !allNames.includes(a));
-                            return { ...prev, amenities: allSelected ? withoutIndoor : [...withoutIndoor, ...allNames] };
-                          });
-                        }}
-                      />
-                      تحديد الكل
-                    </label>
-                  </div>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                    {INDOOR_AMENITIES.map(amenity => {
-                      const isChecked = createForm.amenities.includes(amenity.name);
-                      return (
-                        <label key={amenity.name} className="checkbox-label" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={isChecked}
-                            onChange={() => toggleAmenity(amenity.name)}
-                          />
-                          {amenity.name}
-                        </label>
-                      );
-                    })}
+                  {/* Quick Select Bar: الأساسيات & تحديد الكل */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem', background: '#f8fafc', border: '1px solid var(--border)', padding: '0.75rem 1rem', borderRadius: '10px' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '0.9rem' }}>خيارات التحديد السريع</span>
+                    
+                    <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
+                      {/* الأساسيات Toggle */}
+                      {(() => {
+                        const ESSENTIALS = ["ثلاجة", "بوتاجاز", "غسالة"];
+                        const isEssentialsChecked = ESSENTIALS.every(name => createForm.amenities.includes(name));
+                        return (
+                          <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0284c7', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <input 
+                              type="checkbox"
+                              checked={isEssentialsChecked}
+                              onChange={() => {
+                                setCreateForm(prev => {
+                                  if (isEssentialsChecked) {
+                                    return { ...prev, amenities: prev.amenities.filter(a => !ESSENTIALS.includes(a)) };
+                                  } else {
+                                    const combined = new Set([...prev.amenities, ...ESSENTIALS]);
+                                    return { ...prev, amenities: Array.from(combined) };
+                                  }
+                                });
+                              }}
+                            />
+                            الأساسيات (ثلاجة، بوتاجاز، غسالة)
+                          </label>
+                        );
+                      })()}
+
+                      {/* تحديد الكل Toggle */}
+                      {(() => {
+                        const allNames = [...INDOOR_AMENITIES, ...OUTDOOR_AMENITIES].map(a => a.name);
+                        const allSelected = allNames.every(name => createForm.amenities.includes(name));
+                        return (
+                          <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <input 
+                              type="checkbox"
+                              checked={allSelected}
+                              onChange={() => {
+                                setCreateForm(prev => {
+                                  const customOnly = prev.amenities.filter(a => !allNames.includes(a));
+                                  return { ...prev, amenities: allSelected ? customOnly : [...customOnly, ...allNames] };
+                                });
+                              }}
+                            />
+                            تحديد الكل
+                          </label>
+                        );
+                      })()}
+                    </div>
                   </div>
 
-                  <h5 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem' }}>خدمات ومحلات مجاورة (Outdoor)</h5>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                    {OUTDOOR_AMENITIES.map(amenity => {
-                      const isChecked = createForm.amenities.includes(amenity.name);
-                      return (
-                        <label key={amenity.name} className="checkbox-label" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={isChecked}
-                            onChange={() => toggleAmenity(amenity.name)}
-                          />
-                          {amenity.name}
-                        </label>
-                      );
-                    })}
+                  {/* خدمات داخلية Section */}
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <h5 style={{ fontWeight: 800, color: 'var(--primary)', fontSize: '1rem', borderBottom: '2px solid #e0f2fe', paddingBottom: '0.4rem', marginBottom: '1rem' }}>
+                      خدمات داخلية
+                    </h5>
+                    {INDOOR_AMENITY_GROUPS.map((grp) => (
+                      <div key={grp.title} style={{ marginBottom: '1rem', background: '#ffffff', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+                        <h6 style={{ fontWeight: 700, fontSize: '0.88rem', color: '#334155', marginBottom: '0.75rem' }}>{grp.title}</h6>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.6rem' }}>
+                          {grp.items.map(amenity => {
+                            const isChecked = createForm.amenities.includes(amenity.name);
+                            return (
+                              <label key={amenity.name} className="checkbox-label" style={{ fontWeight: 400, fontSize: '0.82rem' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={isChecked}
+                                  onChange={() => toggleAmenity(amenity.name)}
+                                />
+                                {amenity.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* خدمات مجاورة Section */}
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <h5 style={{ fontWeight: 800, color: '#0369a1', fontSize: '1rem', borderBottom: '2px solid #bae6fd', paddingBottom: '0.4rem', marginBottom: '1rem' }}>
+                      خدمات مجاورة
+                    </h5>
+                    {OUTDOOR_AMENITY_GROUPS.map((grp) => (
+                      <div key={grp.title} style={{ marginBottom: '1rem', background: '#ffffff', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+                        <h6 style={{ fontWeight: 700, fontSize: '0.88rem', color: '#334155', marginBottom: '0.75rem' }}>{grp.title}</h6>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.6rem' }}>
+                          {grp.items.map(amenity => {
+                            const isChecked = createForm.amenities.includes(amenity.name);
+                            return (
+                              <label key={amenity.name} className="checkbox-label" style={{ fontWeight: 400, fontSize: '0.82rem' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={isChecked}
+                                  onChange={() => toggleAmenity(amenity.name)}
+                                />
+                                {amenity.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   <div className="form-group" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
@@ -5062,6 +5205,7 @@ export default function App() {
                         style={{ background: '#ffffff', border: '1.5px solid #94a3b8' }}
                         onChange={(e) => setCustomAmenity(e.target.value)}
                       />
+                      <button type="button" className="btn-outline" style={{ flexShrink: 0 }} onClick={handleAddCustomAmenity}>إضافة</button>
                     </div>
                   </div>
                 </div>
