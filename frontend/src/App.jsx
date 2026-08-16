@@ -1745,9 +1745,13 @@ export default function App() {
       let payload = {
         ...createForm,
         address: createForm.full_address || createForm.address,
+        floor: createForm.floor !== null && createForm.floor !== undefined ? String(createForm.floor) : null,
+        street: createForm.street !== null && createForm.street !== undefined ? String(createForm.street) : null,
+        building_number: createForm.building_number !== null && createForm.building_number !== undefined ? String(createForm.building_number) : null,
+        apartment_number: createForm.apartment_number !== null && createForm.apartment_number !== undefined ? String(createForm.apartment_number) : null,
+        contact_phone: targetContact ? String(targetContact) : null,
+        whatsapp_phone: createForm.no_whatsapp ? (createForm.whatsapp_phone ? String(createForm.whatsapp_phone) : String(targetContact)) : String(targetContact),
         room_configurations: cleanedConfigs,
-        contact_phone: targetContact,
-        whatsapp_phone: createForm.no_whatsapp ? (createForm.whatsapp_phone || targetContact) : targetContact,
         advertiser_id: currentUser.id,
         near_university: Boolean(createForm.near_university),
         near_transit: Boolean(createForm.near_transit)

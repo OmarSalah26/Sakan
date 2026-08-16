@@ -867,10 +867,10 @@ class ListingCreate(BaseModel):
     neighborhood: str
     address: str = ""
     full_address: Optional[str] = None
-    street: Optional[str] = None
-    building_number: Optional[str] = None
-    apartment_number: Optional[str] = None
-    floor: Optional[str] = None
+    street: Optional[Union[str, int]] = None
+    building_number: Optional[Union[str, int]] = None
+    apartment_number: Optional[Union[str, int]] = None
+    floor: Optional[Union[str, int]] = None
     maps_link: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -884,8 +884,8 @@ class ListingCreate(BaseModel):
     tier: str = "regular"
     description: str = ""
     min_lease_months: Optional[int] = None
-    contact_phone: Optional[str] = None
-    whatsapp_phone: Optional[str] = None
+    contact_phone: Optional[Union[str, int]] = None
+    whatsapp_phone: Optional[Union[str, int]] = None
     source: str = "normal"
     full_edit_available: bool = False
     edit_token: Optional[str] = None
@@ -1469,10 +1469,10 @@ def create_listing(payload: ListingCreate):
             city=payload.city,
             neighborhood=payload.neighborhood,
             address=computed_address,
-            street=payload.street,
-            building_number=payload.building_number,
-            apartment_number=payload.apartment_number,
-            floor=payload.floor,
+            street=str(payload.street) if payload.street is not None else None,
+            building_number=str(payload.building_number) if payload.building_number is not None else None,
+            apartment_number=str(payload.apartment_number) if payload.apartment_number is not None else None,
+            floor=str(payload.floor) if payload.floor is not None else None,
             maps_link=payload.maps_link,
             latitude=payload.latitude,
             longitude=payload.longitude,
@@ -1488,8 +1488,8 @@ def create_listing(payload: ListingCreate):
             status="active",
             advertiser_id=payload.advertiser_id,
             min_lease_months=payload.min_lease_months,
-            contact_phone=payload.contact_phone,
-            whatsapp_phone=payload.whatsapp_phone,
+            contact_phone=str(payload.contact_phone) if payload.contact_phone is not None else None,
+            whatsapp_phone=str(payload.whatsapp_phone) if payload.whatsapp_phone is not None else None,
             description=payload.description,
             source=payload.source or "normal",
             full_edit_available=False,
@@ -3412,10 +3412,10 @@ def update_listing(
             listing.city = payload.city
             listing.neighborhood = payload.neighborhood
             listing.address = computed_address
-            listing.street = payload.street
-            listing.building_number = payload.building_number
-            listing.apartment_number = payload.apartment_number
-            listing.floor = payload.floor
+            listing.street = str(payload.street) if payload.street is not None else None
+            listing.building_number = str(payload.building_number) if payload.building_number is not None else None
+            listing.apartment_number = str(payload.apartment_number) if payload.apartment_number is not None else None
+            listing.floor = str(payload.floor) if payload.floor is not None else None
             listing.maps_link = payload.maps_link
             listing.latitude = payload.latitude
             listing.longitude = payload.longitude
@@ -3430,8 +3430,8 @@ def update_listing(
             listing.video_urls = json.dumps(payload.video_urls, ensure_ascii=False)
             listing.description = payload.description
             listing.min_lease_months = payload.min_lease_months
-            listing.contact_phone = payload.contact_phone
-            listing.whatsapp_phone = payload.whatsapp_phone
+            listing.contact_phone = str(payload.contact_phone) if payload.contact_phone is not None else None
+            listing.whatsapp_phone = str(payload.whatsapp_phone) if payload.whatsapp_phone is not None else None
             listing.location_precise = payload.location_precise
             listing.cover_photo_index = payload.cover_photo_index
             listing.near_university = bool(payload.near_university)
