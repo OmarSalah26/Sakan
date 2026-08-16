@@ -43,6 +43,28 @@ function getTimeAgo(dateStr) {
   return `منذ ${diffDays} يوماً`;
 }
 
+function formatFloorDisplay(val) {
+  if (val === null || val === undefined || val === '') return '';
+  const str = String(val).trim();
+  const num = parseInt(str, 10);
+  const ordinals = [
+    'الأرضي', 'الأول', 'الثاني', 'الثالث', 'الرابع', 
+    'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'
+  ];
+  if (!isNaN(num) && num >= 0) {
+    if (num < ordinals.length) return `الدور ${ordinals[num]}`;
+    return `الدور ${num}`;
+  }
+  if (str.startsWith('الدور')) return str;
+  return `الدور ${str}`;
+}
+
+function isFloorOnlyText(text) {
+  if (!text) return false;
+  const s = text.trim();
+  return /^(الدور\s*)?(\d+|الأرضي|الارضي|الأول|الاول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|أرضي|ارضي|أول|اول|ثاني|ثالث|رابع|خامس|سادس|سابع|ثامن|تاسع|عاشر)$/i.test(s);
+}
+
 function extractAmenityName(amenity) {
   if (!amenity) return '';
   if (typeof amenity === 'object' && amenity !== null) {
@@ -126,10 +148,6 @@ export function formatShareText(listing) {
       roomTypesList.push(`${count} غرفة ${label}`);
 
       if (c.services_inclusive) servicesInclusive = true;
-      if (c.insurance_price) {
-        hasInsurance = true;
-        insuranceAmount = c.insurance_price;
-      }
     });
   }
 
@@ -144,10 +162,15 @@ export function formatShareText(listing) {
   const locationStr = locationParts.join('، ');
   const availStr = `${listing.available_beds || 1} سرير متاح من أصل ${totalBeds}`;
 
-  let depositStr = 'بدون تأمين';
-  if (hasInsurance && insuranceAmount) {
-    depositStr = `تأمين: ${insuranceAmount} ج.م`;
-  } else if (hasInsurance) {
+  let depositStr = '';
+  const positiveInsConfig = configs.find(c => c.insurance_price !== null && c.insurance_price !== undefined && Number(c.insurance_price) > 0);
+  const allNoIns = configs.length > 0 && configs.every(c => c.insurance_price === 0 || c.insurance_price === '0');
+
+  if (positiveInsConfig) {
+    depositStr = `تأمين: ${Number(positiveInsConfig.insurance_price).toLocaleString()} ج.م`;
+  } else if (allNoIns) {
+    depositStr = 'لا يوجد تأمين';
+  } else {
     depositStr = 'يتطلب دفع تأمين';
   }
 
@@ -541,10 +564,10 @@ export default function ListingDetailPage() {
             </div>
           )}
 
-          {listing.floor && (
+          {(listing.floor !== null && listing.floor !== undefined && listing.floor !== '') && (
             <div style={{ background: '#f1f5f9', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Home style={{ width: 16, height: 16, color: 'var(--primary)' }} />
-              الدور: {String(listing.floor).replace(/^الدور\s*/, '')}
+              {formatFloorDisplay(listing.floor)}
             </div>
           )}
 
@@ -603,15 +626,17 @@ export default function ListingDetailPage() {
                           </span>
                         )}
 
-                        {c.insurance_price ? (
-                          <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                            <Shield style={{ width: 13, height: 13 }} /> تأمين: {c.insurance_price} ج.م
-                          </span>
-                        ) : (
-                          <span style={{ background: '#f1f5f9', color: '#475569', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
-                            بدون تأمين
-                          </span>
-                        )}
+                        {c.insurance_price !== null && c.insurance_price !== undefined && c.insurance_price !== '' ? (
+                          Number(c.insurance_price) > 0 ? (
+                            <span style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                              <Shield style={{ width: 13, height: 13 }} /> تأمين: {Number(c.insurance_price).toLocaleString()} ج.م
+                            </span>
+                          ) : Number(c.insurance_price) === 0 ? (
+                            <span style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
+                              لا يوجد تأمين
+                            </span>
+                          ) : null
+                        ) : null}
                         {c.services_inclusive ? (
                           <span style={{ background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                             <Zap style={{ width: 13, height: 13 }} /> شامل الخدمات (مياه/كهرباء/إنترنت)
@@ -642,9 +667,7 @@ export default function ListingDetailPage() {
           {/* Full Address */}
           {(() => {
             const rawAddr = (listing.address || '').trim();
-            const rawFloor = (listing.floor || '').toString().trim();
-            const floorPattern = rawFloor ? new RegExp(`^(الدور\\s*)?${rawFloor}$`, 'i') : null;
-            const isFloorOnly = floorPattern ? floorPattern.test(rawAddr) : false;
+            const isFloorOnly = isFloorOnlyText(rawAddr);
             const displayAddress = (!rawAddr || isFloorOnly) ? '' : rawAddr;
 
             return (

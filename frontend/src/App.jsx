@@ -236,6 +236,40 @@ function formatImageUrl(url) {
   return url;
 }
 
+function formatFloorDisplay(val) {
+  const num = parseInt(val, 10);
+  if (isNaN(num) || num <= 0) return 'الدور الأرضي';
+  const ordinals = [
+    'الأرضي', 'الأول', 'الثاني', 'الثالث', 'الرابع', 
+    'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'
+  ];
+  if (num < ordinals.length) {
+    return `الدور ${ordinals[num]}`;
+  }
+  return `الدور ${num}`;
+}
+
+function parseFloorValue(rawFloor) {
+  if (rawFloor === null || rawFloor === undefined || rawFloor === '') return 0;
+  if (typeof rawFloor === 'number') return Math.max(0, Math.floor(rawFloor));
+  const str = String(rawFloor).trim();
+  const num = parseInt(str, 10);
+  if (!isNaN(num)) return Math.max(0, num);
+  
+  if (str.includes('أرض') || str.includes('ارض')) return 0;
+  if (str.includes('أول') || str.includes('اول')) return 1;
+  if (str.includes('ثان')) return 2;
+  if (str.includes('ثالث')) return 3;
+  if (str.includes('رابع')) return 4;
+  if (str.includes('خامس')) return 5;
+  if (str.includes('سادس')) return 6;
+  if (str.includes('سابع')) return 7;
+  if (str.includes('ثامن')) return 8;
+  if (str.includes('تاسع')) return 9;
+  if (str.includes('عاشر')) return 10;
+  return 0;
+}
+
 const GOVERNORATES = [
   "القاهرة", "الجيزة", "الإسكندرية", "الدقهلية", "البحر الأحمر", "المنوفية", 
   "الفيوم", "قنا", "الأقصر", "أسوان", "أسيوط", "المنيا", "بني سويف", 
@@ -657,13 +691,13 @@ export default function App() {
     neighborhood: '',
     full_address: '',
     address: '',
-    floor: '',
+    floor: 0,
     maps_link: '',
     latitude: null,
     longitude: null,
     gender: 'female',
     available_beds: 0,
-    room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
+    room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: null, services_inclusive: false }],
     amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name),
     near_university: false,
     near_transit: false,
@@ -974,13 +1008,13 @@ export default function App() {
       neighborhood: item.neighborhood || '',
       full_address: item.address || '',
       address: item.address || '',
-      floor: item.floor || '',
+      floor: parseFloorValue(item.floor),
       maps_link: item.maps_link || '',
       latitude: item.latitude || null,
       longitude: item.longitude || null,
       gender: item.gender || 'female',
       available_beds: item.available_beds || 1,
-      room_configurations: roomConfigs.length > 0 ? roomConfigs : [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: '', services_inclusive: false }],
+      room_configurations: roomConfigs.length > 0 ? roomConfigs : [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: null, services_inclusive: false }],
       amenities: normalizedAmenities,
       near_university: nearUniv,
       near_transit: nearTrans,
@@ -1058,7 +1092,7 @@ export default function App() {
       if (filters.advertiser_type) q.append('advertiser_type', filters.advertiser_type);
       if (filters.max_commission) q.append('max_commission', filters.max_commission);
       if (filters.services_inclusive) q.append('services_inclusive', 'true');
-      if (filters.has_insurance) q.append('has_insurance', 'true');
+      if (filters.no_insurance) q.append('no_insurance', 'true');
       if (filters.min_total_beds) q.append('min_total_beds', filters.min_total_beds);
       if (filters.max_total_beds) q.append('max_total_beds', filters.max_total_beds);
 
@@ -1622,6 +1656,22 @@ export default function App() {
     handleStepChange(3);
   };
 
+  const handleStep3Next = () => {
+    for (let i = 0; i < (createForm.room_configurations || []).length; i++) {
+      const conf = createForm.room_configurations[i];
+      if (!conf.price_per_person || Number(conf.price_per_person) <= 0) {
+        showToast(`يرجى إدخال سعر الإيجار لفئة الغرفة #${i + 1}`);
+        return;
+      }
+      const isExists = conf._insurance_type === 'exists' || (conf.insurance_price !== null && conf.insurance_price !== undefined && conf.insurance_price !== '' && Number(conf.insurance_price) > 0);
+      if (isExists && (!conf.insurance_price || Number(conf.insurance_price) <= 0)) {
+        showToast(`يرجى إدخال مبلغ التأمين المالي لفئة الغرفة #${i + 1}`);
+        return;
+      }
+    }
+    handleStepChange(4);
+  };
+
   const handleCreateSubmit = async () => {
     let activeUser = user;
     if (!activeUser) {
@@ -1688,7 +1738,7 @@ export default function App() {
         commission: c.commission !== '' && c.commission !== null ? Number(c.commission) : (c.commission_pct ?? 50),
         commission_min: c.commission_min !== '' && c.commission_min !== null ? Number(c.commission_min) : (c.commission_min_pct ?? 30),
         commission_max: c.commission_max !== '' && c.commission_max !== null ? Number(c.commission_max) : (c.commission_max_pct ?? 100),
-        insurance_price: c.insurance_price !== '' && c.insurance_price !== null ? Number(c.insurance_price) : 0,
+        insurance_price: (c.insurance_price === 0 || c.insurance_price === '0' || c._insurance_type === 'none') ? 0 : (c.insurance_price !== null && c.insurance_price !== undefined && c.insurance_price !== '' && Number(c.insurance_price) > 0 ? Number(c.insurance_price) : null),
         count: Number(c.count) || 1
       }));
 
@@ -1760,7 +1810,7 @@ export default function App() {
           commission_min: 30,
           commission_max: 100,
           count: 1,
-          insurance_price: '',
+          insurance_price: null,
           services_inclusive: false,
           has_ac: false
         }
@@ -2520,7 +2570,7 @@ export default function App() {
                 <h3 style={{ margin: 0, paddingBottom: '0.25rem' }}>
                   <span>تصفية النتائج</span>
                   <button className="btn-secondary" style={{ padding: '0.15rem 0.45rem', fontSize: '0.72rem' }} onClick={() => setFilters({
-                    governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', max_commission: '', services_inclusive: false, has_insurance: false, fully_vacant: false, min_total_beds: '', max_total_beds: ''
+                    governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', max_commission: '', services_inclusive: false, no_insurance: false, fully_vacant: false, min_total_beds: '', max_total_beds: ''
                   })}>مسح الكل</button>
                 </h3>
                 
@@ -2768,16 +2818,16 @@ export default function App() {
 
                     <button
                       type="button"
-                      onClick={() => setFilters({ ...filters, has_insurance: !filters.has_insurance })}
+                      onClick={() => setFilters({ ...filters, no_insurance: !filters.no_insurance })}
                       style={{
                         flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
-                        border: filters.has_insurance ? '2px solid #d97706' : '1px solid #cbd5e1',
-                        background: filters.has_insurance ? '#fef3c7' : '#ffffff',
-                        color: filters.has_insurance ? '#b45309' : '#475569',
+                        border: filters.no_insurance ? '2px solid #059669' : '1px solid #cbd5e1',
+                        background: filters.no_insurance ? '#ecfdf5' : '#ffffff',
+                        color: filters.no_insurance ? '#047857' : '#475569',
                         cursor: 'pointer', transition: 'all 0.15s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
                       }}
                     >
-                      <Shield style={{ width: 13, height: 13 }} /> يتطلب تأمين
+                      <Shield style={{ width: 13, height: 13 }} /> لا يوجد تأمين
                     </button>
                   </div>
                 </div>
@@ -2876,7 +2926,9 @@ export default function App() {
 
                       const servicesInclusive = configs.some(c => c.services_inclusive);
                       const hasAc = configs.some(c => c.has_ac);
-                      const hasInsurance = configs.some(c => c.insurance_price && c.insurance_price > 0);
+                      const hasPositiveIns = configs.some(c => c.insurance_price !== null && c.insurance_price !== undefined && Number(c.insurance_price) > 0);
+                      const allExplicitNoIns = configs.length > 0 && configs.every(c => c.insurance_price === 0 || c.insurance_price === '0');
+                      const sampleInsAmt = configs.find(c => c.insurance_price && Number(c.insurance_price) > 0)?.insurance_price;
 
                       // Calculate total monthly rent price of the entire unit using source-of-truth priority rules
                       const totalUnitRent = calculateListingTotalPrice(item);
@@ -3041,11 +3093,15 @@ export default function App() {
                               )}
 
                               {/* Insurance Chip */}
-                              {hasInsurance && (
+                              {hasPositiveIns ? (
                                 <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                                  <Shield style={{ width: 12, height: 12 }} /> يوجد تأمين
+                                  <Shield style={{ width: 12, height: 12 }} /> تأمين: {Number(sampleInsAmt).toLocaleString()} ج.م
                                 </span>
-                              )}
+                              ) : allExplicitNoIns ? (
+                                <span style={{ fontSize: '0.72rem', background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                  لا يوجد تأمين
+                                </span>
+                              ) : null}
                             </div>
                           </div>
                         </article>
@@ -4553,30 +4609,34 @@ export default function App() {
               {/* STEP 2: BASIC INFO */}
               {createStep === 2 && (
                 <div>
-                  <div className="form-group">
-                    <label>عنوان الإعلان</label>
+                  {/* Title Field */}
+                  <div className="form-group" style={{ marginBottom: '0.85rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>عنوان الإعلان</label>
                     <input 
                       type="text" 
                       placeholder="عنوان مميز (مثال: سكن شباب فاخر أمام جامعة المنيا)" 
                       value={createForm.title} 
-                      onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })} 
+                      onChange={(e) => setCreateForm(prev => ({ ...prev, title: e.target.value }))} 
+                      style={{ width: '100%', height: '42px', padding: '0 0.75rem', fontSize: '0.88rem', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#ffffff', outline: 'none' }}
                       required 
                     />
                   </div>
 
-                  <div className="grid-cols-2">
-                    <div className="form-group">
-                      <label>المحافظة</label>
+                  {/* Row 1: Governorate + City */}
+                  <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.85rem' }}>
+                    <div style={{ flex: '1 1 50%', minWidth: 0 }}>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>المحافظة</label>
                       <select 
                         value={createForm.governorate} 
-                        onChange={(e) => setCreateForm({ ...createForm, governorate: e.target.value })}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, governorate: e.target.value }))}
+                        style={{ width: '100%', height: '42px', padding: '0 0.75rem', fontSize: '0.88rem', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#ffffff', outline: 'none' }}
                       >
                         <option value="">اختر المحافظة...</option>
                         {GOVERNORATES.map(gov => {
                           const isLive = dbGovernorates.some(g => g.name === gov && g.status === 'live');
                           return (
                             <option key={gov} value={gov}>
-                              {gov} {isLive ? '✓' : '(قائمة الانتظار)'}
+                              {gov} {isLive ? '(مفعل)' : '(قائمة الانتظار)'}
                             </option>
                           );
                         })}
@@ -4585,12 +4645,12 @@ export default function App() {
                         const selectedGov = dbGovernorates.find(g => g.name === createForm.governorate);
                         if (selectedGov && selectedGov.status === 'waitlist_open') {
                           return (
-                            <div style={{ background: '#fff7ed', border: '1px solid #ffedd5', padding: '0.75rem', borderRadius: 'var(--radius-sm)', color: '#c2410c', fontSize: '0.85rem', fontWeight: 600, marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <div style={{ background: '#fff7ed', border: '1px solid #ffedd5', padding: '0.65rem 0.75rem', borderRadius: 'var(--r-sm)', color: '#c2410c', fontSize: '0.82rem', fontWeight: 600, marginTop: '0.4rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                               <div>تنبيه: خدمة "سكن" غير مفعلة للجمهور حالياً في محافظة <strong>{createForm.governorate}</strong>.</div>
                               <button 
                                 type="button"
                                 className="btn-outline" 
-                                style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', borderColor: '#c2410c', color: '#c2410c', width: 'fit-content' }}
+                                style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', borderColor: '#c2410c', color: '#c2410c', width: 'fit-content' }}
                                 onClick={() => {
                                   setIsCreateOpen(false);
                                   setIsAreaGateOpen(true);
@@ -4606,170 +4666,145 @@ export default function App() {
                       })()}
                     </div>
 
-                    <div className="form-group">
-                      <label>المدينة / المركز</label>
+                    <div style={{ flex: '1 1 50%', minWidth: 0 }}>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>المدينة / المركز</label>
                       <input 
                         type="text" 
                         placeholder="مثال: القاهرة الجديدة..." 
                         value={createForm.city} 
-                        onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })} 
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, city: e.target.value }))} 
+                        style={{ width: '100%', height: '42px', padding: '0 0.75rem', fontSize: '0.88rem', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#ffffff', outline: 'none' }}
                         required 
                       />
                     </div>
                   </div>
 
-                  <div className="form-group">
-                    <label>العنوان بالتفصيل <span style={{ color: 'var(--danger)' }}>*</span></label>
-                    <textarea 
-                      placeholder="ادخل العنوان بالتفاصيل (الحي والشارع ورقم المبنى)" 
-                      value={createForm.full_address} 
-                      onChange={(e) => setCreateForm({ ...createForm, full_address: e.target.value })} 
-                      rows={2}
-                      required 
-                    />
-                  </div>
+                  {/* Row 2: Full Address (70%) + Floor (30%) */}
+                  <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.85rem' }}>
+                    <div style={{ flex: '7 1 0%', minWidth: 0 }}>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                        العنوان بالتفصيل <span style={{ color: 'var(--danger)' }}>*</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="الحي والشارع ورقم المبنى" 
+                        value={createForm.full_address} 
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, full_address: e.target.value, address: e.target.value }))} 
+                        style={{ width: '100%', height: '42px', padding: '0 0.75rem', fontSize: '0.88rem', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#ffffff', outline: 'none' }}
+                        required 
+                      />
+                    </div>
 
-                  <div className="form-group">
-                    <label>الدور <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(اختياري)</span></label>
-                    <input
-                      type="text"
-                      placeholder="مثال: الثاني"
-                      value={createForm.floor}
-                      onChange={(e) => setCreateForm({ ...createForm, floor: e.target.value })}
-                    />
-                  </div>
-
-                  {/* Map picker trigger */}
-                  <div className="form-group">
-                    <label>موقع العقار على الخريطة <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>(اختياري)</span></label>
-                    {createForm.latitude && createForm.longitude ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)' }}>
-                        <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.9rem' }}><CheckCircle style={{ width: 16, height: 16, display: 'inline', color: '#16a34a' }} /> تم تحديد الموقع بنجاح</span>
+                    <div style={{ flex: '3 1 0%', minWidth: '105px' }}>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                        الدور
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', height: '42px', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#fff', padding: '2px', overflow: 'hidden' }}>
                         <button
                           type="button"
-                          className="btn-outline"
-                          style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem', marginRight: 'auto' }}
-                          onClick={() => setShowMapPicker(true)}
+                          style={{ width: '28px', height: '100%', border: 'none', background: '#f1f5f9', cursor: (Number(createForm.floor) || 0) <= 0 ? 'not-allowed' : 'pointer', opacity: (Number(createForm.floor) || 0) <= 0 ? 0.4 : 1, fontWeight: 700, fontSize: '1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          onClick={() => setCreateForm(prev => ({ ...prev, floor: Math.max(0, (Number(prev.floor) || 0) - 1) }))}
+                          disabled={(Number(createForm.floor) || 0) <= 0}
+                          aria-label="إنقاص الدور"
                         >
-                          تعديل الموقع
+                          -
                         </button>
-                      </div>
-                    ) : (
-                      <div>
+                        <span style={{ flex: 1, textAlign: 'center', fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 2px', color: 'var(--text-primary)' }}>
+                          {formatFloorDisplay(createForm.floor)}
+                        </span>
                         <button
                           type="button"
-                          className="btn-secondary"
-                          style={{ width: '100%', padding: '0.75rem', fontSize: '0.95rem' }}
-                          onClick={() => setShowMapPicker(true)}
+                          style={{ width: '28px', height: '100%', border: 'none', background: '#f1f5f9', cursor: 'pointer', fontWeight: 700, fontSize: '1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          onClick={() => setCreateForm(prev => ({ ...prev, floor: (Number(prev.floor) || 0) + 1 }))}
+                          aria-label="زيادة الدور"
                         >
-                          <MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> تحديد موقع العقار على الخريطة (اختياري)
+                          +
                         </button>
                       </div>
-                    )}
-                  </div>
-
-                  {showMapPicker && (
-                    <MapPickerModal
-                      cityFallback={`${createForm.city} ${createForm.governorate}`}
-                      governorate={createForm.governorate}
-                      initialLat={createForm.latitude}
-                      initialLng={createForm.longitude}
-                      onConfirm={(lat, lng) => {
-                        setCreateForm(prev => ({ ...prev, latitude: lat, longitude: lng, has_precise_location: true, location_precise: true }));
-                        setShowMapPicker(false);
-                      }}
-                      onClose={() => setShowMapPicker(false)}
-                    />
-                  )}
-
-                  {/* Location Features */}
-                  <div className="form-group" style={{ background: '#f8fafc', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', marginBottom: '1rem' }}>
-                    <label style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem', display: 'block' }}>مميزات موقع العقار</label>
-                    <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                      <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.88rem', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={createForm.near_university || false}
-                          onChange={(e) => setCreateForm(prev => ({ ...prev, near_university: e.target.checked }))}
-                        />
-                        قريب من الجامعة
-                      </label>
-                      <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.88rem', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={createForm.near_transit || false}
-                          onChange={(e) => setCreateForm(prev => ({ ...prev, near_transit: e.target.checked }))}
-                        />
-                        قريب من المواصلات العامة
-                      </label>
                     </div>
                   </div>
 
-                  <div className="form-group" style={{ background: '#f8fafc', padding: '1rem', borderRadius: 'var(--r-md)', border: '1px solid var(--border)', marginBottom: '1rem' }}>
-                    <label style={{ fontWeight: 700 }}>رقم الهاتف للتواصل <span style={{ color: 'var(--danger)' }}>*</span></label>
-                    <input 
-                      type="tel" 
-                      value={createForm.contact_phone || user?.phone || ''} 
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setCreateForm(prev => ({
-                          ...prev,
-                          contact_phone: val,
-                          contact_verified: val === (user?.phone || '')
-                        }));
-                      }}
-                      placeholder="01xxxxxxxxx" 
-                      required 
-                    />
-                    <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>
-                      افتراضياً تم إدراج رقم هاتفك الموثق ({user?.phone || 'غير مسجل'}).
-                    </small>
-
-                    <div style={{ marginTop: '0.75rem' }}>
-                      <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={createForm.no_whatsapp || false}
-                          onChange={(e) => setCreateForm(prev => ({
-                            ...prev,
-                            no_whatsapp: e.target.checked,
-                            whatsapp_phone: e.target.checked ? prev.whatsapp_phone : ''
-                          }))}
-                        />
-                        لا يوجد واتساب على هذا الرقم؟
+                  {/* Row 3: Gender Toggle (50%) + Available Beds (50%) */}
+                  <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.85rem' }}>
+                    <div style={{ flex: '1 1 50%', minWidth: 0 }}>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                        الجنس المقبول للسكن
                       </label>
-                    </div>
+                      <div 
+                        style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: '1fr 1fr', 
+                          gap: '4px', 
+                          alignItems: 'center', 
+                          height: '42px', 
+                          background: '#f1f5f9', 
+                          borderRadius: 'var(--r-md)', 
+                          padding: '3px', 
+                          border: '1px solid var(--border)' 
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setCreateForm(prev => ({ ...prev, gender: 'female' }))}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: 'calc(var(--r-md) - 3px)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justify: 'center',
+                            gap: '0.3rem',
+                            fontWeight: 700,
+                            fontSize: '0.82rem',
+                            cursor: 'pointer',
+                            border: 'none',
+                            padding: '0 0.4rem',
+                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                            background: createForm.gender === 'female' ? '#ffffff' : 'transparent',
+                            color: createForm.gender === 'female' ? '#be185d' : '#64748b',
+                            boxShadow: createForm.gender === 'female' ? '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                          }}
+                        >
+                          <User style={{ width: 14, height: 14, color: createForm.gender === 'female' ? '#be185d' : '#64748b', flexShrink: 0 }} />
+                          <span>طالبات</span>
+                        </button>
 
-                    {createForm.no_whatsapp && (
-                      <div style={{ marginTop: '0.75rem' }}>
-                        <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>رقم الواتساب للتواصل المباشر <span style={{ color: 'var(--danger)' }}>*</span></label>
-                        <input 
-                          type="tel" 
-                          value={createForm.whatsapp_phone || ''} 
-                          onChange={(e) => setCreateForm(prev => ({ ...prev, whatsapp_phone: e.target.value }))}
-                          placeholder="01xxxxxxxxx" 
-                          required={createForm.no_whatsapp}
-                        />
+                        <button
+                          type="button"
+                          onClick={() => setCreateForm(prev => ({ ...prev, gender: 'male' }))}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: 'calc(var(--r-md) - 3px)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justify: 'center',
+                            gap: '0.3rem',
+                            fontWeight: 700,
+                            fontSize: '0.82rem',
+                            cursor: 'pointer',
+                            border: 'none',
+                            padding: '0 0.4rem',
+                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                            background: createForm.gender === 'male' ? '#ffffff' : 'transparent',
+                            color: createForm.gender === 'male' ? '#1d4ed8' : '#64748b',
+                            boxShadow: createForm.gender === 'male' ? '0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)' : 'none'
+                          }}
+                        >
+                          <User style={{ width: 14, height: 14, color: createForm.gender === 'male' ? '#1d4ed8' : '#64748b', flexShrink: 0 }} />
+                          <span>طلاب</span>
+                        </button>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="grid-cols-2">
-                    <div className="form-group">
-                      <label>الجنس المقبول للسكن</label>
-                      <select value={createForm.gender} onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}>
-                        <option value="female">طالبات (بنات)</option>
-                        <option value="male">طلاب (شباب)</option>
-                      </select>
                     </div>
 
-                    <div className="form-group">
-                      <label>عدد الأسرّة الكلي المتاح حالياً</label>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%' }}>
+                    <div style={{ flex: '1 1 50%', minWidth: 0 }}>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                        الأسرّة المتاحة حالياً
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', height: '42px', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#fff', padding: '2px', overflow: 'hidden' }}>
                         <button 
                           type="button" 
-                          className="btn-secondary" 
-                          style={{ minWidth: '40px', height: '42px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.2rem', borderRadius: 'var(--radius-md)', flexShrink: 0, cursor: (Number(createForm.available_beds) || 0) <= 0 ? 'not-allowed' : 'pointer' }}
+                          style={{ width: '32px', height: '100%', border: 'none', background: '#f1f5f9', cursor: (Number(createForm.available_beds) || 0) <= 0 ? 'not-allowed' : 'pointer', opacity: (Number(createForm.available_beds) || 0) <= 0 ? 0.4 : 1, fontWeight: 700, fontSize: '1.1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                           onClick={() => setCreateForm(prev => ({ ...prev, available_beds: Math.max(0, (Number(prev.available_beds) || 0) - 1) }))}
                           disabled={(Number(createForm.available_beds) || 0) <= 0}
                           aria-label="إنقاص عدد الأسرة"
@@ -4799,12 +4834,11 @@ export default function App() {
                               setCreateForm(prev => ({ ...prev, available_beds: 0 }));
                             }
                           }}
-                          style={{ textAlign: 'center', fontWeight: 700, fontSize: '1rem', height: '42px', flex: 1, minWidth: '60px' }}
+                          style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: '0.95rem', height: '100%', border: 'none', background: 'transparent', outline: 'none', width: '100%' }}
                         />
                         <button 
                           type="button" 
-                          className="btn-secondary" 
-                          style={{ minWidth: '40px', height: '42px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.2rem', borderRadius: 'var(--radius-md)', flexShrink: 0, cursor: 'pointer' }}
+                          style={{ width: '32px', height: '100%', border: 'none', background: '#f1f5f9', cursor: 'pointer', fontWeight: 700, fontSize: '1.1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                           onClick={() => setCreateForm(prev => ({ ...prev, available_beds: (Number(prev.available_beds) || 0) + 1 }))}
                           aria-label="زيادة عدد الأسرة"
                         >
@@ -4813,6 +4847,142 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Row 4: Near University + Near Public Transport */}
+                  <div style={{ background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: 'var(--r-md)', border: '1px solid var(--border)', marginBottom: '0.85rem' }}>
+                    <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={createForm.near_university || false}
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, near_university: e.target.checked }))}
+                        />
+                        <span>قريب من الجامعة</span>
+                      </label>
+                      <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={createForm.near_transit || false}
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, near_transit: e.target.checked }))}
+                        />
+                        <span>قريب من المواصلات العامة</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Row 5: Contact Details */}
+                  <div style={{ background: '#f8fafc', padding: '0.75rem 0.85rem', borderRadius: 'var(--r-md)', border: '1px solid var(--border)', marginBottom: '0.85rem' }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.84rem', display: 'block', marginBottom: '0.35rem' }}>
+                      رقم الهاتف للتواصل <span style={{ color: 'var(--danger)' }}>*</span>
+                    </label>
+                    <input 
+                      type="tel" 
+                      value={createForm.contact_phone || user?.phone || ''} 
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCreateForm(prev => ({
+                          ...prev,
+                          contact_phone: val,
+                          contact_verified: val === (user?.phone || '')
+                        }));
+                      }}
+                      placeholder="01xxxxxxxxx" 
+                      style={{ width: '100%', height: '40px', padding: '0 0.75rem', fontSize: '0.88rem', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#ffffff', outline: 'none' }}
+                      required 
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.73rem', marginTop: '0.2rem', display: 'block' }}>
+                      افتراضياً تم إدراج رقم هاتفك الموثق ({user?.phone || 'غير مسجل'}).
+                    </small>
+
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <label className="checkbox-label" style={{ fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', margin: 0 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={createForm.no_whatsapp || false}
+                          onChange={(e) => setCreateForm(prev => ({
+                            ...prev,
+                            no_whatsapp: e.target.checked,
+                            whatsapp_phone: e.target.checked ? prev.whatsapp_phone : ''
+                          }))}
+                        />
+                        لا يوجد واتساب على هذا الرقم؟
+                      </label>
+                    </div>
+
+                    {createForm.no_whatsapp && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>
+                          رقم الواتساب للتواصل المباشر <span style={{ color: 'var(--danger)' }}>*</span>
+                        </label>
+                        <input 
+                          type="tel" 
+                          value={createForm.whatsapp_phone || ''} 
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, whatsapp_phone: e.target.value }))}
+                          placeholder="01xxxxxxxxx" 
+                          style={{ width: '100%', height: '40px', padding: '0 0.75rem', fontSize: '0.88rem', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#ffffff', outline: 'none' }}
+                          required={createForm.no_whatsapp}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bottom: Map Picker Trigger */}
+                  <div style={{ marginTop: '0.85rem' }}>
+                    {createForm.latitude && createForm.longitude ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.65rem 0.85rem', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--r-md)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#16a34a', fontWeight: 700, fontSize: '0.88rem' }}>
+                          <CheckCircle style={{ width: 18, height: 18, color: '#16a34a', flexShrink: 0 }} />
+                          <span>تم تحديد موقع العقار على الخريطة بنجاح</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-outline"
+                          style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem', marginRight: 'auto', borderRadius: 'var(--r-md)', borderColor: '#86efac', color: '#15803d', fontWeight: 600 }}
+                          onClick={() => setShowMapPicker(true)}
+                        >
+                          تعديل الموقع
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        style={{
+                          width: '100%',
+                          padding: '0.7rem 1rem',
+                          fontSize: '0.9rem',
+                          fontWeight: 700,
+                          borderRadius: 'var(--r-md)',
+                          background: '#f0fdf4',
+                          border: '1.5px dashed #86efac',
+                          color: '#15803d',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justify: 'center',
+                          gap: '0.5rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onClick={() => setShowMapPicker(true)}
+                      >
+                        <MapPin style={{ width: 18, height: 18, color: '#16a34a' }} />
+                        <span>تحديد موقع العقار على الخريطة (اختياري)</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {showMapPicker && (
+                    <MapPickerModal
+                      cityFallback={`${createForm.city} ${createForm.governorate}`}
+                      governorate={createForm.governorate}
+                      initialLat={createForm.latitude}
+                      initialLng={createForm.longitude}
+                      onConfirm={(lat, lng) => {
+                        setCreateForm(prev => ({ ...prev, latitude: lat, longitude: lng, has_precise_location: true, location_precise: true }));
+                        setShowMapPicker(false);
+                      }}
+                      onClose={() => setShowMapPicker(false)}
+                    />
+                  )}
                 </div>
               )}
 
@@ -4942,16 +5112,67 @@ export default function App() {
                           </div>
 
                           <div>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>مبلغ التأمين (اختياري)</label>
-                            <input 
-                              type="number" 
-                              inputMode="numeric"
-                              value={config.insurance_price || ''} 
-                              onFocus={(e) => e.target.select()}
-                              placeholder="مثال: 500"
-                              style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem 0.65rem', fontWeight: 600, width: '100%' }}
-                              onChange={(e) => updateRoomConfig(index, 'insurance_price', e.target.value ? Number(e.target.value) : '')} 
-                            />
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>التأمين المالي للفئة</label>
+                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: (config._insurance_type === 'exists' || (config.insurance_price !== null && config.insurance_price !== undefined && config.insurance_price !== '' && Number(config.insurance_price) > 0)) ? '0.4rem' : 0 }}>
+                              <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', margin: 0 }}>
+                                <input 
+                                  type="checkbox"
+                                  checked={config._insurance_type === 'exists' || (config.insurance_price !== null && config.insurance_price !== undefined && config.insurance_price !== '' && Number(config.insurance_price) > 0)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      updateRoomConfig(index, '_insurance_type', 'exists');
+                                      if (!config.insurance_price || Number(config.insurance_price) <= 0) {
+                                        updateRoomConfig(index, 'insurance_price', '');
+                                      }
+                                    } else {
+                                      updateRoomConfig(index, '_insurance_type', 'unspecified');
+                                      updateRoomConfig(index, 'insurance_price', null);
+                                    }
+                                  }}
+                                />
+                                <span>يوجد تأمين</span>
+                              </label>
+
+                              <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', margin: 0 }}>
+                                <input 
+                                  type="checkbox"
+                                  checked={config._insurance_type === 'none' || config.insurance_price === 0 || config.insurance_price === '0'}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      updateRoomConfig(index, '_insurance_type', 'none');
+                                      updateRoomConfig(index, 'insurance_price', 0);
+                                    } else {
+                                      updateRoomConfig(index, '_insurance_type', 'unspecified');
+                                      updateRoomConfig(index, 'insurance_price', null);
+                                    }
+                                  }}
+                                />
+                                <span>لا يوجد تأمين</span>
+                              </label>
+                            </div>
+
+                            {(config._insurance_type === 'exists' || (config.insurance_price !== null && config.insurance_price !== undefined && config.insurance_price !== '' && Number(config.insurance_price) > 0)) && (
+                              <div style={{ marginTop: '0.35rem' }}>
+                                <input 
+                                  type="number" 
+                                  inputMode="numeric"
+                                  value={config.insurance_price === null || config.insurance_price === undefined ? '' : config.insurance_price} 
+                                  onFocus={(e) => e.target.select()}
+                                  placeholder="مبلغ التأمين (مثال: 5000)"
+                                  style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem 0.65rem', fontWeight: 700, width: '100%' }}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateRoomConfig(index, 'insurance_price', val === '' ? '' : Math.max(0, Number(val)));
+                                  }} 
+                                  required
+                                />
+                                {(!config.insurance_price || Number(config.insurance_price) <= 0) && (
+                                  <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 600, display: 'block', marginTop: '0.2rem' }}>
+                                    يرجى إدخال قيمة مبلغ التأمين المالي
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -5459,7 +5680,7 @@ export default function App() {
                 <button className="btn-primary" disabled={!createForm.title || !createForm.city || !createForm.full_address} onClick={handleStep2Next}>التالي</button>
               )}
               {createStep === 3 && (
-                <button className="btn-primary" onClick={() => handleStepChange(4)}>التالي</button>
+                <button className="btn-primary" onClick={handleStep3Next}>التالي</button>
               )}
               {createStep === 4 && (
                 <button className="btn-primary" onClick={() => handleStepChange(5)}>التالي</button>
@@ -6447,16 +6668,16 @@ export default function App() {
 
                   <button
                     type="button"
-                    onClick={() => setFilters({ ...filters, has_insurance: !filters.has_insurance })}
+                    onClick={() => setFilters({ ...filters, no_insurance: !filters.no_insurance })}
                     style={{
                       flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
-                      border: filters.has_insurance ? '2px solid #d97706' : '1px solid #cbd5e1',
-                      background: filters.has_insurance ? '#fef3c7' : '#ffffff',
-                      color: filters.has_insurance ? '#b45309' : '#475569',
+                      border: filters.no_insurance ? '2px solid #059669' : '1px solid #cbd5e1',
+                      background: filters.no_insurance ? '#ecfdf5' : '#ffffff',
+                      color: filters.no_insurance ? '#047857' : '#475569',
                       cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem'
                     }}
                   >
-                    <Shield style={{ width: 13, height: 13 }} /> يتطلب تأمين
+                    <Shield style={{ width: 13, height: 13 }} /> لا يوجد تأمين
                   </button>
                 </div>
               </div>
@@ -6508,7 +6729,7 @@ export default function App() {
                 className="btn-outline" 
                 style={{ flex: 1, padding: '0.65rem' }}
                 onClick={() => {
-                  setFilters({ governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], near_university: false, near_transit: false, advertiser_type: '', max_commission: '', services_inclusive: false, has_insurance: false, min_total_beds: '', max_total_beds: '' });
+                  setFilters({ governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], near_university: false, near_transit: false, advertiser_type: '', max_commission: '', services_inclusive: false, no_insurance: false, min_total_beds: '', max_total_beds: '' });
                 }}
               >
                 مسح الكل

@@ -458,6 +458,31 @@ def ensure_schema():
             if "near_transit" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN near_transit BOOLEAN DEFAULT 0"))
 
+        # Startup migration for 3-state insurance: convert legacy empty/unspecified/0 insurance_price in existing room_configurations to None (null)
+        try:
+            listings_rows = connection.execute(text("SELECT id, room_configurations FROM listings WHERE room_configurations IS NOT NULL AND room_configurations != ''")).fetchall()
+            for r_id, r_configs_str in listings_rows:
+                try:
+                    configs = json.loads(r_configs_str)
+                    if isinstance(configs, list) and len(configs) > 0:
+                        modified = False
+                        for c in configs:
+                            if isinstance(c, dict):
+                                ins = c.get("insurance_price")
+                                if ins == 0 or ins == "0" or ins == "" or ins is None:
+                                    if c.get("insurance_price") is not None or "insurance_price" not in c:
+                                        c["insurance_price"] = None
+                                        modified = True
+                        if modified:
+                            connection.execute(
+                                text("UPDATE listings SET room_configurations = :configs WHERE id = :id"),
+                                {"configs": json.dumps(configs, ensure_ascii=False), "id": r_id}
+                            )
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         # Check ratings table
         if "ratings" in inspector.get_table_names():
             rating_cols = {col["name"] for col in inspector.get_columns("ratings")}
@@ -1741,6 +1766,7 @@ def list_listings(
     max_commission: Optional[int] = None,
     services_inclusive: Optional[bool] = None,
     has_insurance: Optional[bool] = None,
+    no_insurance: Optional[bool] = None,
     min_lease_months: Optional[int] = None,
     min_total_beds: Optional[int] = None,
     max_total_beds: Optional[int] = None,
@@ -1868,8 +1894,17 @@ def list_listings(
                 if not match_services:
                     continue
 
-            # 6. Insurance filter
-            if has_insurance is not None:
+            # 6. No Insurance filter (must explicitly be insurance_price == 0)
+            if no_insurance is True:
+                match_no_ins = False
+                for conf in configs:
+                    ins_price = conf.get("insurance_price")
+                    if ins_price is not None and ins_price == 0:
+                        match_no_ins = True
+                        break
+                if not match_no_ins:
+                    continue
+            elif has_insurance is not None:
                 match_insurance = False
                 for conf in configs:
                     ins_price = conf.get("insurance_price")
@@ -1877,6 +1912,8 @@ def list_listings(
                     if has_ins == has_insurance:
                         match_insurance = True
                         break
+                if not match_insurance:
+                    continue
             # 7. Min lease months filter
             if min_lease_months is not None:
                 if item.min_lease_months is None or item.min_lease_months > min_lease_months:
