@@ -590,6 +590,25 @@ def extract_amenity_name(item) -> str:
     return str(item).strip()
 
 
+AMENITY_ALIASES = {
+    "تكييف": "مكيفة",
+    "مراوح": "مروحة",
+    "مياه ساخنة": "سخان",
+    "سخان مياه": "سخان",
+    "منشر": "منشر ملابس",
+    "أدوات مطبخ": "أجهزة مطبخ",
+    "فلتر مياه": "أجهزة مطبخ",
+    "صالة جلوس مشتركة": "غرفة معيشة مفروشة",
+    "غرفة مذاكرة": "غرفة معيشة مفروشة",
+    "أمن 24 ساعة": "حارس عقار",
+    "عيادة طبية": "مستشفى",
+    "واي فاي مجاني": "واي فاي",
+    "جيم (Gym)": "جيم",
+    "بوتاجاز / ميكروويف": "بوتاجاز",
+    "سرير إضافي": "تجهيزات الشقة"
+}
+
+
 def parse_amenities_list(val) -> List[str]:
     if not val:
         return []
@@ -609,12 +628,16 @@ def parse_amenities_list(val) -> List[str]:
     if isinstance(parsed, list):
         for x in parsed:
             name = extract_amenity_name(x)
-            if name and name not in result:
-                result.append(name)
+            if name:
+                norm = AMENITY_ALIASES.get(name, name)
+                if norm and norm not in result:
+                    result.append(norm)
     elif isinstance(parsed, dict):
         name = extract_amenity_name(parsed)
         if name:
-            result.append(name)
+            norm = AMENITY_ALIASES.get(name, name)
+            if norm and norm not in result:
+                result.append(norm)
 
     return result
 
@@ -1718,7 +1741,9 @@ def list_listings(
     has_insurance: Optional[bool] = None,
     min_lease_months: Optional[int] = None,
     min_total_beds: Optional[int] = None,
-    max_total_beds: Optional[int] = None
+    max_total_beds: Optional[int] = None,
+    near_university: Optional[bool] = None,
+    near_transit: Optional[bool] = None
 ):
     db = SessionLocal()
     try:
@@ -1803,11 +1828,17 @@ def list_listings(
                 if not match_room:
                     continue
 
-            # 3. Amenities filter ("all of" matching)
+            # 3. Amenities filter ("all of" matching with alias support)
             if target_amenities:
-                item_amenities = parse_amenities_list(item.amenities)
-                # Check if all target amenities are in item amenities
-                if not all(t in item_amenities for t in target_amenities):
+                raw_item_amenities = safe_json_loads(item.amenities, [])
+                parsed_item_amenities = parse_amenities_list(item.amenities)
+                match_all_amenities = True
+                for t in target_amenities:
+                    norm_t = AMENITY_ALIASES.get(t, t)
+                    if norm_t not in parsed_item_amenities and t not in raw_item_amenities and norm_t not in raw_item_amenities:
+                        match_all_amenities = False
+                        break
+                if not match_all_amenities:
                     continue
 
             # 4. Commission filter
@@ -1859,6 +1890,16 @@ def list_listings(
                 continue
             if max_total_beds is not None and total_beds > max_total_beds:
                 continue
+
+            # 9. Location features filter
+            if near_university is True:
+                raw_item_amenities = safe_json_loads(item.amenities, [])
+                if not bool(item.near_university) and "قريب من الجامعة" not in raw_item_amenities:
+                    continue
+            if near_transit is True:
+                raw_item_amenities = safe_json_loads(item.amenities, [])
+                if not bool(item.near_transit) and "قريب من المواصلات العامة" not in raw_item_amenities:
+                    continue
 
             adv = advertisers.get(item.advertiser_id)
             filtered.append(build_listing_out(item, adv))

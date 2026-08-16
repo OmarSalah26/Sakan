@@ -620,6 +620,8 @@ export default function App() {
     max_price: '',
     room_types: [],
     amenities: [],
+    near_university: false,
+    near_transit: false,
     advertiser_type: '',
     max_commission: '',
     services_inclusive: false,
@@ -1051,6 +1053,8 @@ export default function App() {
       if (filters.max_price) q.append('max_price', filters.max_price);
       if (filters.room_types.length) q.append('room_types', filters.room_types.join(','));
       if (filters.amenities.length) q.append('amenities', filters.amenities.join(','));
+      if (filters.near_university) q.append('near_university', 'true');
+      if (filters.near_transit) q.append('near_transit', 'true');
       if (filters.advertiser_type) q.append('advertiser_type', filters.advertiser_type);
       if (filters.max_commission) q.append('max_commission', filters.max_commission);
       if (filters.services_inclusive) q.append('services_inclusive', 'true');
@@ -5447,43 +5451,89 @@ export default function App() {
 
       {/* Amenities Filter Modal */}
       {showAmenitiesModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '600px', maxHeight: '80vh', overflow: 'auto', padding: '1.5rem' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100005, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: '640px', maxHeight: '85vh', overflow: 'auto', padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ fontWeight: 700, margin: 0 }}>اختر المرافق المطلوبة</h3>
+              <h3 style={{ fontWeight: 700, margin: 0 }}>تصفية المرافق ومميزات الموقع</h3>
               <button className="modal-close" onClick={() => setShowAmenitiesModal(false)}>×</button>
             </div>
-            <h5 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem' }}>مرافق داخلية</h5>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
-              {INDOOR_AMENITIES.map(amenity => {
-                const isChecked = filters.amenities.includes(amenity.name);
-                return (
-                  <label key={amenity.name} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', padding: '0.4rem', background: isChecked ? 'var(--primary-light)' : '#f8fafc', borderRadius: 'var(--radius-sm)', cursor: 'pointer', border: isChecked ? '1px solid var(--primary)' : '1px solid var(--border-color)' }}>
-                    <input type="checkbox" checked={isChecked} onChange={() => {
-                      const updated = isChecked ? filters.amenities.filter(a => a !== amenity.name) : [...filters.amenities, amenity.name];
-                      setFilters(prev => ({ ...prev, amenities: updated }));
-                    }} />
-                    {amenity.name}
-                  </label>
-                );
-              })}
+
+            {/* Location Features Section */}
+            <div style={{ marginBottom: '1.25rem', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+              <h5 style={{ fontWeight: 700, color: '#15803d', fontSize: '0.9rem', marginBottom: '0.6rem' }}>مميزات موقع العقار</h5>
+              <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={filters.near_university || false} 
+                    onChange={(e) => setFilters(prev => ({ ...prev, near_university: e.target.checked }))} 
+                  />
+                  قريب من الجامعة
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={filters.near_transit || false} 
+                    onChange={(e) => setFilters(prev => ({ ...prev, near_transit: e.target.checked }))} 
+                  />
+                  قريب من المواصلات العامة
+                </label>
+              </div>
             </div>
-            <h5 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.5rem' }}>خدمات خارجية</h5>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
-              {OUTDOOR_AMENITIES.map(amenity => {
-                const isChecked = filters.amenities.includes(amenity.name);
-                return (
-                  <label key={amenity.name} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', padding: '0.4rem', background: isChecked ? 'var(--primary-light)' : '#f8fafc', borderRadius: 'var(--radius-sm)', cursor: 'pointer', border: isChecked ? '1px solid var(--primary)' : '1px solid var(--border-color)' }}>
-                    <input type="checkbox" checked={isChecked} onChange={() => {
-                      const updated = isChecked ? filters.amenities.filter(a => a !== amenity.name) : [...filters.amenities, amenity.name];
-                      setFilters(prev => ({ ...prev, amenities: updated }));
-                    }} />
-                    {amenity.name}
-                  </label>
-                );
-              })}
+
+            {/* خدمات داخلية Section */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <h5 style={{ fontWeight: 800, color: 'var(--primary)', fontSize: '0.95rem', borderBottom: '2px solid #e0f2fe', paddingBottom: '0.3rem', marginBottom: '0.75rem' }}>
+                خدمات داخلية
+              </h5>
+              {INDOOR_AMENITY_GROUPS.map((grp) => (
+                <div key={grp.title} style={{ marginBottom: '0.85rem', background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '8px', padding: '0.75rem' }}>
+                  <h6 style={{ fontWeight: 700, fontSize: '0.82rem', color: '#334155', marginBottom: '0.5rem' }}>{grp.title}</h6>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.4rem' }}>
+                    {grp.items.map(amenity => {
+                      const isChecked = filters.amenities.includes(amenity.name);
+                      return (
+                        <label key={amenity.name} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', padding: '0.35rem', background: isChecked ? '#e0f2fe' : '#ffffff', borderRadius: '4px', cursor: 'pointer', border: isChecked ? '1px solid #0284c7' : '1px solid var(--border)' }}>
+                          <input type="checkbox" checked={isChecked} onChange={() => {
+                            const updated = isChecked ? filters.amenities.filter(a => a !== amenity.name) : [...filters.amenities, amenity.name];
+                            setFilters(prev => ({ ...prev, amenities: updated }));
+                          }} />
+                          {amenity.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
-            <button className="btn-primary" style={{ width: '100%' }} onClick={() => setShowAmenitiesModal(false)}>تطبيق الفلتر</button>
+
+            {/* خدمات مجاورة Section */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <h5 style={{ fontWeight: 800, color: '#0369a1', fontSize: '0.95rem', borderBottom: '2px solid #bae6fd', paddingBottom: '0.3rem', marginBottom: '0.75rem' }}>
+                خدمات مجاورة
+              </h5>
+              {OUTDOOR_AMENITY_GROUPS.map((grp) => (
+                <div key={grp.title} style={{ marginBottom: '0.85rem', background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '8px', padding: '0.75rem' }}>
+                  <h6 style={{ fontWeight: 700, fontSize: '0.82rem', color: '#334155', marginBottom: '0.5rem' }}>{grp.title}</h6>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.4rem' }}>
+                    {grp.items.map(amenity => {
+                      const isChecked = filters.amenities.includes(amenity.name);
+                      return (
+                        <label key={amenity.name} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', padding: '0.35rem', background: isChecked ? '#e0f2fe' : '#ffffff', borderRadius: '4px', cursor: 'pointer', border: isChecked ? '1px solid #0284c7' : '1px solid var(--border)' }}>
+                          <input type="checkbox" checked={isChecked} onChange={() => {
+                            const updated = isChecked ? filters.amenities.filter(a => a !== amenity.name) : [...filters.amenities, amenity.name];
+                            setFilters(prev => ({ ...prev, amenities: updated }));
+                          }} />
+                          {amenity.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button className="btn-primary" style={{ width: '100%', fontWeight: 700 }} onClick={() => setShowAmenitiesModal(false)}>تطبيق الفلتر</button>
           </div>
         </div>
       )}
@@ -6428,7 +6478,7 @@ export default function App() {
                 className="btn-outline" 
                 style={{ flex: 1, padding: '0.65rem' }}
                 onClick={() => {
-                  setFilters({ governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', max_commission: '', services_inclusive: false, has_insurance: false, min_total_beds: '', max_total_beds: '' });
+                  setFilters({ governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], near_university: false, near_transit: false, advertiser_type: '', max_commission: '', services_inclusive: false, has_insurance: false, min_total_beds: '', max_total_beds: '' });
                 }}
               >
                 مسح الكل
