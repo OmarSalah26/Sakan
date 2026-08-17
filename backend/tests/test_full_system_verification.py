@@ -511,4 +511,43 @@ def test_room_config_insurance_three_state_persistence(setup_system_test_data):
     assert cfg_c["insurance_price"] == 0
 
 
+def test_map_picker_location_reset_persistence(setup_system_test_data):
+    data = setup_system_test_data
+    advA = data["advA"]
+    sample_photos = ["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg"]
+
+    # 1. Create a listing with initial location coordinates
+    payload_initial = {
+        "title": "Map Picker Reset Test Listing",
+        "governorate": "القاهرة",
+        "city": "مدينة نصر",
+        "neighborhood": "الحي السابع",
+        "gender": "male",
+        "available_beds": 1,
+        "advertiser_id": advA.id,
+        "photo_urls": sample_photos,
+        "latitude": 30.0444,
+        "longitude": 31.2357,
+        "location_precise": True,
+        "room_configurations": [{"room_type": "single", "count": 1, "price_per_person": 2000}]
+    }
+    res_create = client.post("/listings", json=payload_initial, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res_create.status_code == 200
+    listing_data = res_create.json()
+    listing_id = listing_data["id"]
+    assert listing_data["latitude"] == 30.0444
+    assert listing_data["longitude"] == 31.2357
+    assert listing_data["location_precise"] is True
+
+    # 2. Reset location by updating listing with latitude = None, longitude = None, location_precise = False
+    payload_reset = dict(payload_initial, latitude=None, longitude=None, location_precise=False, maps_link="")
+    res_update = client.put(f"/listings/{listing_id}", json=payload_reset, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res_update.status_code == 200
+    updated_data = res_update.json()
+    assert updated_data["latitude"] is None
+    assert updated_data["longitude"] is None
+    assert updated_data["location_precise"] is False
+
+
+
 

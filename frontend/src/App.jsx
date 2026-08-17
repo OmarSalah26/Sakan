@@ -35,7 +35,7 @@ function formatAddress(listing) {
 // ---------------------------------------------------------------------------
 // MapPickerModal - full-screen modal with Leaflet, draggable marker.
 // ---------------------------------------------------------------------------
-function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLng, onConfirm, onClose }) {
+function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLng, onConfirm, onReset, onClose }) {
   const currentCity = city || cityFallback || governorate || '';
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -176,6 +176,23 @@ function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLn
           >
             <Navigation style={{ width: 15, height: 15 }} /> موقعي الحالي
           </button>
+          {Boolean(pending.lat || initialLat) && (
+            <button
+              type="button"
+              className="map-picker-location-btn"
+              onClick={() => {
+                if (markerRef.current && mapRef.current) {
+                  mapRef.current.removeLayer(markerRef.current);
+                  markerRef.current = null;
+                }
+                setPending({ lat: null, lng: null });
+                if (onReset) onReset();
+              }}
+              style={{ fontSize: '0.82rem', padding: '0.4rem 0.65rem', borderRadius: 'var(--r-md)', border: '1px solid #cbd5e1', background: '#ffffff', fontWeight: 600, color: '#64748b', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+            >
+              <RotateCcw style={{ width: 14, height: 14 }} /> مسح الدبوس
+            </button>
+          )}
           <select 
             value={mapType}
             onChange={(e) => handleMapTypeChange(e.target.value)}
@@ -247,6 +264,19 @@ function formatFloorDisplay(val) {
     return `الدور ${ordinals[num]}`;
   }
   return `الدور ${num}`;
+}
+
+function formatFloorStepperDisplay(val) {
+  const num = parseInt(val, 10);
+  if (isNaN(num) || num <= 0) return 'الأرضي';
+  const ordinals = [
+    'الأرضي', 'الأول', 'الثاني', 'الثالث', 'الرابع', 
+    'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'
+  ];
+  if (num < ordinals.length) {
+    return ordinals[num];
+  }
+  return `${num}`;
 }
 
 function parseFloorValue(rawFloor) {
@@ -4788,9 +4818,9 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Row 2: Full Address (70%) + Floor (30%) */}
-                  <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.85rem' }}>
-                    <div style={{ flex: '7 1 0%', minWidth: 0 }}>
+                  {/* Row 2: Full Address + Floor (Responsive wrap on mobile) */}
+                  <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.85rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 200px', minWidth: 0 }}>
                       <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
                         العنوان بالتفصيل <span style={{ color: 'var(--danger)' }}>*</span>
                       </label>
@@ -4804,26 +4834,29 @@ export default function App() {
                       />
                     </div>
 
-                    <div style={{ flex: '3 1 0%', minWidth: '105px' }}>
+                    <div style={{ flex: '1 1 125px', minWidth: '115px' }}>
                       <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>
                         الدور
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', height: '42px', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#fff', padding: '2px', overflow: 'hidden' }}>
                         <button
                           type="button"
-                          style={{ width: '28px', height: '100%', border: 'none', background: '#f1f5f9', cursor: (Number(createForm.floor) || 0) <= 0 ? 'not-allowed' : 'pointer', opacity: (Number(createForm.floor) || 0) <= 0 ? 0.4 : 1, fontWeight: 700, fontSize: '1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          style={{ width: '30px', height: '100%', border: 'none', background: '#f1f5f9', cursor: (Number(createForm.floor) || 0) <= 0 ? 'not-allowed' : 'pointer', opacity: (Number(createForm.floor) || 0) <= 0 ? 0.4 : 1, fontWeight: 700, fontSize: '1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                           onClick={() => setCreateForm(prev => ({ ...prev, floor: Math.max(0, (Number(prev.floor) || 0) - 1) }))}
                           disabled={(Number(createForm.floor) || 0) <= 0}
                           aria-label="إنقاص الدور"
                         >
                           -
                         </button>
-                        <span style={{ flex: 1, textAlign: 'center', fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 2px', color: 'var(--text-primary)' }}>
-                          {formatFloorDisplay(createForm.floor)}
+                        <span 
+                          title={formatFloorDisplay(createForm.floor)}
+                          style={{ flex: 1, textAlign: 'center', fontSize: '0.82rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', color: 'var(--text-primary)' }}
+                        >
+                          {formatFloorStepperDisplay(createForm.floor)}
                         </span>
                         <button
                           type="button"
-                          style={{ width: '28px', height: '100%', border: 'none', background: '#f1f5f9', cursor: 'pointer', fontWeight: 700, fontSize: '1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          style={{ width: '30px', height: '100%', border: 'none', background: '#f1f5f9', cursor: 'pointer', fontWeight: 700, fontSize: '1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                           onClick={() => setCreateForm(prev => ({ ...prev, floor: (Number(prev.floor) || 0) + 1 }))}
                           aria-label="زيادة الدور"
                         >
@@ -5038,19 +5071,51 @@ export default function App() {
                   {/* Bottom: Map Picker Trigger */}
                   <div style={{ marginTop: '0.85rem' }}>
                     {createForm.latitude && createForm.longitude ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.65rem 0.85rem', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--r-md)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#16a34a', fontWeight: 700, fontSize: '0.88rem' }}>
-                          <CheckCircle style={{ width: 18, height: 18, color: '#16a34a', flexShrink: 0 }} />
-                          <span>تم تحديد موقع العقار على الخريطة بنجاح</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.65rem 0.85rem', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--r-md)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#16a34a', fontWeight: 700, fontSize: '0.88rem' }}>
+                            <CheckCircle style={{ width: 18, height: 18, color: '#16a34a', flexShrink: 0 }} />
+                            <span>تم تحديد موقع العقار على الخريطة بنجاح</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-outline"
+                            style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem', marginRight: 'auto', borderRadius: 'var(--r-md)', borderColor: '#86efac', color: '#15803d', fontWeight: 600 }}
+                            onClick={() => setShowMapPicker(true)}
+                          >
+                            تعديل الموقع
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          className="btn-outline"
-                          style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem', marginRight: 'auto', borderRadius: 'var(--r-md)', borderColor: '#86efac', color: '#15803d', fontWeight: 600 }}
-                          onClick={() => setShowMapPicker(true)}
-                        >
-                          تعديل الموقع
-                        </button>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#64748b',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.2rem',
+                              padding: '0.15rem 0.35rem'
+                            }}
+                            onClick={() => {
+                              setCreateForm(prev => ({
+                                ...prev,
+                                latitude: null,
+                                longitude: null,
+                                has_precise_location: false,
+                                location_precise: false,
+                                maps_link: ''
+                              }));
+                            }}
+                          >
+                            <X style={{ width: 14, height: 14, color: '#64748b' }} />
+                            <span>مسح الموقع المحدد</span>
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <button
@@ -5087,6 +5152,10 @@ export default function App() {
                       initialLng={createForm.longitude}
                       onConfirm={(lat, lng) => {
                         setCreateForm(prev => ({ ...prev, latitude: lat, longitude: lng, has_precise_location: true, location_precise: true }));
+                        setShowMapPicker(false);
+                      }}
+                      onReset={() => {
+                        setCreateForm(prev => ({ ...prev, latitude: null, longitude: null, has_precise_location: false, location_precise: false, maps_link: '' }));
                         setShowMapPicker(false);
                       }}
                       onClose={() => setShowMapPicker(false)}
@@ -5234,9 +5303,38 @@ export default function App() {
                     return (
                       <div key={index} style={{ background: '#ffffff', border: '1.5px solid #cbd5e1', padding: '0.85rem 1rem', borderRadius: '12px', marginBottom: '0.85rem', display: 'grid', gap: '0.65rem', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
                         
-                        {/* Header: Category Title + Delete Button */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.4rem' }}>
-                          <strong style={{ color: 'var(--primary)', fontSize: '0.9rem' }}>فئة غرفة #{index + 1}</strong>
+                        {/* Header: Category Title + Room Count Stepper + Delete Button */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.4rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <strong style={{ color: 'var(--primary)', fontSize: '0.9rem' }}>فئة غرفة #{index + 1}</strong>
+                            
+                            {/* Room Count Stepper in Header (Red Box Location) */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: '#f8fafc', padding: '0.2rem 0.5rem', borderRadius: 'var(--r-sm)', border: '1px solid #cbd5e1' }}>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>عدد الغرف:</span>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '0.15rem 0.4rem', fontSize: '0.8rem', fontWeight: 800, minWidth: '24px', height: '24px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                onClick={() => updateRoomConfig(index, 'count', Math.max(1, (config.count || 1) - 1))}
+                              >-</button>
+                              <input 
+                                type="number" 
+                                inputMode="numeric"
+                                value={config.count} 
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => updateRoomConfig(index, 'count', Math.max(1, Number(e.target.value) || 1))} 
+                                style={{ width: '38px', textAlign: 'center', fontWeight: 700, background: '#ffffff', border: '1px solid #94a3b8', borderRadius: '4px', padding: '0.15rem 0', fontSize: '0.82rem', height: '24px' }}
+                                min="1" 
+                              />
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '0.15rem 0.4rem', fontSize: '0.8rem', fontWeight: 800, minWidth: '24px', height: '24px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                                onClick={() => updateRoomConfig(index, 'count', (config.count || 1) + 1)}
+                              >+</button>
+                            </div>
+                          </div>
+
                           {createForm.room_configurations.length > 1 && (
                             <button className="btn-danger" style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem' }} onClick={() => removeRoomConfig(index)}>حذف الفئة</button>
                           )}
@@ -5245,45 +5343,19 @@ export default function App() {
                         {/* Section 1: Main 3-Column Compact Grid */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.65rem', alignItems: 'flex-start' }}>
                           
-                          {/* Col 1: Room Type & Count Stepper */}
+                          {/* Col 1: Room Type */}
                           <div>
-                            <label style={{ fontSize: '0.8rem', fontWeight: 700, display: 'block', marginBottom: '0.25rem', color: '#1e293b' }}>نوع الغرفة والعدد</label>
-                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                              <select 
-                                value={config.room_type} 
-                                onChange={(e) => updateRoomConfig(index, 'room_type', e.target.value)}
-                                style={{ flex: 1, height: '36px', padding: '0 0.5rem', fontSize: '0.82rem', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', background: '#ffffff', outline: 'none', fontWeight: 600, minWidth: 0 }}
-                              >
-                                <option value="single">فردية (Single)</option>
-                                <option value="double">ثنائية (Double)</option>
-                                <option value="triple">ثلاثية (Triple)</option>
-                                <option value="quadruple">رباعية (Quadruple)</option>
-                              </select>
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.15rem', flexShrink: 0 }}>
-                                <button
-                                  type="button"
-                                  className="btn-secondary"
-                                  style={{ padding: '0.2rem 0.45rem', fontSize: '0.82rem', fontWeight: 800 }}
-                                  onClick={() => updateRoomConfig(index, 'count', Math.max(1, (config.count || 1) - 1))}
-                                >-</button>
-                                <input 
-                                  type="number" 
-                                  inputMode="numeric"
-                                  value={config.count} 
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => updateRoomConfig(index, 'count', Math.max(1, Number(e.target.value) || 1))} 
-                                  style={{ width: '42px', textAlign: 'center', fontWeight: 700, background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.25rem 0.1rem', fontSize: '0.85rem' }}
-                                  min="1" 
-                                />
-                                <button
-                                  type="button"
-                                  className="btn-secondary"
-                                  style={{ padding: '0.2rem 0.45rem', fontSize: '0.82rem', fontWeight: 800 }}
-                                  onClick={() => updateRoomConfig(index, 'count', (config.count || 1) + 1)}
-                                >+</button>
-                              </div>
-                            </div>
+                            <label style={{ fontSize: '0.8rem', fontWeight: 700, display: 'block', marginBottom: '0.25rem', color: '#1e293b' }}>نوع الغرفة</label>
+                            <select 
+                              value={config.room_type} 
+                              onChange={(e) => updateRoomConfig(index, 'room_type', e.target.value)}
+                              style={{ width: '100%', height: '36px', padding: '0 0.5rem', fontSize: '0.82rem', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', background: '#ffffff', outline: 'none', fontWeight: 600 }}
+                            >
+                              <option value="single">فردية (Single)</option>
+                              <option value="double">ثنائية (Double)</option>
+                              <option value="triple">ثلاثية (Triple)</option>
+                              <option value="quadruple">رباعية (Quadruple)</option>
+                            </select>
                           </div>
 
                           {/* Col 2: Price Per Person */}
