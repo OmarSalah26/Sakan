@@ -359,6 +359,13 @@ Base.metadata.create_all(bind=engine)
 
 def ensure_schema():
     inspector = inspect(engine)
+    dialect_name = engine.dialect.name
+    is_postgres = dialect_name.startswith("postgres")
+
+    bool_dflt_false = "BOOLEAN DEFAULT FALSE" if is_postgres else "BOOLEAN DEFAULT 0"
+    datetime_type = "TIMESTAMP" if is_postgres else "DATETIME"
+    float_type = "DOUBLE PRECISION" if is_postgres else "REAL"
+
     with engine.begin() as connection:
         # Check users table
         if "users" in inspector.get_table_names():
@@ -368,44 +375,63 @@ def ensure_schema():
             if "governorates" not in user_cols:
                 connection.execute(text("ALTER TABLE users ADD COLUMN governorates VARCHAR"))
             if "terms_accepted_at" not in user_cols:
-                connection.execute(text("ALTER TABLE users ADD COLUMN terms_accepted_at DATETIME"))
+                connection.execute(text(f"ALTER TABLE users ADD COLUMN terms_accepted_at {datetime_type}"))
             if "is_verified" not in user_cols:
-                connection.execute(text("ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT 0"))
+                connection.execute(text(f"ALTER TABLE users ADD COLUMN is_verified {bool_dflt_false}"))
             if "otp_code" not in user_cols:
                 connection.execute(text("ALTER TABLE users ADD COLUMN otp_code VARCHAR"))
             if "offense_count" not in user_cols:
                 connection.execute(text("ALTER TABLE users ADD COLUMN offense_count INTEGER DEFAULT 0"))
             if "is_banned" not in user_cols:
-                connection.execute(text("ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0"))
+                connection.execute(text(f"ALTER TABLE users ADD COLUMN is_banned {bool_dflt_false}"))
             if "verified_by_sakan" not in user_cols:
-                connection.execute(text("ALTER TABLE users ADD COLUMN verified_by_sakan BOOLEAN DEFAULT 0"))
+                connection.execute(text(f"ALTER TABLE users ADD COLUMN verified_by_sakan {bool_dflt_false}"))
             if "verified_channel" not in user_cols:
                 connection.execute(text("ALTER TABLE users ADD COLUMN verified_channel VARCHAR"))
             if "password_hash" not in user_cols:
                 connection.execute(text("ALTER TABLE users ADD COLUMN password_hash TEXT"))
             if "must_change_password" not in user_cols:
-                connection.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))
+                connection.execute(text(f"ALTER TABLE users ADD COLUMN must_change_password {bool_dflt_false}"))
             if "auth_token" not in user_cols:
                 connection.execute(text("ALTER TABLE users ADD COLUMN auth_token VARCHAR"))
 
         # Reassign legacy/scraped listings to matching advertiser user by phone number if advertiser_id == 1 or null
         if "listings" in inspector.get_table_names() and "users" in inspector.get_table_names():
-            connection.execute(text("""
-                UPDATE listings 
-                SET advertiser_id = (
-                    SELECT id FROM users 
-                    WHERE users.phone = listings.contact_phone 
-                       OR users.phone = listings.whatsapp_phone 
-                    LIMIT 1
-                )
-                WHERE (advertiser_id IS NULL OR advertiser_id = 1) 
-                  AND (contact_phone IS NOT NULL OR whatsapp_phone IS NOT NULL)
-                  AND EXISTS (
-                    SELECT 1 FROM users 
-                    WHERE users.phone = listings.contact_phone 
-                       OR users.phone = listings.whatsapp_phone
-                  )
-            """))
+            if is_postgres:
+                connection.execute(text("""
+                    UPDATE listings 
+                    SET advertiser_id = (
+                        SELECT id FROM users 
+                        WHERE users.phone = listings.contact_phone 
+                           OR users.phone = listings.whatsapp_phone 
+                        ORDER BY id ASC
+                        LIMIT 1
+                    )
+                    WHERE (advertiser_id IS NULL OR advertiser_id = 1) 
+                      AND (contact_phone IS NOT NULL OR whatsapp_phone IS NOT NULL)
+                      AND EXISTS (
+                        SELECT 1 FROM users 
+                        WHERE users.phone = listings.contact_phone 
+                           OR users.phone = listings.whatsapp_phone
+                      )
+                """))
+            else:
+                connection.execute(text("""
+                    UPDATE listings 
+                    SET advertiser_id = (
+                        SELECT id FROM users 
+                        WHERE users.phone = listings.contact_phone 
+                           OR users.phone = listings.whatsapp_phone 
+                        LIMIT 1
+                    )
+                    WHERE (advertiser_id IS NULL OR advertiser_id = 1) 
+                      AND (contact_phone IS NOT NULL OR whatsapp_phone IS NOT NULL)
+                      AND EXISTS (
+                        SELECT 1 FROM users 
+                        WHERE users.phone = listings.contact_phone 
+                           OR users.phone = listings.whatsapp_phone
+                      )
+                """))
 
         # Check listings table
         if "listings" in inspector.get_table_names():
@@ -415,9 +441,9 @@ def ensure_schema():
             if "maps_link" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN maps_link VARCHAR"))
             if "latitude" not in listing_cols:
-                connection.execute(text("ALTER TABLE listings ADD COLUMN latitude REAL"))
+                connection.execute(text(f"ALTER TABLE listings ADD COLUMN latitude {float_type}"))
             if "longitude" not in listing_cols:
-                connection.execute(text("ALTER TABLE listings ADD COLUMN longitude REAL"))
+                connection.execute(text(f"ALTER TABLE listings ADD COLUMN longitude {float_type}"))
             if "street" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN street VARCHAR"))
             if "building_number" not in listing_cols:
@@ -433,13 +459,15 @@ def ensure_schema():
             if "tier" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN tier VARCHAR DEFAULT 'regular'"))
             if "subscription_expires_at" not in listing_cols:
-                connection.execute(text("ALTER TABLE listings ADD COLUMN subscription_expires_at DATETIME"))
+                connection.execute(text(f"ALTER TABLE listings ADD COLUMN subscription_expires_at {datetime_type}"))
             if "room_configurations" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN room_configurations VARCHAR"))
             if "price_per_person" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN price_per_person INTEGER"))
             if "room_type" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN room_type VARCHAR"))
+            if "total_price" not in listing_cols:
+                connection.execute(text(f"ALTER TABLE listings ADD COLUMN total_price {float_type}"))
             if "view_count" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN view_count INTEGER DEFAULT 0"))
             if "min_lease_months" not in listing_cols:
@@ -451,21 +479,21 @@ def ensure_schema():
             if "source" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN source VARCHAR DEFAULT 'normal'"))
             if "full_edit_available" not in listing_cols:
-                connection.execute(text("ALTER TABLE listings ADD COLUMN full_edit_available BOOLEAN DEFAULT 0"))
+                connection.execute(text(f"ALTER TABLE listings ADD COLUMN full_edit_available {bool_dflt_false}"))
             if "edit_token" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN edit_token VARCHAR"))
             if "cover_photo_index" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN cover_photo_index INTEGER DEFAULT 0"))
             if "location_precise" not in listing_cols:
-                connection.execute(text("ALTER TABLE listings ADD COLUMN location_precise BOOLEAN DEFAULT 0"))
+                connection.execute(text(f"ALTER TABLE listings ADD COLUMN location_precise {bool_dflt_false}"))
             if "pricing_mode" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN pricing_mode VARCHAR DEFAULT 'room_based'"))
             if "not_vacant_reports" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN not_vacant_reports INTEGER DEFAULT 0"))
             if "near_university" not in listing_cols:
-                connection.execute(text("ALTER TABLE listings ADD COLUMN near_university BOOLEAN DEFAULT 0"))
+                connection.execute(text(f"ALTER TABLE listings ADD COLUMN near_university {bool_dflt_false}"))
             if "near_transit" not in listing_cols:
-                connection.execute(text("ALTER TABLE listings ADD COLUMN near_transit BOOLEAN DEFAULT 0"))
+                connection.execute(text(f"ALTER TABLE listings ADD COLUMN near_transit {bool_dflt_false}"))
 
         # Startup migration for 3-state insurance: convert legacy empty/unspecified/0 insurance_price in existing room_configurations to None (null)
         try:
@@ -517,7 +545,7 @@ def ensure_schema():
             if "photo_urls" not in rating_cols:
                 connection.execute(text("ALTER TABLE ratings ADD COLUMN photo_urls VARCHAR"))
             if "is_verified" not in rating_cols:
-                connection.execute(text("ALTER TABLE ratings ADD COLUMN is_verified BOOLEAN DEFAULT 0"))
+                connection.execute(text(f"ALTER TABLE ratings ADD COLUMN is_verified {bool_dflt_false}"))
 
         # Check bookmarks table
         if "bookmarks" not in inspector.get_table_names():
@@ -531,7 +559,7 @@ def ensure_schema():
             if "evidence_urls" not in complaint_cols:
                 connection.execute(text("ALTER TABLE complaints ADD COLUMN evidence_urls VARCHAR"))
             if "actioned_at" not in complaint_cols:
-                connection.execute(text("ALTER TABLE complaints ADD COLUMN actioned_at DATETIME"))
+                connection.execute(text(f"ALTER TABLE complaints ADD COLUMN actioned_at {datetime_type}"))
             if "status" not in complaint_cols:
                 connection.execute(text("ALTER TABLE complaints ADD COLUMN status VARCHAR DEFAULT 'submitted'"))
 
@@ -546,6 +574,21 @@ def ensure_schema():
         # Check advertiser_messages table
         if "advertiser_messages" not in inspector.get_table_names():
             AdvertiserMessage.__table__.create(engine)
+
+        # Synchronize PostgreSQL primary key sequences safely
+        if is_postgres:
+            for tbl_name in ["users", "listings", "ratings", "complaints", "bookmarks", "advertiser_messages", "governorates", "waitlist_entries"]:
+                if tbl_name in inspector.get_table_names():
+                    try:
+                        seq_name = f"{tbl_name}_id_seq"
+                        connection.execute(text(f"""
+                            SELECT CASE 
+                                WHEN (SELECT MAX(id) FROM "{tbl_name}") IS NULL THEN setval('{seq_name}', 1, false)
+                                ELSE setval('{seq_name}', (SELECT MAX(id) FROM "{tbl_name}"), true)
+                            END
+                        """))
+                    except Exception:
+                        pass
 
     # Seed Governorates if empty
     db = SessionLocal()
