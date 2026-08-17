@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useNavigate } from './router/Router';
 import { useApp } from './context/AppContext';
-import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice } from './utils/phoneUtils';
+import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText } from './utils/phoneUtils';
 
 import { 
   Bell, BookOpen, Plus, Search, MapPin, CheckCircle, CheckCircle2, ShieldCheck, 
@@ -12,7 +12,7 @@ import {
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
   Bed, Check, Clock, Award, Sparkles, Upload, Menu, X, Smartphone,
   Navigation, Wind, Video, ArrowDown, Compass, Building2, Mail, LogOut, Copy,
-  Eye, EyeOff, Loader2
+  Eye, EyeOff, Loader2, RotateCcw
 } from 'lucide-react';
 
 
@@ -423,94 +423,40 @@ function normalizeAmenityName(name) {
   return AMENITY_ALIASES[trimmed] || trimmed;
 }
 
-export function formatUnifiedShareText(listing, isAdvertiser = false) {
-  if (!listing) return '';
-  const genderStr = listing.gender === 'male' ? 'سكن طلاب (شباب)' : 'سكن طالبات (بنات)';
-  
-  const configs = Array.isArray(listing.room_configurations) 
-    ? listing.room_configurations 
-    : typeof listing.room_configurations === 'string'
-      ? JSON.parse(listing.room_configurations || '[]')
-      : [];
+export async function copyListingShareMessage(listing, showToast) {
+  if (!listing) return false;
+  const shareText = formatUnifiedShareText(listing);
+  if (navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(shareText);
+      if (showToast) showToast('تم نسخ نص الإعلان جاهزاً للمشاركة!');
+      return true;
+    } catch {
+      if (showToast) showToast('تعذر نسخ النص تلقائياً');
+    }
+  }
+  return false;
+}
 
-  let totalBeds = 0;
-  let servicesInclusive = false;
-  let hasInsurance = false;
-  let insuranceAmount = null;
-  let unitTotalPrice = 0;
-  const roomTypesList = [];
-
-  if (Array.isArray(configs) && configs.length > 0) {
-    configs.forEach(c => {
-      const roomType = c.room_type || 'single';
-      const label = roomType === 'single' ? 'فردية' : roomType === 'double' ? 'ثنائية' : roomType === 'triple' ? 'ثلاثية' : 'رباعية';
-      const multiplier = roomType === 'double' ? 2 : roomType === 'triple' ? 3 : roomType === 'quadruple' ? 4 : 1;
-      const count = c.count || 1;
-      const price = c.price_per_person || 0;
-      
-      totalBeds += multiplier * count;
-      unitTotalPrice += (price * count * multiplier);
-      roomTypesList.push(`${count} غرفة ${label}`);
-
-      if (c.services_inclusive) servicesInclusive = true;
-      if (c.insurance_price) {
-        hasInsurance = true;
-        insuranceAmount = c.insurance_price;
+export async function shareListingMessage(listing, showToast) {
+  if (!listing) return false;
+  const shareText = formatUnifiedShareText(listing);
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: listing.title || 'سكن',
+        text: shareText
+      });
+      if (showToast) showToast('تمت مشاركة الإعلان بنجاح!');
+      return true;
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        return copyListingShareMessage(listing, showToast);
       }
-    });
+    }
+  } else {
+    return copyListingShareMessage(listing, showToast);
   }
-
-  if (totalBeds === 0) {
-    totalBeds = listing.available_beds || 1;
-  }
-  if (!unitTotalPrice && listing.price_per_person) {
-    unitTotalPrice = listing.price_per_person;
-  }
-
-  const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
-  const locationStr = locationParts.join('، ');
-  const availStr = `${listing.available_beds || 1} سرير متاح من أصل ${totalBeds}`;
-
-  let depositStr = 'بدون تأمين';
-  if (hasInsurance && insuranceAmount) {
-    depositStr = `تأمين: ${insuranceAmount} ج.م`;
-  } else if (hasInsurance) {
-    depositStr = 'يتطلب دفع تأمين';
-  }
-
-  const servicesStr = servicesInclusive ? 'الخدمات مشمولة' : 'الخدمات غير مشمولة';
-  const priceStr = unitTotalPrice ? `${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : '';
-
-  if (isAdvertiser) {
-    const lines = [
-      `*${listing.title || 'سكن رائع'}*`,
-      `📍 *الموقع:* ${locationStr}`,
-      `👥 *النوع:* ${genderStr}`,
-      `🛏 *الأسرة المتاحة:* ${availStr}`,
-      priceStr ? `💰 *السعر:* ${priceStr}` : null,
-      '',
-      '📱 *التفاصيل والصور كاملة على منصة سكن:*',
-      `https://sakan-egy.com/listings/${listing.id}`
-    ].filter(Boolean);
-    return lines.join('\n');
-  }
-
-  const lines = [
-    `*${listing.title || 'سكن رائع'}*`,
-    `📍 ${locationStr}`,
-    '',
-    `• *النوع:* ${genderStr}`,
-    roomTypesList.length > 0 ? `• *الغرف:* ${roomTypesList.join('، ')}` : null,
-    `• *الأسرة:* ${availStr}`,
-    `• *التأمين:* ${depositStr}`,
-    `• *الخدمات:* ${servicesStr}`,
-    priceStr ? `• *السعر:* ${priceStr}` : null,
-    '',
-    '🔗 *شاهد الصور والتفاصيل كاملة:*',
-    `https://sakan-egy.com/listings/${listing.id}`
-  ].filter(Boolean);
-
-  return lines.join('\n');
 }
 
 export default function App() {
@@ -705,7 +651,9 @@ export default function App() {
     video_urls: [],
     description: '',
     tier: 'regular',
-    min_lease_months: null
+    min_lease_months: null,
+    pricing_mode: 'room_based',
+    total_price: null
   });
 
   // Progressive Media Upload state & handler
@@ -1023,6 +971,8 @@ export default function App() {
       description: item.description || '',
       tier: item.tier || 'regular',
       min_lease_months: item.min_lease_months || null,
+      pricing_mode: item.pricing_mode || 'room_based',
+      total_price: item.totalPrice !== undefined && item.totalPrice !== null ? item.totalPrice : (item.total_price !== undefined && item.total_price !== null ? item.total_price : null),
       source: item.source || 'normal',
       full_edit_available: item.full_edit_available || false,
       location_precise: item.location_precise || false,
@@ -1403,9 +1353,16 @@ export default function App() {
       showToast("يرجى إدخال رقم هاتف صحيح لا يقل عن 8 أرقام");
       return;
     }
-    if (authMode === 'register' && cleanName.length < 2) {
-      showToast("يرجى إدخال الاسم بالكامل (مطلوب لجميع الحسابات)");
-      return;
+    if (authMode === 'register') {
+      if (cleanName.length < 2) {
+        showToast("يرجى إدخال الاسم بالكامل (مطلوب لجميع الحسابات)");
+        return;
+      }
+      const cleanPwd = (authForm.password || '').trim();
+      if (cleanPwd.length < 6) {
+        showToast("كلمة المرور يجب ألا تقل عن 6 أحرف");
+        return;
+      }
     }
     setAuthSubmitting(true);
     const controller = new AbortController();
@@ -1417,6 +1374,7 @@ export default function App() {
         phone: cleanPhone,
         name: cleanName,
         account_type: validAccountType,
+        password: (authForm.password || '').trim(),
         governorates: Array.isArray(authForm.governorates) ? authForm.governorates : [],
         profile_photo_url: authForm.profile_photo_url || null
       } : {
@@ -1432,12 +1390,31 @@ export default function App() {
       clearTimeout(timer);
       const data = await res.json();
       if (res.ok) {
-        setAuthForm(prev => ({ ...prev, otp: '' }));
-        setAuthStep('otp');
-        if (data.otp_code) {
-          showToast(`تم إرسال كود التحقق (كود تجريبي: ${data.otp_code})`);
+        if (authMode === 'register' && data.id) {
+          setUser(data);
+          setIsAuthOpen(false);
+          showToast(`تم إنشاء الحساب بنجاح! مرحباً بك، ${data.name || ''}`);
+          if (pendingActionRef.current) {
+            const cb = pendingActionRef.current;
+            pendingActionRef.current = null;
+            cb(data);
+          } else {
+            if (data.account_type === 'broker' || data.account_type === 'owner') {
+              navigateTo('#/dashboard');
+            } else if (data.account_type === 'admin') {
+              navigateTo('#/admin');
+            } else {
+              navigateTo('#/browse');
+            }
+          }
         } else {
-          showToast(`تم إرسال رمز التحقق إلى WhatsApp/SMS على الرقم ${cleanPhone}`);
+          setAuthForm(prev => ({ ...prev, otp: '' }));
+          setAuthStep('otp');
+          if (data.otp_code) {
+            showToast(`تم إرسال كود التحقق (كود تجريبي: ${data.otp_code})`);
+          } else {
+            showToast(`تم إرسال رمز التحقق إلى WhatsApp/SMS على الرقم ${cleanPhone}`);
+          }
         }
       } else {
         showToast(data.detail || "خطأ أثناء إرسال الطلب");
@@ -1732,18 +1709,58 @@ export default function App() {
       const isEditing = Boolean(editingListing && editingListing.id);
       showToast(isEditing ? "جاري حفظ التعديلات..." : "جاري نشر العقار...");
 
-      const cleanedConfigs = (createForm.room_configurations || []).map(c => ({
-        ...c,
-        price_per_person: Number(c.price_per_person) || 0,
-        commission: c.commission !== '' && c.commission !== null ? Number(c.commission) : (c.commission_pct ?? 50),
-        commission_min: c.commission_min !== '' && c.commission_min !== null ? Number(c.commission_min) : (c.commission_min_pct ?? 30),
-        commission_max: c.commission_max !== '' && c.commission_max !== null ? Number(c.commission_max) : (c.commission_max_pct ?? 100),
-        insurance_price: (c.insurance_price === 0 || c.insurance_price === '0' || c._insurance_type === 'none') ? 0 : (c.insurance_price !== null && c.insurance_price !== undefined && c.insurance_price !== '' && Number(c.insurance_price) > 0 ? Number(c.insurance_price) : null),
-        count: Number(c.count) || 1
-      }));
+      const isOwnerUser = (currentUser?.account_type === 'owner') || (editingListing && (editingListing.advertiser_account_type === 'owner' || editingListing.advertiser_type === 'owner'));
+
+      const cleanedConfigs = (createForm.room_configurations || []).map(c => {
+        const roomType = c.room_type || 'single';
+        const multiplier = roomType === 'double' ? 2 : roomType === 'triple' ? 3 : roomType === 'quadruple' || roomType === 'triple+' ? 4 : 1;
+        const roomCount = Number(c.count) || 1;
+        const maxCapacity = multiplier * roomCount;
+
+        let availBeds = maxCapacity;
+        if (c.available_beds !== undefined && c.available_beds !== null && c.available_beds !== '') {
+          const parsedAvail = Number(c.available_beds);
+          if (!isNaN(parsedAvail)) {
+            availBeds = Math.min(Math.max(0, parsedAvail), maxCapacity);
+          }
+        }
+
+        return {
+          ...c,
+          price_per_person: Number(c.price_per_person) || 0,
+          commission: isOwnerUser ? 0 : (c.commission !== '' && c.commission !== null ? Number(c.commission) : (c.commission_pct ?? 50)),
+          commission_min: isOwnerUser ? null : (c.commission_min !== '' && c.commission_min !== null ? Number(c.commission_min) : (c.commission_min_pct ?? 30)),
+          commission_max: isOwnerUser ? null : (c.commission_max !== '' && c.commission_max !== null ? Number(c.commission_max) : (c.commission_max_pct ?? 100)),
+          commission_pct: isOwnerUser ? 0 : (c.commission_pct ?? 50),
+          commission_type: isOwnerUser ? 'fixed' : (c.commission_type || 'fixed'),
+          insurance_price: (c.insurance_price === 0 || c.insurance_price === '0' || c._insurance_type === 'none') ? 0 : (c.insurance_price !== null && c.insurance_price !== undefined && c.insurance_price !== '' && Number(c.insurance_price) > 0 ? Number(c.insurance_price) : null),
+          count: roomCount,
+          available_beds: availBeds
+        };
+      });
+
+      const totalCalculatedAvailBeds = cleanedConfigs.reduce((sum, cfg) => sum + (cfg.available_beds ?? 0), 0);
+
+      let computedRoomTotal = 0;
+      cleanedConfigs.forEach(c => {
+        const roomType = c.room_type || 'single';
+        const multiplier = roomType === 'single' ? 1 : roomType === 'double' ? 2 : roomType === 'triple' ? 3 : 4;
+        const count = Number(c.count) || 1;
+        const price = Number(c.price_per_person) || 0;
+        computedRoomTotal += (count * multiplier * price);
+      });
+
+      const finalPricingMode = createForm.pricing_mode || 'room_based';
+      const finalTotalPrice = (finalPricingMode === 'total_based' && createForm.total_price !== null && createForm.total_price !== undefined && createForm.total_price !== '')
+        ? Number(createForm.total_price)
+        : computedRoomTotal;
 
       let payload = {
         ...createForm,
+        available_beds: totalCalculatedAvailBeds,
+        pricing_mode: finalPricingMode,
+        total_price: finalTotalPrice,
+        totalPrice: finalTotalPrice,
         address: createForm.full_address || createForm.address,
         floor: createForm.floor !== null && createForm.floor !== undefined ? String(createForm.floor) : null,
         street: createForm.street !== null && createForm.street !== undefined ? String(createForm.street) : null,
@@ -2016,6 +2033,20 @@ export default function App() {
 
   const handleUpdateRoomBeds = async (listingId, configIndex, newBedCount) => {
     if (newBedCount < 0) return;
+    const listing = listings.find(l => l.id === listingId);
+    if (listing && listing.room_configurations) {
+      const configs = Array.isArray(listing.room_configurations) 
+        ? listing.room_configurations 
+        : (typeof listing.room_configurations === 'string' ? safe_json_loads(listing.room_configurations, []) : []);
+      if (configs && configs[configIndex]) {
+        const c = configs[configIndex];
+        const roomType = c.room_type || 'single';
+        const multiplier = roomType === 'double' ? 2 : roomType === 'triple' ? 3 : roomType === 'quadruple' || roomType === 'triple+' ? 4 : 1;
+        const roomCount = c.count || 1;
+        const maxCapacity = multiplier * roomCount;
+        if (newBedCount > maxCapacity) return;
+      }
+    }
     try {
       const headers = {
         'Content-Type': 'application/json'
@@ -2984,7 +3015,6 @@ export default function App() {
                               </svg>
                             </button>
                           </div>
-
                           <div className="card-content" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                             {/* Header: Title + Location & Top-Left Total Capacity Badge */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.65rem' }}>
@@ -3032,17 +3062,19 @@ export default function App() {
                                 configs
                                   .filter(config => (config.available_beds !== undefined ? config.available_beds > 0 : true))
                                   .map((config, idx) => {
-                                    let typeLabel = config.room_type === 'single' ? 'غرفة فردية' : config.room_type === 'double' ? 'غرفة ثنائية' : config.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية';
+                                    const roomCount = config.count || 1;
+                                    let typeName = config.room_type === 'single' ? 'فردية' : config.room_type === 'double' ? 'ثنائية' : config.room_type === 'triple' ? 'ثلاثية' : 'رباعية';
+                                    const roomLabel = roomCount > 1 ? `${roomCount} غرف ${typeName}` : `غرفة ${typeName}`;
                                     const isRange = config.commission_type === 'range' || (config.commission_min && config.commission_max);
-                                    const bedsAvail = config.available_beds !== undefined ? config.available_beds : (config.count || 1);
+                                    const availText = config.available_beds !== undefined ? ` (${config.available_beds} أسرة متوفرة)` : '';
 
                                     return (
                                       <div key={idx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.55rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                                            <Bed style={{ width: 14, height: 14, color: 'var(--primary)' }} />
+                                            <Home style={{ width: 14, height: 14, color: 'var(--primary)' }} />
                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
-                                              ({bedsAvail} أسرة متوفرة) {typeLabel}
+                                              {roomLabel}{availText}
                                             </span>
                                           
                                           {/* AC Badge tied directly to THIS room */}
@@ -3054,9 +3086,11 @@ export default function App() {
                                         </div>
 
                                         {/* Room Rent Price */}
-                                        <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary-dark)' }}>
-                                          {config.price_per_person ? config.price_per_person.toLocaleString() : '---'} ج.م/فرد
-                                        </span>
+                                        {item.pricing_mode !== 'total_based' && (
+                                          <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--primary-dark)' }}>
+                                            {config.price_per_person ? config.price_per_person.toLocaleString() : '---'} ج.م/فرد
+                                          </span>
+                                        )}
                                       </div>
 
                                       {/* Room Commission */}
@@ -3232,15 +3266,18 @@ export default function App() {
 
                           return displayConfigs.map((conf, idx) => {
                             const roomLabel = conf.room_type === 'single' ? 'فردية' : conf.room_type === 'double' ? 'ثنائية' : conf.room_type === 'triple' ? 'ثلاثية' : 'رباعية';
-                            const currentBeds = conf.available_beds !== undefined ? conf.available_beds : (conf.count || 1);
+                            const multiplier = conf.room_type === 'double' ? 2 : conf.room_type === 'triple' ? 3 : conf.room_type === 'quadruple' || conf.room_type === 'triple+' ? 4 : 1;
+                            const roomCount = conf.count || 1;
+                            const maxCapacity = multiplier * roomCount;
+                            const currentBeds = conf.available_beds !== undefined && conf.available_beds !== null ? conf.available_beds : maxCapacity;
 
                             return (
                               <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: '#f8fafc', padding: '0.25rem 0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                 <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1e293b' }}>{roomLabel}:</span>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                  <button className="btn-secondary" style={{ padding: '0.15rem 0.4rem', fontSize: '0.75rem' }} onClick={() => handleUpdateRoomBeds(item.id, idx, currentBeds - 1)}>-</button>
+                                  <button className="btn-secondary" style={{ padding: '0.15rem 0.4rem', fontSize: '0.75rem' }} disabled={currentBeds <= 0} onClick={() => handleUpdateRoomBeds(item.id, idx, Math.max(0, currentBeds - 1))}>-</button>
                                   <span style={{ minWidth: '22px', textAlign: 'center', fontWeight: 'bold', fontSize: '0.8rem' }}>{currentBeds}</span>
-                                  <button className="btn-secondary" style={{ padding: '0.15rem 0.4rem', fontSize: '0.75rem' }} onClick={() => handleUpdateRoomBeds(item.id, idx, currentBeds + 1)}>+</button>
+                                  <button className="btn-secondary" style={{ padding: '0.15rem 0.4rem', fontSize: '0.75rem' }} disabled={currentBeds >= maxCapacity} onClick={() => handleUpdateRoomBeds(item.id, idx, Math.min(maxCapacity, currentBeds + 1))}>+</button>
                                 </div>
                               </div>
                             );
@@ -3254,6 +3291,13 @@ export default function App() {
                         </button>
                         <button className="btn-primary" style={{ padding: '0.4rem 0.85rem' }} onClick={() => handleOpenEditFlow(item)}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>تعديل <PenTool style={{ width: 14, height: 14 }} /></span>
+                        </button>
+
+                        <button className="btn-outline" style={{ padding: '0.4rem 0.75rem' }} onClick={() => copyListingShareMessage(item, showToast)}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>نسخ <Copy style={{ width: 14, height: 14 }} /></span>
+                        </button>
+                        <button className="btn-outline" style={{ padding: '0.4rem 0.75rem', borderColor: 'var(--primary)', color: 'var(--primary)' }} onClick={() => shareListingMessage(item, showToast)}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>مشاركة <Share2 style={{ width: 14, height: 14 }} /></span>
                         </button>
                         
                         <button 
@@ -3617,6 +3661,12 @@ export default function App() {
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => openListingDetail(l.id)}>عرض التفاصيل</button>
                           <button className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => handleOpenEditFlow(l)}>تعديل الإعلان</button>
+                          <button className="btn-outline" style={{ fontSize: '0.8rem' }} onClick={() => copyListingShareMessage(l, showToast)}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Copy style={{ width: 13, height: 13 }} /> نسخ</span>
+                          </button>
+                          <button className="btn-outline" style={{ fontSize: '0.8rem', borderColor: 'var(--primary)', color: 'var(--primary)' }} onClick={() => shareListingMessage(l, showToast)}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Share2 style={{ width: 13, height: 13 }} /> مشاركة</span>
+                          </button>
                           <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => handleAdminRemoveListing(l.id)}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إيقاف وحذف الإعلان <Trash2 style={{ width: 14, height: 14 }} /></span>
                           </button>
@@ -4377,8 +4427,32 @@ export default function App() {
                         onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
                       />
                     </div>
+
+                    <div className="form-group">
+                      <label>كلمة المرور (الحد الأدنى 6 أحرف)</label>
+                      <div style={{ position: 'relative' }}>
+                        <input 
+                          type={showPassword ? "text" : "password"} 
+                          placeholder="أدخل كلمة المرور لحسابك" 
+                          required 
+                          minLength={6}
+                          value={authForm.password || ''}
+                          onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                          style={{ paddingLeft: '2.5rem' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', padding: 0 }}
+                          title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                        >
+                          {showPassword ? <EyeOff style={{ width: 18, height: 18 }} /> : <Eye style={{ width: 18, height: 18 }} />}
+                        </button>
+                      </div>
+                    </div>
+
                     <button type="submit" className="btn-primary" disabled={authSubmitting} style={{ width: '100%', marginTop: '0.5rem', opacity: authSubmitting ? 0.7 : 1 }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>{authSubmitting ? 'جاري الإرسال...' : 'إرسال كود تسجيل الحساب'} <MessageSquare style={{ width: 16, height: 16 }} /></span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>{authSubmitting ? 'جاري إنشاء الحساب...' : 'إنشاء حساب جديد'} <User style={{ width: 16, height: 16 }} /></span>
                     </button>
 
                     <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}>
@@ -4840,7 +4914,7 @@ export default function App() {
                           }}
                           style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: '0.95rem', height: '100%', border: 'none', background: 'transparent', outline: 'none', width: '100%' }}
                         />
-                        <button 
+<button 
                           type="button" 
                           style={{ width: '32px', height: '100%', border: 'none', background: '#f1f5f9', cursor: 'pointer', fontWeight: 700, fontSize: '1.1rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                           onClick={() => setCreateForm(prev => ({ ...prev, available_beds: (Number(prev.available_beds) || 0) + 1 }))}
@@ -4961,7 +5035,7 @@ export default function App() {
                           color: '#15803d',
                           display: 'flex',
                           alignItems: 'center',
-                          justify: 'center',
+                          justifyContent: 'center',
                           gap: '0.5rem',
                           cursor: 'pointer',
                           transition: 'all 0.15s ease'
@@ -4991,344 +5065,467 @@ export default function App() {
               )}
 
               {/* STEP 3: ROOM CONFIGURATION, PRICING & COMMISSION */}
-              {createStep === 3 && (
+              {createStep === 3 && (() => {
+                const computedRoomTotal = (createForm.room_configurations || []).reduce((sum, c) => {
+                  const roomType = c.room_type || 'single';
+                  const multiplier = roomType === 'single' ? 1 : roomType === 'double' ? 2 : roomType === 'triple' ? 3 : 4;
+                  const count = Number(c.count) || 1;
+                  const price = Number(c.price_per_person) || 0;
+                  return sum + (count * multiplier * price);
+                }, 0);
+
+                return (
                 <div>
                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>تهيئة الغرف والأسعار والعمولة</h4>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>قم بإضافة فئات الغرف المتوفرة، تحديد الأسعار، والعمولة بشكل منظم.</p>
                   
-                  {/* Minimum lease duration option */}
-                  <div style={{ background: '#EFF6FF', border: '1px solid #60a5fa', borderRadius: 'var(--r-md)', padding: '1rem', marginBottom: '1.25rem' }}>
-                    <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={!!createForm.min_lease_months}
-                        onChange={(e) => setCreateForm(prev => ({ ...prev, min_lease_months: e.target.checked ? 6 : null }))}
-                      />
-                      تحديد حد أدنى لمدة الإيجار (شرط تعاقد)
-                    </label>
-                    {createForm.min_lease_months && (
-                      <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'white', padding: '0.5rem 0.75rem', borderRadius: 'var(--r-sm)', border: '1.5px solid #3b82f6' }}>
-                        <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>الحد الأدنى (بالأشهر):</label>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
-                            onClick={() => setCreateForm(prev => ({ ...prev, min_lease_months: Math.max(1, (prev.min_lease_months || 1) - 1) }))}
-                          >-</button>
-                          <input 
-                            type="number" 
-                            inputMode="numeric"
-                            min="1" 
-                            max="36" 
-                            value={createForm.min_lease_months} 
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => setCreateForm(prev => ({ ...prev, min_lease_months: Math.max(1, Number(e.target.value) || 1) }))}
-                            style={{ width: '60px', textAlign: 'center', padding: '0.35rem', borderRadius: 'var(--r-sm)', background: '#ffffff', border: '1.5px solid #94a3b8', fontWeight: 700 }}
-                          />
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
-                            onClick={() => setCreateForm(prev => ({ ...prev, min_lease_months: (prev.min_lease_months || 1) + 1 }))}
-                          >+</button>
+                  {/* Header Bar: Total Price + Lease Duration */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+                    
+                    {/* Card 1: Total Rent Price Field */}
+                    <div style={{ background: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: 'var(--r-md)', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.35rem' }}>
+                          <label style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>
+                            إجمالي سعر الإيجار (جنيه)
+                          </label>
+                          {createForm.pricing_mode === 'total_based' && (
+                            <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
+                              تسعير إجمالي مخصص
+                            </span>
+                          )}
                         </div>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>أشهر</span>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <input 
+                            type="number"
+                            inputMode="numeric"
+                            placeholder="أدخل إجمالي سعر السكن"
+                            value={createForm.pricing_mode === 'total_based' ? (createForm.total_price ?? '') : computedRoomTotal}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCreateForm(prev => ({
+                                ...prev,
+                                pricing_mode: 'total_based',
+                                total_price: val === '' ? null : Number(val)
+                              }));
+                            }}
+                            style={{ flex: 1, minWidth: 0, padding: '0.5rem 0.75rem', borderRadius: 'var(--r-sm)', border: '1.5px solid #3b82f6', fontWeight: 700, fontSize: '1rem', background: createForm.pricing_mode === 'total_based' ? '#fff' : '#f8fafc' }}
+                          />
+
+                          {createForm.pricing_mode === 'total_based' && (
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              title="العودة للحساب التلقائي حسب الغرف"
+                              onClick={() => setCreateForm(prev => ({ ...prev, pricing_mode: 'room_based', total_price: computedRoomTotal }))}
+                              style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0 }}
+                            >
+                              <RotateCcw style={{ width: 14, height: 14 }} /> إرجاع تلقائي
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    )}
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem', display: 'block', lineHeight: 1.4 }}>
+                        {createForm.pricing_mode === 'total_based' 
+                          ? 'ملاحظة: السعر الإجمالي يدوي (محدد من قبلك). اضغط "إرجاع تلقائي" لاستعادة التسعير حسب الغرف.'
+                          : `محسوب تلقائياً من الغرف (${computedRoomTotal.toLocaleString()} ج.م). تعديل الرقم يحوله إلى تسعير إجمالي.`}
+                      </span>
+                    </div>
+
+                    {/* Card 2: Lease Duration Field */}
+                    <div style={{ background: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: 'var(--r-md)', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
+                      <div>
+                        <div style={{ marginBottom: '0.5rem' }}>
+                          <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', color: '#1e40af', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={!!createForm.min_lease_months}
+                              onChange={(e) => setCreateForm(prev => ({ ...prev, min_lease_months: e.target.checked ? 6 : null }))}
+                            />
+                            حد أدنى لمدة الإيجار (شرط تعاقد)
+                          </label>
+                        </div>
+
+                        {createForm.min_lease_months ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc', padding: '0.4rem 0.65rem', borderRadius: 'var(--r-sm)', border: '1px solid #cbd5e1', width: 'fit-content' }}>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              style={{ padding: '0.2rem 0.55rem', fontSize: '0.85rem', fontWeight: 800 }}
+                              onClick={() => setCreateForm(prev => ({ ...prev, min_lease_months: Math.max(1, (prev.min_lease_months || 1) - 1) }))}
+                            >-</button>
+                            <input 
+                              type="number" 
+                              inputMode="numeric"
+                              min="1" 
+                              max="36" 
+                              value={createForm.min_lease_months} 
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => setCreateForm(prev => ({ ...prev, min_lease_months: Math.max(1, Number(e.target.value) || 1) }))}
+                              style={{ width: '55px', textAlign: 'center', padding: '0.3rem', borderRadius: 'var(--r-sm)', background: '#ffffff', border: '1.5px solid #94a3b8', fontWeight: 700 }}
+                            />
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              style={{ padding: '0.2rem 0.55rem', fontSize: '0.85rem', fontWeight: 800 }}
+                              onClick={() => setCreateForm(prev => ({ ...prev, min_lease_months: (prev.min_lease_months || 1) + 1 }))}
+                            >+</button>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)' }}>أشهر</span>
+                          </div>
+                        ) : (
+                          <div style={{ height: '38px', display: 'flex', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>اختياري (مثلاً 6 أشهر)</span>
+                          </div>
+                        )}
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem', display: 'block', lineHeight: 1.4 }}>
+                        {createForm.min_lease_months 
+                          ? `يشترط المالك عدم إيجار المكان لأقل من ${createForm.min_lease_months} أشهر.` 
+                          : 'يمكنك اختيار تفعيل حد أدنى مدة عقد الإيجار للطلاب.'}
+                      </span>
+                    </div>
                   </div>
 
                   {createForm.room_configurations.map((config, index) => {
                     const price = Number(config.price_per_person) || 0;
                     const isRange = config.commission_type === 'range';
+                    const activeUser = user;
+                    const isOwnerRole = activeUser?.account_type === 'owner' || (editingListing && (editingListing.advertiser_account_type === 'owner' || editingListing.advertiser_type === 'owner'));
                     
+                    const displayCommissionPct = (config.commission_pct !== null && config.commission_pct !== undefined)
+                      ? config.commission_pct
+                      : (typeof config.commission === 'number' && config.commission <= 100 ? config.commission : 50);
+
+                    const isInsuranceExists = config._insurance_type === 'exists' || (config.insurance_price !== null && config.insurance_price !== undefined && config.insurance_price !== '' && Number(config.insurance_price) > 0);
+                    const isInsuranceNone = config._insurance_type === 'none' || config.insurance_price === 0 || config.insurance_price === '0';
+
                     return (
-                      <div key={index} style={{ background: '#ffffff', border: '2px solid #cbd5e1', padding: '1.25rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem', display: 'grid', gap: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1.5px dashed #cbd5e1', paddingBottom: '0.5rem' }}>
-                          <strong style={{ color: 'var(--primary)', fontSize: '0.95rem' }}>فئة غرفة #{index + 1}</strong>
+                      <div key={index} style={{ background: '#ffffff', border: '1.5px solid #cbd5e1', padding: '0.85rem 1rem', borderRadius: '12px', marginBottom: '0.85rem', display: 'grid', gap: '0.65rem', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
+                        
+                        {/* Header: Category Title + Delete Button */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.4rem' }}>
+                          <strong style={{ color: 'var(--primary)', fontSize: '0.9rem' }}>فئة غرفة #{index + 1}</strong>
                           {createForm.room_configurations.length > 1 && (
-                            <button className="btn-danger" style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }} onClick={() => removeRoomConfig(index)}>حذف الفئة</button>
+                            <button className="btn-danger" style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem' }} onClick={() => removeRoomConfig(index)}>حذف الفئة</button>
                           )}
                         </div>
                         
-                        {/* Section A: Room Type & Count Stepper */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        {/* Section 1: Main 3-Column Compact Grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.65rem', alignItems: 'flex-start' }}>
+                          
+                          {/* Col 1: Room Type & Count Stepper */}
                           <div>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>نوع الغرفة</label>
-                            <select 
-                              value={config.room_type} 
-                              onChange={(e) => updateRoomConfig(index, 'room_type', e.target.value)}
-                              style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem', fontWeight: 600, width: '100%' }}
-                            >
-                              <option value="single">فردية (Single)</option>
-                              <option value="double">ثنائية (Double)</option>
-                              <option value="triple">ثلاثية (Triple)</option>
-                              <option value="quadruple">رباعية (Quadruple)</option>
-                            </select>
-                          </div>
+                            <label style={{ fontSize: '0.8rem', fontWeight: 700, display: 'block', marginBottom: '0.25rem', color: '#1e293b' }}>نوع الغرفة والعدد</label>
+                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                              <select 
+                                value={config.room_type} 
+                                onChange={(e) => updateRoomConfig(index, 'room_type', e.target.value)}
+                                style={{ flex: 1, height: '36px', padding: '0 0.5rem', fontSize: '0.82rem', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', background: '#ffffff', outline: 'none', fontWeight: 600, minWidth: 0 }}
+                              >
+                                <option value="single">فردية (Single)</option>
+                                <option value="double">ثنائية (Double)</option>
+                                <option value="triple">ثلاثية (Triple)</option>
+                                <option value="quadruple">رباعية (Quadruple)</option>
+                              </select>
 
-                          <div>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>عدد الغرف المتاحة</label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                              <button
-                                type="button"
-                                className="btn-secondary"
-                                style={{ padding: '0.35rem 0.75rem', fontWeight: 800 }}
-                                onClick={() => updateRoomConfig(index, 'count', Math.max(1, (config.count || 1) - 1))}
-                              >-</button>
-                              <input 
-                                type="number" 
-                                inputMode="numeric"
-                                value={config.count} 
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => updateRoomConfig(index, 'count', Math.max(1, Number(e.target.value) || 1))} 
-                                style={{ textAlign: 'center', fontWeight: 700, background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem' }}
-                                min="1" 
-                              />
-                              <button
-                                type="button"
-                                className="btn-secondary"
-                                style={{ padding: '0.35rem 0.75rem', fontWeight: 800 }}
-                                onClick={() => updateRoomConfig(index, 'count', (config.count || 1) + 1)}
-                              >+</button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.15rem', flexShrink: 0 }}>
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  style={{ padding: '0.2rem 0.45rem', fontSize: '0.82rem', fontWeight: 800 }}
+                                  onClick={() => updateRoomConfig(index, 'count', Math.max(1, (config.count || 1) - 1))}
+                                >-</button>
+                                <input 
+                                  type="number" 
+                                  inputMode="numeric"
+                                  value={config.count} 
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => updateRoomConfig(index, 'count', Math.max(1, Number(e.target.value) || 1))} 
+                                  style={{ width: '42px', textAlign: 'center', fontWeight: 700, background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.25rem 0.1rem', fontSize: '0.85rem' }}
+                                  min="1" 
+                                />
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  style={{ padding: '0.2rem 0.45rem', fontSize: '0.82rem', fontWeight: 800 }}
+                                  onClick={() => updateRoomConfig(index, 'count', (config.count || 1) + 1)}
+                                >+</button>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Section B: Pricing & Insurance */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          {/* Col 2: Price Per Person */}
                           <div>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>الإيجار الشهري للفرد (جنيه)</label>
+                            <label style={{ fontSize: '0.8rem', fontWeight: 700, display: 'block', marginBottom: '0.25rem', color: '#1e293b' }}>الإيجار الشهري (جنيه/فرد)</label>
                             <input 
                               type="number" 
                               inputMode="numeric"
+                              disabled={createForm.pricing_mode === 'total_based'}
                               value={config.price_per_person || ''} 
                               onFocus={(e) => e.target.select()}
                               onChange={(e) => updateRoomConfig(index, 'price_per_person', e.target.value ? Number(e.target.value) : '')} 
                               placeholder="مثال: 1200"
-                              style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem 0.65rem', fontWeight: 700, width: '100%' }}
+                              style={{ 
+                                background: createForm.pricing_mode === 'total_based' ? '#f1f5f9' : '#ffffff', 
+                                border: '1.5px solid #94a3b8', 
+                                borderRadius: 'var(--r-sm)', 
+                                padding: '0.35rem 0.55rem', 
+                                fontWeight: 700, 
+                                width: '100%', 
+                                height: '36px', 
+                                fontSize: '0.88rem',
+                                opacity: createForm.pricing_mode === 'total_based' ? 0.65 : 1,
+                                cursor: createForm.pricing_mode === 'total_based' ? 'not-allowed' : 'text'
+                              }}
                               min="0" 
                               step="50"
                             />
-                            {(!config.price_per_person || config.price_per_person <= 0) && (
-                              <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 600, display: 'block', marginTop: '0.2rem' }}>يرجى إدخال السعر المطلوب</span>
-                            )}
+                            {createForm.pricing_mode === 'total_based' ? (
+                              <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, display: 'block', marginTop: '0.15rem' }}>
+                                معطل في نظام "التسعير الإجمالي"
+                              </span>
+                            ) : (!config.price_per_person || config.price_per_person <= 0) ? (
+                              <span style={{ fontSize: '0.72rem', color: '#dc2626', fontWeight: 600, display: 'block', marginTop: '0.15rem' }}>السعر مطلوب</span>
+                            ) : null}
                           </div>
 
+                          {/* Col 3: Insurance Setup */}
                           <div>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.35rem', color: '#1e293b' }}>التأمين المالي للفئة</label>
-                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: (config._insurance_type === 'exists' || (config.insurance_price !== null && config.insurance_price !== undefined && config.insurance_price !== '' && Number(config.insurance_price) > 0)) ? '0.4rem' : 0 }}>
-                              <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', margin: 0 }}>
-                                <input 
-                                  type="checkbox"
-                                  checked={config._insurance_type === 'exists' || (config.insurance_price !== null && config.insurance_price !== undefined && config.insurance_price !== '' && Number(config.insurance_price) > 0)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      updateRoomConfig(index, '_insurance_type', 'exists');
-                                      if (!config.insurance_price || Number(config.insurance_price) <= 0) {
-                                        updateRoomConfig(index, 'insurance_price', '');
-                                      }
-                                    } else {
-                                      updateRoomConfig(index, '_insurance_type', 'unspecified');
-                                      updateRoomConfig(index, 'insurance_price', null);
-                                    }
-                                  }}
-                                />
-                                <span>يوجد تأمين</span>
-                              </label>
+                            <label style={{ fontSize: '0.8rem', fontWeight: 700, display: 'block', marginBottom: '0.25rem', color: '#1e293b' }}>التأمين المالي للفئة</label>
+                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                              <button
+                                type="button"
+                                style={{
+                                  padding: '0.3rem 0.55rem',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  borderRadius: 'var(--r-sm)',
+                                  border: isInsuranceNone ? '1.5px solid #94a3b8' : '1px solid #cbd5e1',
+                                  background: isInsuranceNone ? '#f1f5f9' : '#ffffff',
+                                  color: isInsuranceNone ? '#334155' : '#64748b',
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => {
+                                  updateRoomConfig(index, '_insurance_type', 'none');
+                                  updateRoomConfig(index, 'insurance_price', 0);
+                                }}
+                              >
+                                لا يوجد تأمين
+                              </button>
 
-                              <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', margin: 0 }}>
-                                <input 
-                                  type="checkbox"
-                                  checked={config._insurance_type === 'none' || config.insurance_price === 0 || config.insurance_price === '0'}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      updateRoomConfig(index, '_insurance_type', 'none');
-                                      updateRoomConfig(index, 'insurance_price', 0);
-                                    } else {
-                                      updateRoomConfig(index, '_insurance_type', 'unspecified');
-                                      updateRoomConfig(index, 'insurance_price', null);
-                                    }
-                                  }}
-                                />
-                                <span>لا يوجد تأمين</span>
-                              </label>
-                            </div>
+                              <button
+                                type="button"
+                                style={{
+                                  padding: '0.3rem 0.55rem',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  borderRadius: 'var(--r-sm)',
+                                  border: isInsuranceExists ? '1.5px solid #3b82f6' : '1px solid #cbd5e1',
+                                  background: isInsuranceExists ? '#eff6ff' : '#ffffff',
+                                  color: isInsuranceExists ? '#1d4ed8' : '#64748b',
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => {
+                                  updateRoomConfig(index, '_insurance_type', 'exists');
+                                  if (!config.insurance_price || Number(config.insurance_price) <= 0) {
+                                    updateRoomConfig(index, 'insurance_price', '');
+                                  }
+                                }}
+                              >
+                                يوجد تأمين
+                              </button>
 
-                            {(config._insurance_type === 'exists' || (config.insurance_price !== null && config.insurance_price !== undefined && config.insurance_price !== '' && Number(config.insurance_price) > 0)) && (
-                              <div style={{ marginTop: '0.35rem' }}>
+                              {isInsuranceExists && (
                                 <input 
                                   type="number" 
                                   inputMode="numeric"
                                   value={config.insurance_price === null || config.insurance_price === undefined ? '' : config.insurance_price} 
                                   onFocus={(e) => e.target.select()}
-                                  placeholder="مبلغ التأمين (مثال: 5000)"
-                                  style={{ background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.45rem 0.65rem', fontWeight: 700, width: '100%' }}
+                                  placeholder="مبلغ التأمين"
+                                  style={{ background: '#ffffff', border: '1.5px solid #3b82f6', borderRadius: 'var(--r-sm)', padding: '0.3rem 0.45rem', fontWeight: 700, width: '90px', height: '36px', fontSize: '0.82rem' }}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     updateRoomConfig(index, 'insurance_price', val === '' ? '' : Math.max(0, Number(val)));
                                   }} 
                                   required
                                 />
-                                {(!config.insurance_price || Number(config.insurance_price) <= 0) && (
-                                  <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 600, display: 'block', marginTop: '0.2rem' }}>
-                                    يرجى إدخال قيمة مبلغ التأمين المالي
-                                  </span>
-                                )}
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Section C: Commission Setup (Percentage based) */}
-                        <div style={{ background: '#f8fafc', border: '1.5px solid #cbd5e1', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-dark)' }}>عمولة الوسيط المعنية بهذه الفئة</label>
-                            
-                            {/* Checkbox for Fixed vs Range */}
-                            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                              <input 
-                                type="checkbox"
-                                checked={isRange}
-                                onChange={(e) => updateRoomConfig(index, 'commission_type', e.target.checked ? 'range' : 'fixed')}
-                              />
-                              عمولة غير ثابتة/عمولة تقريبية
-                            </label>
-                          </div>
-
-                          {!isRange ? (
-                            /* Fixed Percentage Stepper */
-                            <div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>نسبة العمولة من الإيجار الشهري:</span>
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                                  <button
-                                    type="button"
-                                    className="btn-secondary"
-                                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
-                                    onClick={() => updateRoomConfig(index, 'commission_pct', Math.max(0, (config.commission_pct ?? 50) - 5))}
-                                  >-</button>
-                                  <input 
-                                    type="number" 
-                                    inputMode="numeric"
-                                    value={config.commission_pct ?? 50} 
-                                    onFocus={(e) => e.target.select()}
-                                    onChange={(e) => updateRoomConfig(index, 'commission_pct', e.target.value ? Number(e.target.value) : 0)} 
-                                    style={{ width: '65px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.35rem', fontWeight: 700 }}
-                                    min="0"
-                                    max="200"
-                                    step="5"
-                                  />
-                                  <button
-                                    type="button"
-                                    className="btn-secondary"
-                                    style={{ padding: '0.25rem 0.6rem', fontSize: '0.9rem', fontWeight: 800 }}
-                                    onClick={() => updateRoomConfig(index, 'commission_pct', Math.min(200, (config.commission_pct ?? 50) + 5))}
-                                  >+</button>
-                                </div>
-                                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)' }}>%</span>
-                              </div>
-                              
-                              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#15803d', marginTop: '0.35rem' }}>
-                                نسبة العمولة المحددة: {config.commission_pct ?? config.commission ?? 50}% من الإيجار الشهري
-                              </div>
+                        {/* Section 2: Streamlined Commission Bar */}
+                        <div style={{ 
+                          background: isOwnerRole ? '#f1f5f9' : '#f8fafc', 
+                          border: '1px solid #e2e8f0', 
+                          padding: '0.5rem 0.75rem', 
+                          borderRadius: '8px',
+                          opacity: isOwnerRole ? 0.75 : 1
+                        }}>
+                          {isOwnerRole ? (
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#15803d', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <ShieldCheck style={{ width: 15, height: 15, color: '#16a34a', flexShrink: 0 }} />
+                              <span>حساب المالك المباشر: الإعلان ينشر بدون أي عمولة إيجار (0%)</span>
                             </div>
                           ) : (
-                            /* Range Percentage Steppers */
-                            <div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.35rem' }}>
-                                <div>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.25rem' }}>نسبة الحد الأدنى (%):</label>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                    <button
-                                      type="button"
-                                      className="btn-secondary"
-                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
-                                      onClick={() => updateRoomConfig(index, 'commission_min_pct', Math.max(0, (config.commission_min_pct ?? 30) - 5))}
-                                    >-</button>
-                                    <input 
-                                      type="number" 
-                                      inputMode="numeric"
-                                      value={config.commission_min_pct ?? 30} 
-                                      onFocus={(e) => e.target.select()}
-                                      onChange={(e) => updateRoomConfig(index, 'commission_min_pct', e.target.value ? Number(e.target.value) : 0)} 
-                                      style={{ width: '55px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.3rem', fontWeight: 700 }}
-                                      min="0"
-                                      max="200"
-                                      step="5"
-                                    />
-                                    <button
-                                      type="button"
-                                      className="btn-secondary"
-                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
-                                      onClick={() => updateRoomConfig(index, 'commission_min_pct', Math.min(200, (config.commission_min_pct ?? 30) + 5))}
-                                    >+</button>
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>%</span>
-                                  </div>
-                                </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b' }}>عمولة الوسيط:</span>
+                                
+                                {!isRange ? (
+                                  <>
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                      <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        style={{ padding: '0.15rem 0.45rem', fontSize: '0.8rem', fontWeight: 800 }}
+                                        onClick={() => updateRoomConfig(index, 'commission_pct', Math.max(0, displayCommissionPct - 5))}
+                                      >-</button>
+                                      <input 
+                                        type="number" 
+                                        inputMode="numeric"
+                                        value={displayCommissionPct} 
+                                        onFocus={(e) => e.target.select()}
+                                        onChange={(e) => updateRoomConfig(index, 'commission_pct', e.target.value ? Number(e.target.value) : 0)} 
+                                        style={{ width: '48px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.2rem', fontWeight: 700, fontSize: '0.85rem' }}
+                                        min="0"
+                                        max="200"
+                                        step="5"
+                                      />
+                                      <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        style={{ padding: '0.15rem 0.45rem', fontSize: '0.8rem', fontWeight: 800 }}
+                                        onClick={() => updateRoomConfig(index, 'commission_pct', Math.min(200, displayCommissionPct + 5))}
+                                      >+</button>
+                                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>%</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#15803d' }}>
+                                      ({displayCommissionPct}% من الإيجار الشهري)
+                                    </span>
+                                  </>
+                                ) : (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>من:</span>
+                                      <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.78rem', fontWeight: 800 }}
+                                        onClick={() => updateRoomConfig(index, 'commission_min_pct', Math.max(0, (config.commission_min_pct ?? 30) - 5))}
+                                      >-</button>
+                                      <input 
+                                        type="number" 
+                                        inputMode="numeric"
+                                        value={config.commission_min_pct ?? config.commission_min ?? 30} 
+                                        onFocus={(e) => e.target.select()}
+                                        onChange={(e) => updateRoomConfig(index, 'commission_min_pct', e.target.value ? Number(e.target.value) : 0)} 
+                                        style={{ width: '45px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.15rem', fontWeight: 700, fontSize: '0.82rem' }}
+                                        min="0"
+                                        max="200"
+                                        step="5"
+                                      />
+                                      <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.78rem', fontWeight: 800 }}
+                                        onClick={() => updateRoomConfig(index, 'commission_min_pct', Math.min(200, (config.commission_min_pct ?? 30) + 5))}
+                                      >+</button>
+                                      <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>%</span>
+                                    </div>
 
-                                <div>
-                                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.25rem' }}>نسبة الحد الأقصى (%):</label>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                    <button
-                                      type="button"
-                                      className="btn-secondary"
-                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
-                                      onClick={() => updateRoomConfig(index, 'commission_max_pct', Math.max(0, (config.commission_max_pct ?? 100) - 5))}
-                                    >-</button>
-                                    <input 
-                                      type="number" 
-                                      inputMode="numeric"
-                                      value={config.commission_max_pct ?? 100} 
-                                      onFocus={(e) => e.target.select()}
-                                      onChange={(e) => updateRoomConfig(index, 'commission_max_pct', e.target.value ? Number(e.target.value) : 0)} 
-                                      style={{ width: '55px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.3rem', fontWeight: 700 }}
-                                      min="0"
-                                      max="200"
-                                      step="5"
-                                    />
-                                    <button
-                                      type="button"
-                                      className="btn-secondary"
-                                      style={{ padding: '0.2rem 0.5rem', fontWeight: 800 }}
-                                      onClick={() => updateRoomConfig(index, 'commission_max_pct', Math.min(200, (config.commission_max_pct ?? 100) + 5))}
-                                    >+</button>
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>%</span>
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>إلى:</span>
+                                      <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.78rem', fontWeight: 800 }}
+                                        onClick={() => updateRoomConfig(index, 'commission_max_pct', Math.max(0, (config.commission_max_pct ?? 100) - 5))}
+                                      >-</button>
+                                      <input 
+                                        type="number" 
+                                        inputMode="numeric"
+                                        value={config.commission_max_pct ?? config.commission_max ?? 100} 
+                                        onFocus={(e) => e.target.select()}
+                                        onChange={(e) => updateRoomConfig(index, 'commission_max_pct', e.target.value ? Number(e.target.value) : 0)} 
+                                        style={{ width: '45px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', padding: '0.15rem', fontWeight: 700, fontSize: '0.82rem' }}
+                                        min="0"
+                                        max="200"
+                                        step="5"
+                                      />
+                                      <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.78rem', fontWeight: 800 }}
+                                        onClick={() => updateRoomConfig(index, 'commission_max_pct', Math.min(200, (config.commission_max_pct ?? 100) + 5))}
+                                      >+</button>
+                                      <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>%</span>
+                                    </div>
+
+                                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0284c7' }}>
+                                      (نطاق نسبة العمولة: {config.commission_min_pct ?? config.commission_min ?? 30}% إلى {config.commission_max_pct ?? config.commission_max ?? 100}% - قابل للتفاوض)
+                                    </span>
                                   </div>
-                                </div>
+                                )}
                               </div>
 
-                              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0284c7', marginTop: '0.35rem' }}>
-                                نطاق نسبة العمولة: {config.commission_min_pct ?? config.commission_min ?? 30}% إلى {config.commission_max_pct ?? config.commission_max ?? 100}% (قابل للتفاوض)
-                              </div>
+                              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <input 
+                                  type="checkbox"
+                                  checked={isRange}
+                                  onChange={(e) => updateRoomConfig(index, 'commission_type', e.target.checked ? 'range' : 'fixed')}
+                                />
+                                عمولة غير ثابتة/تقريبية
+                              </label>
                             </div>
                           )}
-
-                          <small style={{ color: 'var(--text-light)', fontSize: '0.72rem', display: 'block', marginTop: '0.4rem' }}>
-                            نسبة العمولة من الإيجار الشهري. تظهر العمولة كنسبة مئوية على الكروت وسطح الإعلان.
-                          </small>
                         </div>
 
-                        {/* Inclusive Options */}
-                        <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                          <label style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={!!config.services_inclusive}
-                              onChange={(e) => updateRoomConfig(index, 'services_inclusive', e.target.checked)} 
-                            />
-                            السعر شامل الفواتير (كهرباء، مياه، غاز)
-                          </label>
+                        {/* Section 3: Compact Pill Chips for Utilities & AC */}
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            style={{
+                              padding: '0.25rem 0.65rem',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              borderRadius: '999px',
+                              border: config.services_inclusive ? '1.5px solid #86efac' : '1px solid #cbd5e1',
+                              background: config.services_inclusive ? '#dcfce7' : '#f8fafc',
+                              color: config.services_inclusive ? '#166534' : '#64748b',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem'
+                            }}
+                            onClick={() => updateRoomConfig(index, 'services_inclusive', !config.services_inclusive)}
+                          >
+                            <Zap style={{ width: 13, height: 13, color: config.services_inclusive ? '#16a34a' : '#64748b' }} />
+                            <span>السعر شامل الفواتير (كهرباء، مياه، غاز)</span>
+                          </button>
 
-                          <label style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#0284c7' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={!!config.has_ac}
-                              onChange={(e) => updateRoomConfig(index, 'has_ac', e.target.checked)} 
-                            />
-                            ❄️ مكيفة
-                          </label>
+                          <button
+                            type="button"
+                            style={{
+                              padding: '0.25rem 0.65rem',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              borderRadius: '999px',
+                              border: config.has_ac ? '1.5px solid #bae6fd' : '1px solid #cbd5e1',
+                              background: config.has_ac ? '#e0f2fe' : '#f8fafc',
+                              color: config.has_ac ? '#0369a1' : '#64748b',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem'
+                            }}
+                            onClick={() => updateRoomConfig(index, 'has_ac', !config.has_ac)}
+                          >
+                            <span>❄️ مكيفة</span>
+                          </button>
                         </div>
+
                       </div>
                     );
                   })}
@@ -5337,7 +5534,7 @@ export default function App() {
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><Plus style={{ width: 16, height: 16 }} /> إضافة فئة غرفة أخرى</span>
                   </button>
                 </div>
-              )}
+              ); })()}
 
               {/* STEP 4: AMENITIES & BED COUNT */}
               {createStep === 4 && (
@@ -6286,12 +6483,8 @@ export default function App() {
               <button 
                 className="btn-outline" 
                 style={{ padding: '0.65rem 1.1rem', fontWeight: 700, borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: 'var(--primary)', color: 'var(--primary)' }}
-                onClick={async () => {
-                  const shareText = formatUnifiedShareText(postPublishListing, true);
-                  if (navigator.clipboard) {
-                    await navigator.clipboard.writeText(shareText);
-                    showToast('تم نسخ نص الإعلان جاهزاً للمشاركة!');
-                  }
+                onClick={() => {
+                  copyListingShareMessage(postPublishListing, showToast);
                 }}
               >
                 <Copy style={{ width: 16, height: 16 }} /> نسخ الإعلان
@@ -6301,27 +6494,7 @@ export default function App() {
                 className="btn-primary" 
                 style={{ padding: '0.65rem 1.35rem', fontWeight: 800, borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
                 onClick={async () => {
-                  const shareText = formatUnifiedShareText(postPublishListing, true);
-                  const shareUrl = `https://sakan-egy.com/listings/${postPublishListing.id}`;
-                  
-                  if (navigator.share) {
-                    try {
-                      await navigator.share({
-                        title: postPublishListing.title,
-                        text: shareText,
-                        url: shareUrl
-                      });
-                      showToast('تمت مشاركة الإعلان بنجاح!');
-                    } catch (err) {
-                      if (err.name !== 'AbortError' && navigator.clipboard) {
-                        await navigator.clipboard.writeText(shareText);
-                        showToast('تم نسخ نص الإعلان جاهزاً للمشاركة!');
-                      }
-                    }
-                  } else if (navigator.clipboard) {
-                    await navigator.clipboard.writeText(shareText);
-                    showToast('تم نسخ نص الإعلان جاهزاً للمشاركة!');
-                  }
+                  await shareListingMessage(postPublishListing, showToast);
                   setIsPostPublishModalOpen(false);
                   setPostPublishListing(null);
                 }}

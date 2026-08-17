@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Play, ShieldCheck, Wind
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice } from '../utils/phoneUtils';
+import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText } from '../utils/phoneUtils';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '/api');
 
@@ -119,80 +119,7 @@ const OUTDOOR_AMENITIES = [
 ];
 
 export function formatShareText(listing) {
-  if (!listing) return '';
-  const genderStr = listing.gender === 'male' ? 'سكن طلاب (شباب)' : 'سكن طالبات (بنات)';
-  
-  const configs = Array.isArray(listing.room_configurations) 
-    ? listing.room_configurations 
-    : typeof listing.room_configurations === 'string'
-      ? JSON.parse(listing.room_configurations || '[]')
-      : [];
-
-  let totalBeds = 0;
-  let servicesInclusive = false;
-  let hasInsurance = false;
-  let insuranceAmount = null;
-  let unitTotalPrice = 0;
-  const roomTypesList = [];
-
-  if (Array.isArray(configs) && configs.length > 0) {
-    configs.forEach(c => {
-      const roomType = c.room_type || 'single';
-      const label = roomType === 'single' ? 'فردية' : roomType === 'double' ? 'ثنائية' : roomType === 'triple' ? 'ثلاثية' : 'رباعية';
-      const multiplier = roomType === 'double' ? 2 : roomType === 'triple' ? 3 : roomType === 'quadruple' ? 4 : 1;
-      const count = c.count || 1;
-      const price = c.price_per_person || 0;
-      
-      totalBeds += multiplier * count;
-      unitTotalPrice += (price * count * multiplier);
-      roomTypesList.push(`${count} غرفة ${label}`);
-
-      if (c.services_inclusive) servicesInclusive = true;
-    });
-  }
-
-  if (totalBeds === 0) {
-    totalBeds = listing.available_beds || 1;
-  }
-  if (!unitTotalPrice && listing.price_per_person) {
-    unitTotalPrice = listing.price_per_person;
-  }
-
-  const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
-  const locationStr = locationParts.join('، ');
-  const availStr = `${listing.available_beds || 1} سرير متاح من أصل ${totalBeds}`;
-
-  let depositStr = '';
-  const positiveInsConfig = configs.find(c => c.insurance_price !== null && c.insurance_price !== undefined && Number(c.insurance_price) > 0);
-  const allNoIns = configs.length > 0 && configs.every(c => c.insurance_price === 0 || c.insurance_price === '0');
-
-  if (positiveInsConfig) {
-    depositStr = `تأمين: ${Number(positiveInsConfig.insurance_price).toLocaleString()} ج.م`;
-  } else if (allNoIns) {
-    depositStr = 'لا يوجد تأمين';
-  } else {
-    depositStr = 'يتطلب دفع تأمين';
-  }
-
-  const servicesStr = servicesInclusive ? 'الخدمات مشمولة' : 'الخدمات غير مشمولة';
-  const priceStr = unitTotalPrice ? `${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : '';
-
-  const lines = [
-    `*${listing.title || 'سكن رائع'}*`,
-    `📍 ${locationStr}`,
-    '',
-    `• *النوع:* ${genderStr}`,
-    roomTypesList.length > 0 ? `• *الغرف:* ${roomTypesList.join('، ')}` : null,
-    `• *الأسرة:* ${availStr}`,
-    `• *التأمين:* ${depositStr}`,
-    `• *الخدمات:* ${servicesStr}`,
-    priceStr ? `• *السعر:* ${priceStr}` : null,
-    '',
-    '🔗 *شاهد الصور والتفاصيل كاملة:*',
-    `https://sakan-egy.com/listings/${listing.id}`
-  ].filter(Boolean);
-
-  return lines.join('\n');
+  return formatUnifiedShareText(listing);
 }
 
 export default function ListingDetailPage() {
@@ -284,20 +211,20 @@ export default function ListingDetailPage() {
 
   const handleShare = async () => {
     const shareText = formatShareText(listing);
-    const shareUrl = window.location.href;
     if (navigator.share) {
       try {
         await navigator.share({
-          title: listing.title,
-          text: shareText,
-          url: shareUrl
+          title: listing.title || 'سكن',
+          text: shareText
         });
         return;
       } catch (err) {
-        if (err.name !== 'AbortError') console.error(err);
+        if (err.name !== 'AbortError' && navigator.clipboard) {
+          await navigator.clipboard.writeText(shareText);
+          showToast('تم نسخ رابط وتفاصيل الإعلان بنجاح!');
+        }
       }
-    }
-    if (navigator.clipboard) {
+    } else if (navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(shareText);
         showToast('تم نسخ رابط وتفاصيل الإعلان بنجاح!');
@@ -592,21 +519,29 @@ export default function ListingDetailPage() {
           {/* Room Configurations */}
           <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
-              فئات الغرف والأسعار المتاحة
+              {listing.pricing_mode === 'total_based' ? 'فئات الغرف المتاحة' : 'فئات الغرف والأسعار المتاحة'}
             </h3>
             <div style={{ display: 'grid', gap: '0.85rem' }}>
               {(() => {
-                const validConfigs = (listing.room_configurations || []).filter(c => Number(c.price_per_person) > 0);
+                const validConfigs = (listing.room_configurations || []).filter(c => Number(c.price_per_person) > 0 || listing.pricing_mode === 'total_based');
                 if (validConfigs.length > 0) {
                   return validConfigs.map((c, idx) => (
                     <div key={idx} style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                         <span style={{ fontWeight: 700, fontSize: '1rem' }}>
-                          {c.room_type === 'single' ? 'غرفة فردية' : c.room_type === 'double' ? 'غرفة ثنائية' : c.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية'} ({c.available_beds !== undefined ? c.available_beds : (c.count || 1)} أسرة متوفرة)
+                          {(() => {
+                            const roomCount = c.count || 1;
+                            const typeName = c.room_type === 'single' ? 'فردية' : c.room_type === 'double' ? 'ثنائية' : c.room_type === 'triple' ? 'ثلاثية' : 'رباعية';
+                            const roomLabel = roomCount > 1 ? `${roomCount} غرف ${typeName}` : `غرفة ${typeName}`;
+                            const availText = c.available_beds !== undefined ? ` (${c.available_beds} أسرة متوفرة)` : '';
+                            return `${roomLabel}${availText}`;
+                          })()}
                         </span>
-                        <strong style={{ color: 'var(--primary)', fontSize: '1.2rem', fontWeight: 800 }}>
-                          {c.price_per_person} ج.م <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ شهرياً</span>
-                        </strong>
+                        {listing.pricing_mode !== 'total_based' && (
+                          <strong style={{ color: 'var(--primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                            {c.price_per_person} ج.م <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ شهرياً</span>
+                          </strong>
+                        )}
                       </div>
 
                       <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>

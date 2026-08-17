@@ -89,7 +89,13 @@ def solve_akedly_pow(challenge: str, difficulty: int = 3) -> str:
         nonce += 1
 
 
+ENABLE_OTP = False  # Temporary flag to bypass OTP requirements during authentication
+
+
 def send_akedly_otp(phone: str, otp_code: str) -> dict:
+    if not ENABLE_OTP:
+        return {"status": "mock", "message": "OTP delivery is temporarily bypassed"}
+
     if IS_TESTING or os.environ.get("TESTING") == "true":
         return {"status": "mock", "message": "Test mode mock OTP"}
 
@@ -226,6 +232,7 @@ class Listing(Base):
     price_per_person = Column(Integer, nullable=True)
     room_type = Column(String, nullable=True)
     total_price = Column(Float, nullable=True)
+    pricing_mode = Column(String, default="room_based", nullable=False)
 
     # Added columns for updated requirements
     room_configurations = Column(String, nullable=True)  # JSON string array of {room_type, price_per_person, commission}
@@ -451,6 +458,8 @@ def ensure_schema():
                 connection.execute(text("ALTER TABLE listings ADD COLUMN cover_photo_index INTEGER DEFAULT 0"))
             if "location_precise" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN location_precise BOOLEAN DEFAULT 0"))
+            if "pricing_mode" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN pricing_mode VARCHAR DEFAULT 'room_based'"))
             if "not_vacant_reports" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN not_vacant_reports INTEGER DEFAULT 0"))
             if "near_university" not in listing_cols:
@@ -473,10 +482,27 @@ def ensure_schema():
                                     if c.get("insurance_price") is not None or "insurance_price" not in c:
                                         c["insurance_price"] = None
                                         modified = True
+
+                                # Correct available_beds calculation for room config
+                                r_type = c.get("room_type", "single")
+                                multiplier = 2 if r_type == "double" else 3 if r_type == "triple" else 4 if r_type in ["quadruple", "triple+"] else 1
+                                room_cnt = safe_int(c.get("count"), 1)
+                                if room_cnt < 1: room_cnt = 1
+                                cap = multiplier * room_cnt
+                                curr_avail = c.get("available_beds")
+
+                                if curr_avail is None or curr_avail == "" or (curr_avail == c.get("count") and cap > room_cnt):
+                                    c["available_beds"] = cap
+                                    modified = True
+                                elif curr_avail > cap:
+                                    c["available_beds"] = cap
+                                    modified = True
+
                         if modified:
+                            new_total_avail = sum(safe_int(c.get("available_beds"), get_config_capacity(c)) for c in configs if isinstance(c, dict))
                             connection.execute(
-                                text("UPDATE listings SET room_configurations = :configs WHERE id = :id"),
-                                {"configs": json.dumps(configs, ensure_ascii=False), "id": r_id}
+                                text("UPDATE listings SET room_configurations = :configs, available_beds = :avail WHERE id = :id"),
+                                {"configs": json.dumps(configs, ensure_ascii=False), "avail": new_total_avail, "id": r_id}
                             )
                 except Exception:
                     pass
@@ -836,6 +862,7 @@ class RegisterRequest(BaseModel):
     phone: str = Field(..., min_length=8)
     name: str = Field(..., min_length=2)
     account_type: Literal["student", "owner", "broker", "admin"]
+    password: Optional[str] = None
     governorates: List[str] = []
     profile_photo_url: Optional[str] = None
 
@@ -900,6 +927,7 @@ class ListingCreate(BaseModel):
     room_type: Optional[str] = None
     totalPrice: Optional[Union[float, int]] = None
     total_price: Optional[Union[float, int]] = None
+    pricing_mode: Optional[str] = "room_based"
 
 
 class ListingOut(BaseModel):
@@ -922,6 +950,7 @@ class ListingOut(BaseModel):
     room_type: Optional[str] = None
     totalPrice: Optional[Union[float, int]] = None
     total_price: Optional[Union[float, int]] = None
+    pricing_mode: Optional[str] = "room_based"
     room_configurations: List[dict] = []
     amenities: List[str] = []
     photo_urls: List[str] = []
@@ -955,6 +984,27 @@ def safe_int(val, default=None):
         return int(val)
     except (ValueError, TypeError):
         return default
+
+
+def get_beds_per_room(room_type: Optional[str]) -> int:
+    r_type = (room_type or "single").lower().strip()
+    if r_type == "double":
+        return 2
+    elif r_type == "triple":
+        return 3
+    elif r_type in ["quadruple", "triple+"]:
+        return 4
+    return 1
+
+
+def get_config_capacity(c: dict) -> int:
+    if not isinstance(c, dict):
+        return 1
+    r_type = c.get("room_type", "single")
+    count = safe_int(c.get("count"), 1)
+    if count < 1:
+        count = 1
+    return get_beds_per_room(r_type) * count
 
 
 def build_listing_out(item: Listing, advertiser: Optional[User] = None) -> ListingOut:
@@ -1001,7 +1051,8 @@ def build_listing_out(item: Listing, advertiser: Optional[User] = None) -> Listi
         near_university=bool(item.near_university),
         near_transit=bool(item.near_transit),
         totalPrice=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None),
-        total_price=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None)
+        total_price=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None),
+        pricing_mode=item.pricing_mode or "room_based"
     )
 
 
@@ -1149,6 +1200,38 @@ def register_user(payload: RegisterRequest):
         user = db.query(User).filter(User.phone == payload.phone).first()
         if user and (user.is_verified or user.password_hash):
             raise HTTPException(status_code=400, detail="رقم الهاتف مسجل بالفعل، يرجى تسجيل الدخول بدلاً من ذلك")
+
+        # Temporary OTP bypass: If password is provided, register user directly with password
+        if payload.password:
+            pwd = payload.password.strip()
+            if len(pwd) < 6:
+                raise HTTPException(status_code=400, detail="كلمة المرور يجب ألا تقل عن 6 أحرف")
+
+            if not user:
+                user = User(
+                    phone=payload.phone,
+                    name=payload.name.strip(),
+                    account_type=payload.account_type,
+                    password_hash=hash_password(pwd),
+                    is_verified=True,
+                    governorates=json.dumps(payload.governorates, ensure_ascii=False),
+                    profile_photo_url=payload.profile_photo_url,
+                    terms_accepted_at=datetime.utcnow() if payload.account_type in ["owner", "broker"] else None
+                )
+                db.add(user)
+            else:
+                user.name = payload.name.strip()
+                user.account_type = payload.account_type
+                user.password_hash = hash_password(pwd)
+                user.is_verified = True
+                if payload.governorates:
+                    user.governorates = json.dumps(payload.governorates, ensure_ascii=False)
+                if payload.profile_photo_url:
+                    user.profile_photo_url = payload.profile_photo_url
+
+            db.commit()
+            db.refresh(user)
+            return user_to_user_out(user)
 
         otp_code = f"{random.randint(100000, 999999)}"
 
@@ -1460,8 +1543,21 @@ def create_listing(payload: ListingCreate):
 
         if configs:
             for c in configs:
-                if "available_beds" not in c or c["available_beds"] is None:
-                    c["available_beds"] = safe_int(c.get("count"), 1)
+                if isinstance(c, dict):
+                    cap = get_config_capacity(c)
+                    if "available_beds" not in c or c["available_beds"] is None:
+                        c["available_beds"] = cap
+                    else:
+                        c["available_beds"] = min(safe_int(c["available_beds"], cap), cap)
+                    
+                    if advertiser and advertiser.account_type == "owner":
+                        c["commission"] = 0
+                        c["commission_min"] = None
+                        c["commission_max"] = None
+                        c["commission_pct"] = 0
+                        c["commission_type"] = "fixed"
+
+        calc_total_avail = sum(safe_int(c.get("available_beds"), get_config_capacity(c)) for c in configs if isinstance(c, dict)) if configs else (payload.available_beds or 1)
 
         listing = Listing(
             title=payload.title or "سكن طلاب",
@@ -1477,7 +1573,7 @@ def create_listing(payload: ListingCreate):
             latitude=payload.latitude,
             longitude=payload.longitude,
             gender=payload.gender,
-            available_beds=payload.available_beds,
+            available_beds=calc_total_avail,
             price_per_person=legacy_price,
             room_type=legacy_room_type,
             room_configurations=json.dumps(configs),
@@ -1497,7 +1593,8 @@ def create_listing(payload: ListingCreate):
             cover_photo_index=payload.cover_photo_index or 0,
             near_university=bool(payload.near_university),
             near_transit=bool(payload.near_transit),
-            total_price=payload.totalPrice if payload.totalPrice is not None else payload.total_price
+            total_price=payload.totalPrice if payload.totalPrice is not None else payload.total_price,
+            pricing_mode=payload.pricing_mode or "room_based"
         )
         db.add(listing)
         db.commit()
@@ -2232,7 +2329,12 @@ def update_available_beds(
                 configs[0]["available_beds"] = beds
 
             # Ensure all configs have an available_beds field
-            total_beds = sum(safe_int(c.get("available_beds"), 0) for c in configs)
+            for c in configs:
+                if isinstance(c, dict):
+                    if "available_beds" not in c or c["available_beds"] is None:
+                        c["available_beds"] = get_config_capacity(c)
+
+            total_beds = sum(safe_int(c.get("available_beds"), 0) for c in configs if isinstance(c, dict))
             listing.room_configurations = json.dumps(configs, ensure_ascii=False)
             listing.available_beds = total_beds
         else:
@@ -3422,9 +3524,24 @@ def update_listing(
             listing.gender = payload.gender
             listing.available_beds = payload.available_beds
             if configs:
+                adv = db.query(User).filter(User.id == listing.advertiser_id).first()
+                for c in configs:
+                    if isinstance(c, dict):
+                        cap = get_config_capacity(c)
+                        if "available_beds" not in c or c["available_beds"] is None:
+                            c["available_beds"] = cap
+                        
+                        if adv and adv.account_type == "owner":
+                            c["commission"] = 0
+                            c["commission_min"] = None
+                            c["commission_max"] = None
+                            c["commission_pct"] = 0
+                            c["commission_type"] = "fixed"
+
                 listing.price_per_person = configs[0].get("price_per_person", listing.price_per_person)
                 listing.room_type = configs[0].get("room_type", listing.room_type)
                 listing.room_configurations = json.dumps(configs, ensure_ascii=False)
+                listing.available_beds = sum(safe_int(c.get("available_beds"), get_config_capacity(c)) for c in configs if isinstance(c, dict))
             listing.amenities = json.dumps(payload.amenities, ensure_ascii=False)
             listing.photo_urls = json.dumps(payload.photo_urls, ensure_ascii=False)
             listing.video_urls = json.dumps(payload.video_urls, ensure_ascii=False)
@@ -3436,6 +3553,8 @@ def update_listing(
             listing.cover_photo_index = payload.cover_photo_index
             listing.near_university = bool(payload.near_university)
             listing.near_transit = bool(payload.near_transit)
+            if payload.pricing_mode:
+                listing.pricing_mode = payload.pricing_mode
             total_val = payload.totalPrice if payload.totalPrice is not None else payload.total_price
             if total_val is not None:
                 listing.total_price = total_val

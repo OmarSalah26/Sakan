@@ -226,3 +226,107 @@ def test_scenario6_existing_functionality(setup_system_test_data):
 
     res_admin_users = client.get(f"/admin/users?x_user_id={admin.id}", headers={"Authorization": f"Bearer {admin.auth_token}"})
     assert res_admin_users.status_code == 200
+
+
+def test_pricing_mode_and_total_price_scenarios(setup_system_test_data):
+    data = setup_system_test_data
+    advA = data["advA"]
+
+    # Test A: Normal room-based listing (4 beds * 3000 = 12000)
+    payload_a = {
+        "title": "Pricing Test Listing",
+        "governorate": "القاهرة",
+        "city": "مدينة نصر",
+        "neighborhood": "الحي السابع",
+        "gender": "male",
+        "available_beds": 4,
+        "advertiser_id": advA.id,
+        "pricing_mode": "room_based",
+        "total_price": 12000,
+        "room_configurations": [
+            {"room_type": "quadruple", "count": 1, "price_per_person": 3000, "commission": 500}
+        ]
+    }
+    res_a = client.post("/listings", json=payload_a, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res_a.status_code == 200
+    listing_a = res_a.json()
+    assert listing_a["pricing_mode"] == "room_based"
+    assert listing_a["totalPrice"] == 12000
+
+    # Test B & C: Manual override to total_based (14000)
+    payload_b = dict(payload_a)
+    payload_b["pricing_mode"] = "total_based"
+    payload_b["total_price"] = 14000
+    res_b = client.put(f"/listings/{listing_a['id']}?x_user_id={advA.id}", json=payload_b, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res_b.status_code == 200
+    listing_b = res_b.json()
+    assert listing_b["pricing_mode"] == "total_based"
+    assert listing_b["totalPrice"] == 14000
+
+    # Test D: Explicit return to room_based
+    payload_d = dict(payload_b)
+    payload_d["pricing_mode"] = "room_based"
+    payload_d["total_price"] = 12000
+    res_d = client.put(f"/listings/{listing_a['id']}?x_user_id={advA.id}", json=payload_d, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res_d.status_code == 200
+    listing_d = res_d.json()
+    assert listing_d["pricing_mode"] == "room_based"
+    assert listing_d["totalPrice"] == 12000
+
+    # Test E: Imported total-only listing
+    payload_e = {
+        "title": "Imported Listing",
+        "governorate": "القاهرة",
+        "city": "مصر الجديدة",
+        "neighborhood": "الميرغني",
+        "gender": "female",
+        "available_beds": 2,
+        "advertiser_id": advA.id,
+        "pricing_mode": "total_based",
+        "total_price": 15000,
+        "room_configurations": []
+    }
+    res_e = client.post("/listings", json=payload_e, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res_e.status_code == 200
+    listing_e = res_e.json()
+    assert listing_e["pricing_mode"] == "total_based"
+    assert listing_e["totalPrice"] == 15000
+
+
+def test_range_commission_and_min_max_persistence(setup_system_test_data):
+    data = setup_system_test_data
+    advA = data["advA"]
+
+    # Create listing with range commission (commission_min_pct: 20, commission_max_pct: 60)
+    payload = {
+        "title": "Variable Commission Test Listing",
+        "governorate": "القاهرة",
+        "city": "مدينة نصر",
+        "neighborhood": "الحي الثامن",
+        "gender": "male",
+        "available_beds": 2,
+        "advertiser_id": advA.id,
+        "pricing_mode": "room_based",
+        "total_price": 6000,
+        "room_configurations": [
+            {
+                "room_type": "double",
+                "count": 1,
+                "price_per_person": 3000,
+                "commission_type": "range",
+                "commission_min_pct": 20,
+                "commission_max_pct": 60,
+                "commission_min": 20,
+                "commission_max": 60
+            }
+        ]
+    }
+    res = client.post("/listings", json=payload, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res.status_code == 200
+    listing = res.json()
+    configs = listing.get("room_configurations", [])
+    assert len(configs) == 1
+    assert configs[0]["commission_type"] == "range"
+    assert configs[0]["commission_min"] == 20 or configs[0]["commission_min_pct"] == 20
+    assert configs[0]["commission_max"] == 60 or configs[0]["commission_max_pct"] == 60
+
