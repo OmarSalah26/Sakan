@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 import pytest
@@ -30,6 +31,8 @@ def setup_system_test_data():
         db.refresh(advA)
         db.refresh(advB)
 
+        photos_json = json.dumps(["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg"])
+
         # Listings for Advertiser A
         listingA1 = Listing(
             title="Alpha Property 1",
@@ -39,6 +42,7 @@ def setup_system_test_data():
             address="Street 1",
             gender="male",
             available_beds=3,
+            photo_urls=photos_json,
             advertiser_id=advA.id,
             status="active"
         )
@@ -50,6 +54,7 @@ def setup_system_test_data():
             address="Street 2",
             gender="female",
             available_beds=2,
+            photo_urls=photos_json,
             advertiser_id=advA.id,
             status="active"
         )
@@ -63,6 +68,7 @@ def setup_system_test_data():
             address="Street 3",
             gender="male",
             available_beds=4,
+            photo_urls=photos_json,
             advertiser_id=advB.id,
             status="active"
         )
@@ -232,6 +238,8 @@ def test_pricing_mode_and_total_price_scenarios(setup_system_test_data):
     data = setup_system_test_data
     advA = data["advA"]
 
+    sample_photos = ["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg"]
+
     # Test A: Normal room-based listing (4 beds * 3000 = 12000)
     payload_a = {
         "title": "Pricing Test Listing",
@@ -243,6 +251,7 @@ def test_pricing_mode_and_total_price_scenarios(setup_system_test_data):
         "advertiser_id": advA.id,
         "pricing_mode": "room_based",
         "total_price": 12000,
+        "photo_urls": sample_photos,
         "room_configurations": [
             {"room_type": "quadruple", "count": 1, "price_per_person": 3000, "commission": 500}
         ]
@@ -273,6 +282,91 @@ def test_pricing_mode_and_total_price_scenarios(setup_system_test_data):
     assert listing_d["pricing_mode"] == "room_based"
     assert listing_d["totalPrice"] == 12000
 
+
+def test_step2_phone_admin_assignment_and_floor_address_separation(setup_system_test_data):
+    data = setup_system_test_data
+    admin = data["admin"]
+    advA = data["advA"]
+
+    sample_photos = ["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg"]
+
+    # 1. Test Admin creating listing under registered user's contact_phone -> reassigns advertiser_id to advA
+    payload_a = {
+        "title": "Admin Created for AdvA",
+        "governorate": "القاهرة",
+        "city": "مدينة نصر",
+        "neighborhood": "الحي السابع",
+        "gender": "male",
+        "available_beds": 1,
+        "contact_phone": advA.phone,
+        "advertiser_id": admin.id,
+        "full_address": "شارع الطيران، عمارة 10، الدور الثالث",
+        "floor": "3",
+        "photo_urls": sample_photos,
+        "room_configurations": [{"room_type": "single", "count": 1, "price_per_person": 3000}]
+    }
+    res_a = client.post("/listings", json=payload_a, headers={"Authorization": f"Bearer {admin.auth_token}"})
+    assert res_a.status_code == 200
+    listing_a = res_a.json()
+    assert listing_a["advertiser_id"] == advA.id
+    assert "الدور" not in listing_a["address"]
+    assert listing_a["address"] == "شارع الطيران، عمارة 10"
+
+    # 2. Test updating listing with empty contact_phone preserves empty address without auto-filling admin phone
+    payload_update = {
+        "title": "Admin Created for AdvA Updated",
+        "governorate": "القاهرة",
+        "city": "مدينة نصر",
+        "neighborhood": "الحي السابع",
+        "gender": "male",
+        "available_beds": 1,
+        "advertiser_id": admin.id,
+        "contact_phone": "",
+        "address": "شارع مصطفى النحاس",
+        "full_address": "شارع مصطفى النحاس، الدور 2",
+        "floor": "2",
+        "photo_urls": sample_photos,
+        "room_configurations": [{"room_type": "single", "count": 1, "price_per_person": 3500}]
+    }
+    res_u = client.put(f"/listings/{listing_a['id']}?x_user_id={admin.id}", json=payload_update, headers={"Authorization": f"Bearer {admin.auth_token}"})
+    assert res_u.status_code == 200
+    listing_u = res_u.json()
+    assert "الدور" not in listing_u["address"]
+    assert listing_u["address"] == "شارع مصطفى النحاس"
+
+
+def test_prevent_duplicate_listing_creation_within_window(setup_system_test_data):
+    data = setup_system_test_data
+    advA = data["advA"]
+
+    sample_photos = ["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg"]
+
+    payload = {
+        "title": "Idempotent Test Listing",
+        "governorate": "أسيوط",
+        "city": "أسيوط",
+        "neighborhood": "شركة الفريزر",
+        "address": "شارع الجمهورية",
+        "gender": "male",
+        "available_beds": 2,
+        "advertiser_id": advA.id,
+        "photo_urls": sample_photos,
+        "room_configurations": [{"room_type": "double", "count": 1, "price_per_person": 1500}]
+    }
+
+    # First publish request
+    res1 = client.post("/listings", json=payload, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res1.status_code == 200
+    listing1 = res1.json()
+
+    # Rapid second publish request (simulating double click / network duplicate)
+    res2 = client.post("/listings", json=payload, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res2.status_code == 200
+    listing2 = res2.json()
+
+    # Must return the exact same listing ID (no duplicate created)
+    assert listing1["id"] == listing2["id"]
+
     # Test E: Imported total-only listing
     payload_e = {
         "title": "Imported Listing",
@@ -284,6 +378,7 @@ def test_pricing_mode_and_total_price_scenarios(setup_system_test_data):
         "advertiser_id": advA.id,
         "pricing_mode": "total_based",
         "total_price": 15000,
+        "photo_urls": sample_photos,
         "room_configurations": []
     }
     res_e = client.post("/listings", json=payload_e, headers={"Authorization": f"Bearer {advA.auth_token}"})
@@ -297,6 +392,8 @@ def test_range_commission_and_min_max_persistence(setup_system_test_data):
     data = setup_system_test_data
     advA = data["advA"]
 
+    sample_photos = ["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg"]
+
     # Create listing with range commission (commission_min_pct: 20, commission_max_pct: 60)
     payload = {
         "title": "Variable Commission Test Listing",
@@ -308,6 +405,7 @@ def test_range_commission_and_min_max_persistence(setup_system_test_data):
         "advertiser_id": advA.id,
         "pricing_mode": "room_based",
         "total_price": 6000,
+        "photo_urls": sample_photos,
         "room_configurations": [
             {
                 "room_type": "double",
@@ -329,4 +427,88 @@ def test_range_commission_and_min_max_persistence(setup_system_test_data):
     assert configs[0]["commission_type"] == "range"
     assert configs[0]["commission_min"] == 20 or configs[0]["commission_min_pct"] == 20
     assert configs[0]["commission_max"] == 60 or configs[0]["commission_max_pct"] == 60
+
+
+def test_listing_media_5_images_requirement(setup_system_test_data):
+    data = setup_system_test_data
+    advA = data["advA"]
+
+    base_payload = {
+        "title": "Media Requirement Test Listing",
+        "governorate": "القاهرة",
+        "city": "مدينة نصر",
+        "neighborhood": "الحي السابع",
+        "gender": "male",
+        "available_beds": 1,
+        "advertiser_id": advA.id,
+        "room_configurations": [{"room_type": "single", "count": 1, "price_per_person": 2000}]
+    }
+
+    # 1. 0 images -> reject 400
+    p0 = dict(base_payload, photo_urls=[])
+    res0 = client.post("/listings", json=p0, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res0.status_code == 400
+    assert "يجب إضافة 5 صور على الأقل" in res0.json()["detail"]
+
+    # 2. 1 image -> reject 400
+    p1 = dict(base_payload, photo_urls=["/img1.jpg"])
+    res1 = client.post("/listings", json=p1, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res1.status_code == 400
+    assert "يجب إضافة 5 صور على الأقل" in res1.json()["detail"]
+
+    # 3. 4 images -> reject 400
+    p4 = dict(base_payload, photo_urls=["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg"])
+    res4 = client.post("/listings", json=p4, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res4.status_code == 400
+    assert "يجب إضافة 5 صور على الأقل" in res4.json()["detail"]
+
+    # 4. Exactly 5 images -> allow 200
+    p5 = dict(base_payload, photo_urls=["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg"])
+    res5 = client.post("/listings", json=p5, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res5.status_code == 200
+
+    # 5. 6 images -> allow 200
+    p6 = dict(base_payload, photo_urls=["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg", "/img6.jpg"])
+    p6["title"] = "Media Requirement Test Listing 6"
+    res6 = client.post("/listings", json=p6, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res6.status_code == 200
+
+
+def test_room_config_insurance_three_state_persistence(setup_system_test_data):
+    data = setup_system_test_data
+    advA = data["advA"]
+    sample_photos = ["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg"]
+
+    # 1. State A: Neither selected (insurance_price = null)
+    payload_a = {
+        "title": "Insurance State A Test",
+        "governorate": "القاهرة",
+        "city": "مدينة نصر",
+        "neighborhood": "الحي السابع",
+        "gender": "male",
+        "available_beds": 1,
+        "advertiser_id": advA.id,
+        "photo_urls": sample_photos,
+        "room_configurations": [{"room_type": "single", "count": 1, "price_per_person": 2000, "insurance_price": None}]
+    }
+    res_a = client.post("/listings", json=payload_a, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res_a.status_code == 200
+    cfg_a = res_a.json()["room_configurations"][0]
+    assert cfg_a.get("insurance_price") is None
+
+    # 2. State B: "يوجد تأمين" selected (insurance_price = 1500)
+    payload_b = dict(payload_a, title="Insurance State B Test", room_configurations=[{"room_type": "single", "count": 1, "price_per_person": 2000, "insurance_price": 1500, "_insurance_type": "exists"}])
+    res_b = client.post("/listings", json=payload_b, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res_b.status_code == 200
+    cfg_b = res_b.json()["room_configurations"][0]
+    assert cfg_b["insurance_price"] == 1500
+
+    # 3. State C: "لا يوجد تأمين" selected (insurance_price = 0)
+    payload_c = dict(payload_a, title="Insurance State C Test", room_configurations=[{"room_type": "single", "count": 1, "price_per_person": 2000, "insurance_price": 0, "_insurance_type": "none"}])
+    res_c = client.post("/listings", json=payload_c, headers={"Authorization": f"Bearer {advA.auth_token}"})
+    assert res_c.status_code == 200
+    cfg_c = res_c.json()["room_configurations"][0]
+    assert cfg_c["insurance_price"] == 0
+
+
 

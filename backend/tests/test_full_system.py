@@ -66,6 +66,7 @@ def _create_listing(advertiser_id, **kwargs):
         "price_per_person": 1500,
         "room_type": "single",
         "description": "وحدة رائعة",
+        "photo_urls": ["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg"],
         "room_configurations": [
             {"room_type": "single", "price_per_person": 1500, "commission": 750}
         ],

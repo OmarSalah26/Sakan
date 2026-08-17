@@ -193,5 +193,18 @@ export function formatUnifiedShareText(listing) {
   return lines.join('\n');
 }
 
+export function stripFloorFromAddress(addr) {
+  if (!addr || typeof addr !== 'string') return '';
+  return addr
+    .replace(/(?:،|,)?\s*الدور\s+(?:الأرضي|الارضي|الأول|الاول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|\d+)/gi, '')
+    .replace(/(?:،|,)?\s*دور\s+(?:أرضي|ارضي|أول|اول|ثاني|ثالث|رابع|خامس|سادس|سابع|ثامن|تاسع|عاشر|\d+)/gi, '')
+    .replace(/,\s*,/g, ',')
+    .replace(/،\s*،/g, '،')
+    .trim()
+    .replace(/^،|،$/g, '')
+    .replace(/^,|,$/g, '')
+    .trim();
+}
+
 
 

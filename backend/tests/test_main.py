@@ -54,6 +54,7 @@ def test_create_listing():
         'room_type': 'single',
         'description': 'Great place',
         'amenities': ['wifi', 'ac'],
+        'photo_urls': ['/img1.jpg', '/img2.jpg', '/img3.jpg', '/img4.jpg', '/img5.jpg'],
         'advertiser_id': advertiser_id,
     })
     assert response.status_code == 200

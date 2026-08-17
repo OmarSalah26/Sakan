@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useNavigate } from './router/Router';
 import { useApp } from './context/AppContext';
-import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText } from './utils/phoneUtils';
+import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText, stripFloorFromAddress } from './utils/phoneUtils';
 
 import { 
   Bell, BookOpen, Plus, Search, MapPin, CheckCircle, CheckCircle2, ShieldCheck, 
@@ -630,6 +630,7 @@ export default function App() {
   const [customAmenity, setCustomAmenity] = useState('');
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [showAmenitiesModal, setShowAmenitiesModal] = useState(false);
+  const [isSubmittingListing, setIsSubmittingListing] = useState(false);
   const [createForm, setCreateForm] = useState({
     title: '',
     governorate: '',
@@ -935,7 +936,20 @@ export default function App() {
       return [];
     };
 
-    const roomConfigs = parseArr(item.room_configurations);
+    const rawRoomConfigs = parseArr(item.room_configurations);
+    const roomConfigs = rawRoomConfigs.map(c => {
+      let insType = c._insurance_type;
+      if (!insType) {
+        if (c.insurance_price === 0 || c.insurance_price === '0') {
+          insType = 'none';
+        } else if (c.insurance_price !== null && c.insurance_price !== undefined && c.insurance_price !== '' && Number(c.insurance_price) > 0) {
+          insType = 'exists';
+        } else {
+          insType = null;
+        }
+      }
+      return { ...c, _insurance_type: insType };
+    });
     const rawAmenitiesList = parseArr(item.amenities);
     const photoUrlsList = parseArr(item.photo_urls);
     const videoUrlsList = parseArr(item.video_urls);
@@ -949,14 +963,18 @@ export default function App() {
         .filter(Boolean)
     ));
 
+    const cleanedAddress = stripFloorFromAddress(item.address || item.full_address || '');
+    const floorVal = parseFloorValue(item.floor || item.address);
+    const existingContact = item.contact_phone !== undefined && item.contact_phone !== null ? item.contact_phone : (item.phone || '');
+
     setCreateForm({
       title: item.title || '',
       governorate: item.governorate || '',
       city: item.city || '',
       neighborhood: item.neighborhood || '',
-      full_address: item.address || '',
-      address: item.address || '',
-      floor: parseFloorValue(item.floor),
+      full_address: cleanedAddress,
+      address: cleanedAddress,
+      floor: floorVal,
       maps_link: item.maps_link || '',
       latitude: item.latitude || null,
       longitude: item.longitude || null,
@@ -976,9 +994,9 @@ export default function App() {
       source: item.source || 'normal',
       full_edit_available: item.full_edit_available || false,
       location_precise: item.location_precise || false,
-      contact_phone: item.contact_phone || item.phone || '',
-      whatsapp_phone: item.whatsapp_phone || item.contact_phone || item.phone || '',
-      no_whatsapp: Boolean(item.whatsapp_phone && item.contact_phone && item.whatsapp_phone !== item.contact_phone),
+      contact_phone: existingContact,
+      whatsapp_phone: item.whatsapp_phone || existingContact,
+      no_whatsapp: Boolean(item.whatsapp_phone && existingContact && item.whatsapp_phone !== existingContact),
       contact_verified: true
     });
     setShowMapPicker(false);
@@ -1640,7 +1658,7 @@ export default function App() {
         showToast(`يرجى إدخال سعر الإيجار لفئة الغرفة #${i + 1}`);
         return;
       }
-      const isExists = conf._insurance_type === 'exists' || (conf.insurance_price !== null && conf.insurance_price !== undefined && conf.insurance_price !== '' && Number(conf.insurance_price) > 0);
+      const isExists = conf._insurance_type === 'exists';
       if (isExists && (!conf.insurance_price || Number(conf.insurance_price) <= 0)) {
         showToast(`يرجى إدخال مبلغ التأمين المالي لفئة الغرفة #${i + 1}`);
         return;
@@ -1650,6 +1668,7 @@ export default function App() {
   };
 
   const handleCreateSubmit = async () => {
+    if (isSubmittingListing) return;
     let activeUser = user;
     if (!activeUser) {
       try {
@@ -1691,12 +1710,12 @@ export default function App() {
   };
 
   const submitListingWithUser = async (currentUser) => {
-    if (!currentUser || !currentUser.id) return;
+    if (!currentUser || !currentUser.id || isSubmittingListing) return;
     const isEditing = Boolean(editingListing && editingListing.id);
     const isAdminUser = currentUser.account_type === 'admin';
-    const targetContact = createForm.contact_phone || currentUser.phone || '';
+    const targetContact = createForm.contact_phone !== undefined && createForm.contact_phone !== null ? createForm.contact_phone : '';
 
-    if (!isEditing && !isAdminUser && targetContact !== (currentUser.phone || '') && !createForm.contact_verified) {
+    if (!isEditing && !isAdminUser && targetContact !== '' && targetContact !== (currentUser.phone || '') && !createForm.contact_verified) {
       const inputOtp = prompt(`تم إرسال كود التفعيل إلى الرقم ${targetContact}. أدخل الكود (123456):`);
       if (inputOtp !== '123456') {
         showToast('كود تفعيل رقم الهاتف للتواصل غير صحيح (الكود التجريبي: 123456)');
@@ -1705,6 +1724,13 @@ export default function App() {
       setCreateForm(prev => ({ ...prev, contact_verified: true }));
     }
 
+    const validPhotos = (createForm.photo_urls || []).filter(url => Boolean(url && String(url).trim()));
+    if (validPhotos.length < 5) {
+      showToast(`يجب إضافة 5 صور على الأقل قبل نشر الإعلان (تم إضافة ${validPhotos.length} من 5)`);
+      return;
+    }
+
+    setIsSubmittingListing(true);
     try {
       const isEditing = Boolean(editingListing && editingListing.id);
       showToast(isEditing ? "جاري حفظ التعديلات..." : "جاري نشر العقار...");
@@ -1733,7 +1759,7 @@ export default function App() {
           commission_max: isOwnerUser ? null : (c.commission_max !== '' && c.commission_max !== null ? Number(c.commission_max) : (c.commission_max_pct ?? 100)),
           commission_pct: isOwnerUser ? 0 : (c.commission_pct ?? 50),
           commission_type: isOwnerUser ? 'fixed' : (c.commission_type || 'fixed'),
-          insurance_price: (c.insurance_price === 0 || c.insurance_price === '0' || c._insurance_type === 'none') ? 0 : (c.insurance_price !== null && c.insurance_price !== undefined && c.insurance_price !== '' && Number(c.insurance_price) > 0 ? Number(c.insurance_price) : null),
+          insurance_price: c._insurance_type === 'none' ? 0 : (c._insurance_type === 'exists' && c.insurance_price !== null && c.insurance_price !== undefined && c.insurance_price !== '' && Number(c.insurance_price) > 0 ? Number(c.insurance_price) : null),
           count: roomCount,
           available_beds: availBeds
         };
@@ -1755,18 +1781,21 @@ export default function App() {
         ? Number(createForm.total_price)
         : computedRoomTotal;
 
+      const cleanedFullAddr = stripFloorFromAddress(createForm.full_address || createForm.address || '');
+
       let payload = {
         ...createForm,
         available_beds: totalCalculatedAvailBeds,
         pricing_mode: finalPricingMode,
         total_price: finalTotalPrice,
         totalPrice: finalTotalPrice,
-        address: createForm.full_address || createForm.address,
+        address: cleanedFullAddr,
+        full_address: cleanedFullAddr,
         floor: createForm.floor !== null && createForm.floor !== undefined ? String(createForm.floor) : null,
         street: createForm.street !== null && createForm.street !== undefined ? String(createForm.street) : null,
         building_number: createForm.building_number !== null && createForm.building_number !== undefined ? String(createForm.building_number) : null,
         apartment_number: createForm.apartment_number !== null && createForm.apartment_number !== undefined ? String(createForm.apartment_number) : null,
-        contact_phone: targetContact ? String(targetContact) : null,
+        contact_phone: targetContact !== '' ? String(targetContact) : null,
         whatsapp_phone: createForm.no_whatsapp ? (createForm.whatsapp_phone ? String(createForm.whatsapp_phone) : String(targetContact)) : String(targetContact),
         room_configurations: cleanedConfigs,
         advertiser_id: currentUser.id,
@@ -1812,6 +1841,8 @@ export default function App() {
       }
     } catch (err) {
       showToast("خطأ في الاتصال بالخادم أثناء نشر الإعلان");
+    } finally {
+      setIsSubmittingListing(false);
     }
   };
 
@@ -4955,13 +4986,13 @@ export default function App() {
                     </label>
                     <input 
                       type="tel" 
-                      value={createForm.contact_phone || user?.phone || ''} 
+                      value={createForm.contact_phone !== undefined && createForm.contact_phone !== null ? createForm.contact_phone : ''} 
                       onChange={(e) => {
                         const val = e.target.value;
                         setCreateForm(prev => ({
                           ...prev,
                           contact_phone: val,
-                          contact_verified: val === (user?.phone || '')
+                          contact_verified: Boolean(user?.phone && val === user.phone)
                         }));
                       }}
                       placeholder="01xxxxxxxxx" 
@@ -4969,7 +5000,7 @@ export default function App() {
                       required 
                     />
                     <small style={{ color: 'var(--text-muted)', fontSize: '0.73rem', marginTop: '0.2rem', display: 'block' }}>
-                      افتراضياً تم إدراج رقم هاتفك الموثق ({user?.phone || 'غير مسجل'}).
+                      يمكنك تحديد وتعديل رقم الهاتف المخصص للتواصل الخاص بهذا الإعلان.
                     </small>
 
                     <div style={{ marginTop: '0.5rem' }}>
@@ -5197,8 +5228,8 @@ export default function App() {
                       ? config.commission_pct
                       : (typeof config.commission === 'number' && config.commission <= 100 ? config.commission : 50);
 
-                    const isInsuranceExists = config._insurance_type === 'exists' || (config.insurance_price !== null && config.insurance_price !== undefined && config.insurance_price !== '' && Number(config.insurance_price) > 0);
-                    const isInsuranceNone = config._insurance_type === 'none' || config.insurance_price === 0 || config.insurance_price === '0';
+                    const isInsuranceExists = config._insurance_type === 'exists';
+                    const isInsuranceNone = config._insurance_type === 'none';
 
                     return (
                       <div key={index} style={{ background: '#ffffff', border: '1.5px solid #cbd5e1', padding: '0.85rem 1rem', borderRadius: '12px', marginBottom: '0.85rem', display: 'grid', gap: '0.65rem', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
@@ -5293,47 +5324,69 @@ export default function App() {
                           {/* Col 3: Insurance Setup */}
                           <div>
                             <label style={{ fontSize: '0.8rem', fontWeight: 700, display: 'block', marginBottom: '0.25rem', color: '#1e293b' }}>التأمين المالي للفئة</label>
-                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
                               <button
                                 type="button"
                                 style={{
-                                  padding: '0.3rem 0.55rem',
-                                  fontSize: '0.78rem',
+                                  padding: '0.35rem 0.65rem',
+                                  fontSize: '0.8rem',
                                   fontWeight: 700,
                                   borderRadius: 'var(--r-sm)',
-                                  border: isInsuranceNone ? '1.5px solid #94a3b8' : '1px solid #cbd5e1',
+                                  border: isInsuranceNone ? '2px solid #475569' : '1.5px solid #cbd5e1',
                                   background: isInsuranceNone ? '#f1f5f9' : '#ffffff',
-                                  color: isInsuranceNone ? '#334155' : '#64748b',
-                                  cursor: 'pointer'
+                                  color: isInsuranceNone ? '#0f172a' : '#64748b',
+                                  boxShadow: isInsuranceNone ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                  transition: 'all 0.15s ease'
                                 }}
                                 onClick={() => {
-                                  updateRoomConfig(index, '_insurance_type', 'none');
-                                  updateRoomConfig(index, 'insurance_price', 0);
+                                  if (isInsuranceNone) {
+                                    updateRoomConfig(index, '_insurance_type', null);
+                                    updateRoomConfig(index, 'insurance_price', null);
+                                  } else {
+                                    updateRoomConfig(index, '_insurance_type', 'none');
+                                    updateRoomConfig(index, 'insurance_price', 0);
+                                  }
                                 }}
                               >
-                                لا يوجد تأمين
+                                {isInsuranceNone && <Check style={{ width: 14, height: 14 }} />}
+                                <span>لا يوجد تأمين</span>
                               </button>
 
                               <button
                                 type="button"
                                 style={{
-                                  padding: '0.3rem 0.55rem',
-                                  fontSize: '0.78rem',
+                                  padding: '0.35rem 0.65rem',
+                                  fontSize: '0.8rem',
                                   fontWeight: 700,
                                   borderRadius: 'var(--r-sm)',
-                                  border: isInsuranceExists ? '1.5px solid #3b82f6' : '1px solid #cbd5e1',
+                                  border: isInsuranceExists ? '2px solid #2563eb' : '1.5px solid #cbd5e1',
                                   background: isInsuranceExists ? '#eff6ff' : '#ffffff',
-                                  color: isInsuranceExists ? '#1d4ed8' : '#64748b',
-                                  cursor: 'pointer'
+                                  color: isInsuranceExists ? '#1e40af' : '#64748b',
+                                  boxShadow: isInsuranceExists ? '0 1px 3px rgba(37,99,235,0.12)' : 'none',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                  transition: 'all 0.15s ease'
                                 }}
                                 onClick={() => {
-                                  updateRoomConfig(index, '_insurance_type', 'exists');
-                                  if (!config.insurance_price || Number(config.insurance_price) <= 0) {
-                                    updateRoomConfig(index, 'insurance_price', '');
+                                  if (isInsuranceExists) {
+                                    updateRoomConfig(index, '_insurance_type', null);
+                                    updateRoomConfig(index, 'insurance_price', null);
+                                  } else {
+                                    updateRoomConfig(index, '_insurance_type', 'exists');
+                                    if (!config.insurance_price || Number(config.insurance_price) <= 0) {
+                                      updateRoomConfig(index, 'insurance_price', '');
+                                    }
                                   }
                                 }}
                               >
-                                يوجد تأمين
+                                {isInsuranceExists && <Check style={{ width: 14, height: 14 }} />}
+                                <span>يوجد تأمين</span>
                               </button>
 
                               {isInsuranceExists && (
@@ -5343,9 +5396,10 @@ export default function App() {
                                   value={config.insurance_price === null || config.insurance_price === undefined ? '' : config.insurance_price} 
                                   onFocus={(e) => e.target.select()}
                                   placeholder="مبلغ التأمين"
-                                  style={{ background: '#ffffff', border: '1.5px solid #3b82f6', borderRadius: 'var(--r-sm)', padding: '0.3rem 0.45rem', fontWeight: 700, width: '90px', height: '36px', fontSize: '0.82rem' }}
+                                  style={{ background: '#ffffff', border: '2px solid #2563eb', borderRadius: 'var(--r-sm)', padding: '0.35rem 0.5rem', fontWeight: 700, width: '100px', height: '36px', fontSize: '0.82rem', outline: 'none' }}
                                   onChange={(e) => {
                                     const val = e.target.value;
+                                    updateRoomConfig(index, '_insurance_type', 'exists');
                                     updateRoomConfig(index, 'insurance_price', val === '' ? '' : Math.max(0, Number(val)));
                                   }} 
                                   required
@@ -5675,6 +5729,13 @@ export default function App() {
                   <div className="form-group">
                     <label>صور الوحدة - {createForm.photo_urls.length} مرفوعة (٥ كحد أدنى، ٣٠ كحد أقصى)</label>
 
+                    {createForm.photo_urls.length < 5 && (
+                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', padding: '0.65rem 0.85rem', borderRadius: 'var(--r-md)', fontSize: '0.82rem', marginTop: '0.35rem', marginBottom: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0 }} />
+                        <span>يجب إضافة 5 صور على الأقل قبل نشر الإعلان (تم إضافة {createForm.photo_urls.length} من 5 المطلوب)</span>
+                      </div>
+                    )}
+
                     {/* Thumbnail grid with uploaded photos + uploading placeholder tiles */}
                     {(createForm.photo_urls.length > 0 || uploadingPhotoCount > 0) && (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
@@ -5887,8 +5948,21 @@ export default function App() {
                 <button className="btn-primary" onClick={() => handleStepChange(5)}>التالي</button>
               )}
               {createStep === 5 && (
-                <button className="btn-primary" onClick={handleCreateSubmit}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>نشر الإعلان مباشرة <Send style={{ width: 16, height: 16 }} /></span>
+                <button 
+                  className="btn-primary" 
+                  onClick={handleCreateSubmit}
+                  disabled={isSubmittingListing}
+                  style={{ opacity: isSubmittingListing ? 0.7 : 1, cursor: isSubmittingListing ? 'not-allowed' : 'pointer' }}
+                >
+                  {isSubmittingListing ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                      جاري نشر العقار... <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
+                    </span>
+                  ) : (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                      {editingListing ? "حفظ التعديلات" : "نشر الإعلان مباشرة"} <Send style={{ width: 16, height: 16 }} />
+                    </span>
+                  )}
                 </button>
               )}
             </div>
@@ -6072,8 +6146,8 @@ export default function App() {
                       amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name).concat(OUTDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name)),
                       near_university: false,
                       near_transit: false,
-                      photo_urls: [...PRESETS_PROPERTY_IMAGES],
-                      video_urls: [...PRESETS_PROPERTY_VIDEOS],
+                      photo_urls: [],
+                      video_urls: [],
                       description: '',
                       tier: 'regular',
                       min_lease_months: null

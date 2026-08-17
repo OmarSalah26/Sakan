@@ -40,6 +40,7 @@ def test_submit_advertiser_rating_and_complaint():
         'room_type': 'double',
         'description': 'Good location',
         'amenities': ['wifi'],
+        'photo_urls': ['/img1.jpg', '/img2.jpg', '/img3.jpg', '/img4.jpg', '/img5.jpg'],
         'advertiser_id': advertiser['id'],
     })
 

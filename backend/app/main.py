@@ -3,6 +3,7 @@ import html
 import json
 import os
 import shutil
+import re
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -1534,13 +1535,22 @@ def upload_listing_video(file: UploadFile = File(...)):
     return {"url": f"/static/uploads/listings/{filename}"}
 
 
+def strip_floor_from_address(addr: Optional[str]) -> str:
+    if not addr:
+        return ""
+    cleaned = re.sub(r'(?:،|,)?\s*الدور\s+(?:الأرضي|الارضي|الأول|الاول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|\d+)', '', addr, flags=re.IGNORECASE)
+    cleaned = re.sub(r'(?:،|,)?\s*دور\s+(?:أرضي|ارضي|أول|اول|ثاني|ثالث|رابع|خامس|سادس|سابع|ثامن|تاسع|عاشر|\d+)', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'[،,]\s*[،,]', '،', cleaned)
+    return cleaned.strip("،, ").strip()
+
+
 @app.post('/listings', response_model=ListingOut)
 def create_listing(payload: ListingCreate):
     db = SessionLocal()
     try:
         advertiser = db.query(User).filter(User.id == payload.advertiser_id).first()
         if not advertiser and payload.contact_phone:
-            advertiser = db.query(User).filter(User.phone == payload.contact_phone).first()
+            advertiser = db.query(User).filter(User.phone == payload.contact_phone.strip()).first()
             if advertiser:
                 payload.advertiser_id = advertiser.id
         if not advertiser:
@@ -1548,6 +1558,14 @@ def create_listing(payload: ListingCreate):
             if admin_user:
                 advertiser = admin_user
                 payload.advertiser_id = admin_user.id
+
+        # If admin is creating the listing and provided a contact_phone matching a registered user, assign listing to that user
+        if advertiser and advertiser.account_type == "admin" and payload.contact_phone:
+            phone_clean = payload.contact_phone.strip()
+            target_user = db.query(User).filter(User.phone == phone_clean).first()
+            if target_user:
+                advertiser = target_user
+                payload.advertiser_id = target_user.id
         if not advertiser:
             raise HTTPException(status_code=404, detail="المعلن غير موجود")
         if advertiser.is_banned:
@@ -1557,9 +1575,29 @@ def create_listing(payload: ListingCreate):
         if advertiser.account_type not in ["broker", "owner", "admin"]:
             raise HTTPException(status_code=403, detail="غير مصرح لهذا الحساب بنشر عقارات. الخدمة متاحة للوسطاء والملاك والمسؤولين فقط.")
 
+        # Procar Listing Production Media Rule: Minimum 5 images required
+        photos = payload.photo_urls or []
+        valid_photos = [p for p in photos if p and str(p).strip()]
+        if len(valid_photos) < 5:
+            raise HTTPException(status_code=400, detail="يجب إضافة 5 صور على الأقل قبل نشر الإعلان.")
+
         # Automatically record terms acceptance
         if not advertiser.terms_accepted_at:
             advertiser.terms_accepted_at = datetime.utcnow()
+
+        # Idempotency safeguard against rapid double-clicks or duplicate requests within 15 seconds
+        fifteen_sec_ago = datetime.utcnow() - timedelta(seconds=15)
+        recent_duplicate = db.query(Listing).filter(
+            Listing.advertiser_id == payload.advertiser_id,
+            Listing.title == (payload.title or "سكن طلاب"),
+            Listing.governorate == payload.governorate,
+            Listing.city == payload.city,
+            Listing.neighborhood == payload.neighborhood,
+            Listing.created_at >= fifteen_sec_ago
+        ).order_by(Listing.id.desc()).first()
+
+        if recent_duplicate:
+            return build_listing_out(recent_duplicate, advertiser)
 
         configs = payload.room_configurations
         # Fallback to legacy fields if room_configurations not provided (for older tests)
@@ -1575,8 +1613,9 @@ def create_listing(payload: ListingCreate):
 
         # Select user-provided address or build fallback from structured location parts (excluding floor-only)
         user_addr = (payload.full_address or payload.address or "").strip()
-        if user_addr:
-            computed_address = user_addr
+        user_addr_clean = strip_floor_from_address(user_addr)
+        if user_addr_clean:
+            computed_address = user_addr_clean
         else:
             parts = []
             if payload.building_number: parts.append(f"مبنى {payload.building_number}")
@@ -3521,6 +3560,12 @@ def update_listing(
         if not is_admin and not is_owner:
             raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل هذا الإعلان")
 
+        if is_admin and payload.contact_phone:
+            phone_clean = payload.contact_phone.strip()
+            target_user = db.query(User).filter(User.phone == phone_clean).first()
+            if target_user:
+                listing.advertiser_id = target_user.id
+
         source = listing.source or "normal"
         full_edit_avail = bool(listing.full_edit_available)
 
@@ -3532,6 +3577,12 @@ def update_listing(
             if payload.description is not None:
                 listing.description = payload.description
         else:
+            # Procar Listing Production Media Rule: Minimum 5 images required
+            target_photos = payload.photo_urls if payload.photo_urls else safe_json_loads(listing.photo_urls, [])
+            valid_photos = [p for p in target_photos if p and str(p).strip()]
+            if len(valid_photos) < 5:
+                raise HTTPException(status_code=400, detail="يجب إضافة 5 صور على الأقل قبل نشر الإعلان.")
+
             configs = payload.room_configurations
             if not configs and payload.price_per_person is not None:
                 configs = [{
@@ -3541,8 +3592,9 @@ def update_listing(
                 }]
 
             user_addr = (payload.full_address or payload.address or "").strip()
-            if user_addr:
-                computed_address = user_addr
+            user_addr_clean = strip_floor_from_address(user_addr)
+            if user_addr_clean:
+                computed_address = user_addr_clean
             elif payload.street or payload.building_number or payload.apartment_number:
                 parts = []
                 if payload.building_number: parts.append(f"مبنى {payload.building_number}")
@@ -3550,7 +3602,7 @@ def update_listing(
                 if payload.street: parts.append(f"شارع {payload.street}")
                 computed_address = "، ".join(parts)
             else:
-                computed_address = (listing.address or "").strip()
+                computed_address = strip_floor_from_address(listing.address or "")
 
             listing.title = payload.title or listing.title
             listing.governorate = payload.governorate
