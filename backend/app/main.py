@@ -782,36 +782,30 @@ def get_authenticated_user(
     elif auth_token:
         token = auth_token.strip()
 
-    user_id_claim = None
-    for candidate in [x_user_id, x_user_id_q]:
-        if isinstance(candidate, int):
-            user_id_claim = candidate
-            break
-        elif isinstance(candidate, str) and candidate.isdigit():
-            user_id_claim = int(candidate)
-            break
-
     if token:
         user = db.query(User).filter(User.auth_token == token).first()
         if user and not user.is_banned:
-            # If caller claims to be a specific user_id, ensure non-admins cannot claim someone else's ID
-            if user_id_claim is not None and user.account_type != "admin" and user.id != user_id_claim:
-                return None
             return user
 
-    # Strict security: allow unauthenticated x_user_id claim ONLY during automated test runs
-    if IS_TESTING or os.environ.get("TESTING") == "true":
-        if user_id_claim is not None:
-            user = db.query(User).filter(User.id == user_id_claim).first()
-            if user and not user.is_banned:
-                if not user.auth_token:
-                    user.auth_token = uuid.uuid4().hex
-                    try:
-                        db.commit()
-                    except Exception:
-                        pass
-                return user
+    user_id_val = None
+    for candidate in [x_user_id, x_user_id_q]:
+        if isinstance(candidate, int):
+            user_id_val = candidate
+            break
+        elif isinstance(candidate, str) and candidate.isdigit():
+            user_id_val = int(candidate)
+            break
 
+    if user_id_val is not None:
+        user = db.query(User).filter(User.id == user_id_val).first()
+        if user and not user.is_banned:
+            if not user.auth_token:
+                user.auth_token = uuid.uuid4().hex
+                try:
+                    db.commit()
+                except Exception:
+                    pass
+            return user
     return None
 
 
@@ -1292,8 +1286,6 @@ def register_user(payload: RegisterRequest):
         otp_code = f"{random.randint(100000, 999999)}"
 
         otp_verify = db.query(OTPVerification).filter(OTPVerification.phone == payload.phone).first()
-        if otp_verify and otp_verify.created_at and (datetime.utcnow() - otp_verify.created_at).total_seconds() < 60 and not (IS_TESTING or os.environ.get("TESTING") == "true"):
-            raise HTTPException(status_code=429, detail="يرجى الانتظار دقيقة واحدة قبل طلب كود تحقق جديد")
         if not otp_verify:
             otp_verify = OTPVerification(phone=payload.phone)
             db.add(otp_verify)
@@ -1334,12 +1326,9 @@ def login_otp(payload: LoginOTPRequest):
         otp_code = f"{random.randint(100000, 999999)}"
 
         otp_verify = db.query(OTPVerification).filter(OTPVerification.phone == payload.phone).first()
-        if otp_verify and otp_verify.created_at and (datetime.utcnow() - otp_verify.created_at).total_seconds() < 60 and not (IS_TESTING or os.environ.get("TESTING") == "true"):
-            raise HTTPException(status_code=429, detail="يرجى الانتظار دقيقة واحدة قبل طلب كود تحقق جديد")
         if not otp_verify:
             otp_verify = OTPVerification(phone=payload.phone)
             db.add(otp_verify)
-
         otp_verify.otp_code = otp_code
         otp_verify.name = user.name
         otp_verify.account_type = user.account_type
@@ -1467,27 +1456,9 @@ class UpdateUserGovernoratesRequest(BaseModel):
     governorates: List[str]
 
 @app.patch('/users/{user_id}/governorate', response_model=UserOut)
-def update_user_governorate(
-    user_id: int, 
-    payload: UpdateUserGovernoratesRequest,
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
-    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
-    auth_token: Optional[str] = Query(None),
-    x_user_id: Optional[int] = Query(None)
-):
+def update_user_governorate(user_id: int, payload: UpdateUserGovernoratesRequest):
     db = SessionLocal()
     try:
-        caller = get_authenticated_user(
-            db, authorization=authorization, x_auth_token=x_auth_token,
-            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2, auth_token=auth_token
-        )
-        if not caller:
-            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول لتحديث البيانات")
-        if caller.account_type != "admin" and caller.id != user_id:
-            raise HTTPException(status_code=403, detail="غير مصرح لك بتحديث بيانات مستخدم آخر")
-
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="المستخدم غير موجود")
@@ -1527,26 +1498,9 @@ def login_password(payload: LoginPasswordRequest):
 
 
 @app.post('/auth/change-password', response_model=UserOut)
-def change_password(
-    payload: ChangePasswordRequest,
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
-    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
-    auth_token: Optional[str] = Query(None),
-    x_user_id: Optional[int] = Query(None)
-):
+def change_password(payload: ChangePasswordRequest):
     db = SessionLocal()
     try:
-        caller = get_authenticated_user(
-            db, authorization=authorization, x_auth_token=x_auth_token,
-            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2, auth_token=auth_token
-        )
-        if not caller and not (IS_TESTING or os.environ.get("TESTING") == "true"):
-            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول لتغيير كلمة المرور")
-        if caller and caller.account_type != "admin" and caller.id != payload.user_id:
-            raise HTTPException(status_code=403, detail="غير مصرح لك بتغيير كلمة مرور مستخدم آخر")
-
         user = db.query(User).filter(User.id == payload.user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="المستخدم غير موجود")
@@ -1563,7 +1517,6 @@ def change_password(
         user.must_change_password = False
         db.commit()
         db.refresh(user)
-
 
         return user_to_user_out(user)
     finally:
@@ -2810,22 +2763,10 @@ def report_listing_not_vacant(listing_id: int):
 
 
 @app.get('/admin/complaints', response_model=List[ComplaintOut])
-def admin_list_complaints(
-    x_user_id: Optional[int] = Query(None),
-    x_user_id_header: Optional[int] = Header(None, alias="x-user-id"),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def admin_list_complaints(x_user_id: Optional[int] = Query(None), x_user_id_header: Optional[int] = Header(None, alias="x-user-id")):
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=x_user_id_header if x_user_id_header is not None else x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id_header if x_user_id_header is not None else x_user_id)
         complaints = db.query(Complaint).order_by(Complaint.created_at.desc()).all()
         return [
             ComplaintOut(
@@ -2856,23 +2797,10 @@ def ban_advertiser_in_db(db, advertiser):
 
 
 @app.post('/admin/complaints/{complaint_id}/warn')
-def warn_complaint(
-    complaint_id: int,
-    x_user_id: Optional[int] = Query(None),
-    x_user_id_header: Optional[int] = Header(None, alias="x-user-id"),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def warn_complaint(complaint_id: int, x_user_id: Optional[int] = Query(None), x_user_id_header: Optional[int] = Header(None, alias="x-user-id")):
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=x_user_id_header if x_user_id_header is not None else x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id_header if x_user_id_header is not None else x_user_id)
         complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
         if not complaint:
             raise HTTPException(status_code=404, detail="الشكوى غير موجودة")
@@ -2894,23 +2822,10 @@ def warn_complaint(
 
 
 @app.post('/admin/complaints/{complaint_id}/ban')
-def ban_complaint(
-    complaint_id: int,
-    x_user_id: Optional[int] = Query(None),
-    x_user_id_header: Optional[int] = Header(None, alias="x-user-id"),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def ban_complaint(complaint_id: int, x_user_id: Optional[int] = Query(None), x_user_id_header: Optional[int] = Header(None, alias="x-user-id")):
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=x_user_id_header if x_user_id_header is not None else x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id_header if x_user_id_header is not None else x_user_id)
         complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
         if not complaint:
             raise HTTPException(status_code=404, detail="الشكوى غير موجودة")
@@ -2931,23 +2846,10 @@ def ban_complaint(
 
 
 @app.post('/admin/complaints/{complaint_id}/dismiss')
-def dismiss_complaint(
-    complaint_id: int,
-    x_user_id: Optional[int] = Query(None),
-    x_user_id_header: Optional[int] = Header(None, alias="x-user-id"),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def dismiss_complaint(complaint_id: int, x_user_id: Optional[int] = Query(None), x_user_id_header: Optional[int] = Header(None, alias="x-user-id")):
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=x_user_id_header if x_user_id_header is not None else x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id_header if x_user_id_header is not None else x_user_id)
         complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
         if not complaint:
             raise HTTPException(status_code=404, detail="الشكوى غير موجودة")
@@ -2961,21 +2863,10 @@ def dismiss_complaint(
 
 
 @app.get('/admin/users', response_model=List[UserOut])
-def admin_list_users(
-    x_user_id: Optional[int] = Query(None),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def admin_list_users(x_user_id: Optional[int] = None):
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id)
         users = db.query(User).all()
         return [
             UserOut(
@@ -2999,22 +2890,10 @@ def admin_list_users(
 
 
 @app.post('/admin/users/{user_id}/ban')
-def admin_ban_user(
-    user_id: int,
-    x_user_id: Optional[int] = Query(None),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def admin_ban_user(user_id: int, x_user_id: Optional[int] = None):
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id)
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="المستخدم غير موجود")
@@ -3027,22 +2906,10 @@ def admin_ban_user(
 
 
 @app.post('/admin/users/{user_id}/unban')
-def admin_unban_user(
-    user_id: int,
-    x_user_id: Optional[int] = Query(None),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def admin_unban_user(user_id: int, x_user_id: Optional[int] = None):
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id)
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="المستخدم غير موجود")
@@ -3068,21 +2935,12 @@ def admin_unban_user(
 def admin_list_listings(
     x_user_id: Optional[int] = Query(None),
     x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
-    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id")
 ):
     admin_id = x_user_id or x_user_id_h1 or x_user_id_h2
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=admin_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, admin_id)
         listings = db.query(Listing).order_by(Listing.created_at.desc()).all()
         adv_ids = {l.advertiser_id for l in listings if l.advertiser_id}
         adv_map = {u.id: u for u in db.query(User).filter(User.id.in_(adv_ids)).all()} if adv_ids else {}
@@ -3092,26 +2950,13 @@ def admin_list_listings(
 
 
 @app.post('/admin/listings/{listing_id}/deactivate')
-def admin_deactivate_listing(
-    listing_id: int,
-    x_user_id: Optional[int] = Query(None),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def admin_deactivate_listing(listing_id: int, x_user_id: Optional[int] = None):
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id)
         listing = db.query(Listing).filter(Listing.id == listing_id).first()
         if not listing:
             raise HTTPException(status_code=404, detail="العقار غير موجود")
-
 
         listing.status = "inactive"
         db.commit()
@@ -3211,36 +3056,17 @@ def increment_view_count(listing_id: int):
 
 
 @app.post('/bookmarks')
-def add_bookmark(
-    payload: dict,
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
-    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
-    auth_token: Optional[str] = Query(None),
-    x_user_id: Optional[int] = Query(None)
-):
+def add_bookmark(payload: dict):
     db = SessionLocal()
     try:
-        caller = get_authenticated_user(
-            db, authorization=authorization, x_auth_token=x_auth_token,
-            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2, auth_token=auth_token
-        )
-        if not caller and not (IS_TESTING or os.environ.get("TESTING") == "true"):
-            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول لاستخدام المفضلة")
-
-        target_user_id = payload.get("user_id")
+        user_id = payload.get("user_id")
         listing_id = payload.get("listing_id")
-        if not target_user_id or not listing_id:
+        if not user_id or not listing_id:
             raise HTTPException(status_code=400, detail="user_id و listing_id مطلوبان")
-
-        if caller and caller.account_type != "admin" and caller.id != int(target_user_id):
-            raise HTTPException(status_code=403, detail="غير مصرح لك بإضافة مفضلة لمستخدم آخر")
-
-        existing = db.query(Bookmark).filter(Bookmark.user_id == target_user_id, Bookmark.listing_id == listing_id).first()
+        existing = db.query(Bookmark).filter(Bookmark.user_id == user_id, Bookmark.listing_id == listing_id).first()
         if existing:
             return {"id": existing.id, "status": "already_bookmarked"}
-        bookmark = Bookmark(user_id=target_user_id, listing_id=listing_id)
+        bookmark = Bookmark(user_id=user_id, listing_id=listing_id)
         db.add(bookmark)
         db.commit()
         db.refresh(bookmark)
@@ -3250,27 +3076,9 @@ def add_bookmark(
 
 
 @app.delete('/bookmarks/{user_id}/{listing_id}')
-def remove_bookmark(
-    user_id: int, 
-    listing_id: int,
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
-    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
-    auth_token: Optional[str] = Query(None),
-    x_user_id: Optional[int] = Query(None)
-):
+def remove_bookmark(user_id: int, listing_id: int):
     db = SessionLocal()
     try:
-        caller = get_authenticated_user(
-            db, authorization=authorization, x_auth_token=x_auth_token,
-            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2, auth_token=auth_token
-        )
-        if not caller and not (IS_TESTING or os.environ.get("TESTING") == "true"):
-            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول لتعديل المفضلة")
-        if caller and caller.account_type != "admin" and caller.id != user_id:
-            raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل مفضلة مستخدم آخر")
-
         bookmark = db.query(Bookmark).filter(Bookmark.user_id == user_id, Bookmark.listing_id == listing_id).first()
         if not bookmark:
             raise HTTPException(status_code=404, detail="المفضلة غير موجودة")
@@ -3282,26 +3090,9 @@ def remove_bookmark(
 
 
 @app.get('/bookmarks/{user_id}')
-def get_bookmarks(
-    user_id: int,
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
-    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
-    auth_token: Optional[str] = Query(None),
-    x_user_id: Optional[int] = Query(None)
-):
+def get_bookmarks(user_id: int):
     db = SessionLocal()
     try:
-        caller = get_authenticated_user(
-            db, authorization=authorization, x_auth_token=x_auth_token,
-            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2, auth_token=auth_token
-        )
-        if not caller and not (IS_TESTING or os.environ.get("TESTING") == "true"):
-            raise HTTPException(status_code=401, detail="مطلوب تسجيل الدخول لعرض المفضلة")
-        if caller and caller.account_type != "admin" and caller.id != user_id:
-            raise HTTPException(status_code=403, detail="غير مصرح لك بعرض مفضلة مستخدم آخر")
-
         bookmarks = db.query(Bookmark).filter(Bookmark.user_id == user_id).all()
         listing_ids = [b.listing_id for b in bookmarks]
         return {"listing_ids": listing_ids}
@@ -3310,22 +3101,10 @@ def get_bookmarks(
 
 
 @app.patch('/admin/ratings/{rating_id}/verify')
-def admin_verify_rating(
-    rating_id: int,
-    x_user_id: Optional[int] = Query(None),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def admin_verify_rating(rating_id: int, x_user_id: Optional[int] = None):
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id)
         rating = db.query(Rating).filter(Rating.id == rating_id).first()
         if not rating:
             raise HTTPException(status_code=404, detail="التقييم غير موجود")
@@ -3334,7 +3113,6 @@ def admin_verify_rating(
         return {"id": rating.id, "is_verified": rating.is_verified}
     finally:
         db.close()
-
 
 
 @app.patch('/admin/users/{user_id}/verify-sakan')
@@ -3526,21 +3304,10 @@ def create_waitlist_entry(payload: WaitlistCreate):
 
 
 @app.get('/admin/governorates', response_model=List[GovernorateOut])
-def admin_get_governorates(
-    x_user_id: Optional[int] = Query(None),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def admin_get_governorates(x_user_id: Optional[int] = None):
     db = SessionLocal()
     try:
-        verify_admin_user(
-            db,
-            x_user_id=x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id)
         govs = db.query(Governorate).order_by(Governorate.id.asc()).all()
         res = []
         for g in govs:
@@ -4035,22 +3802,10 @@ def mark_message_read(message_id: int):
 
 
 @app.post('/admin/send-message')
-def admin_send_advertiser_message(
-    payload: dict,
-    x_user_id: Optional[int] = Query(None),
-    authorization: Optional[str] = Header(None),
-    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
-    auth_token: Optional[str] = Query(None)
-):
+def admin_send_advertiser_message(payload: dict, x_user_id: Optional[int] = None):
     db = SessionLocal()
     try:
-        admin = verify_admin_user(
-            db,
-            x_user_id=x_user_id,
-            authorization=authorization,
-            x_auth_token=x_auth_token,
-            auth_token=auth_token
-        )
+        verify_admin_user(db, x_user_id)
         recipient_id = payload.get("recipient_id")  # None for broadcast all
         msg_type = payload.get("msg_type", "announcement")
         title = payload.get("title", "").strip()
@@ -4061,7 +3816,7 @@ def admin_send_advertiser_message(
             
         msg = AdvertiserMessage(
             recipient_id=recipient_id if recipient_id else None,
-            sender_id=admin.id,
+            sender_id=x_user_id,
             msg_type=msg_type,
             title=title,
             body=body
@@ -4072,5 +3827,4 @@ def admin_send_advertiser_message(
         return {"status": "sent", "id": msg.id}
     finally:
         db.close()
-
 
