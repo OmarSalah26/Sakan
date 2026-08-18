@@ -12,7 +12,7 @@ import {
   Save, Share2, FileText, PenTool, Calendar, Shield, Zap, Plug,
   Bed, Check, Clock, Award, Sparkles, Upload, Menu, X, Smartphone,
   Navigation, Wind, Video, ArrowDown, Compass, Building2, Mail, LogOut, Copy,
-  Eye, EyeOff, Loader2, RotateCcw
+  Eye, EyeOff, Loader2, RotateCcw, UserPlus
 } from 'lucide-react';
 
 
@@ -853,9 +853,16 @@ export default function App() {
       showToast('خطأ في الاتصال بالخادم');
     }
   };
-  const [adminTab, setAdminTab] = useState('complaints'); // 'complaints' | 'users' | 'listings' | 'ratings' | 'leaderboard' | 'governorates'
+  const [adminTab, setAdminTab] = useState('complaints'); // 'complaints' | 'users' | 'listings' | 'ratings' | 'leaderboard' | 'governorates' | 'send_msg' | 'add_for_others'
   const [adminSearch, setAdminSearch] = useState('');
   const [adminRatings, setAdminRatings] = useState([]);
+
+  // "إضافة إعلانات للغير" workflow state
+  const [forOthersStep, setForOthersStep] = useState('account'); // 'account' | 'listing' | 'done'
+  const [forOthersAccount, setForOthersAccount] = useState(null); // { id, user_id, name, phone, account_type, is_new_account, temp_password, must_change_password, has_existing_password }
+  const [forOthersAccountForm, setForOthersAccountForm] = useState({ name: '', account_type: 'owner', phone: '' });
+  const [forOthersAccountLoading, setForOthersAccountLoading] = useState(false);
+  const [forOthersCreatedListing, setForOthersCreatedListing] = useState(null);
 
   // Geo-scaling Waitlist State
   const [dbGovernorates, setDbGovernorates] = useState(DEFAULT_GOVERNORATES_LIST);
@@ -966,6 +973,102 @@ export default function App() {
       }
     } catch {
       showToast('خطأ في الاتصال بالخادم');
+    }
+  };
+
+  // --- "إضافة إعلانات للغير" (Add Listings for Others) workflow ---
+  const resetForOthersFlow = () => {
+    setForOthersStep('account');
+    setForOthersAccount(null);
+    setForOthersAccountForm({ name: '', account_type: 'owner', phone: '' });
+    setForOthersCreatedListing(null);
+    setEditingListing(null);
+  };
+
+  const openForOthersListingWizard = (fresh = true) => {
+    if (fresh) {
+      setCreateForm({
+        title: '',
+        governorate: '',
+        city: '',
+        neighborhood: '',
+        full_address: '',
+        address: '',
+        floor: '',
+        maps_link: '',
+        latitude: null,
+        longitude: null,
+        gender: 'female',
+        available_beds: 0,
+        room_configurations: [{ room_type: 'single', price_per_person: 1000, commission: 500, count: 1, insurance_price: null, services_inclusive: false }],
+        amenities: INDOOR_AMENITIES.filter(a => a.prechecked).map(a => a.name),
+        near_university: false,
+        near_transit: false,
+        photo_urls: [],
+        video_urls: [],
+        description: '',
+        tier: 'regular',
+        min_lease_months: null,
+        pricing_mode: 'room_based',
+        total_price: null
+      });
+    }
+    setShowMapPicker(false);
+    setEditingListing(null);
+    setIsCreateOpen(true);
+    setCreateStep(1);
+    setTermsChecked(true);
+  };
+
+  const handleCreateAdvertiserForOthers = async () => {
+    if (!user || forOthersAccountLoading) return;
+    const cleanName = (forOthersAccountForm.name || '').trim();
+    const cleanPhone = (forOthersAccountForm.phone || '').trim();
+    if (cleanName.length < 2) {
+      showToast('يرجى إدخال اسم المعلن (حرفان على الأقل)');
+      return;
+    }
+    if (cleanPhone.length < 8) {
+      showToast('يرجى إدخال رقم هاتف صحيح لا يقل عن 8 أرقام');
+      return;
+    }
+    setForOthersAccountLoading(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-id': String(user.id),
+        'x_user_id': String(user.id)
+      };
+      if (user.auth_token) {
+        headers['Authorization'] = `Bearer ${user.auth_token}`;
+      }
+      const res = await fetch(`${API_BASE}/admin/create-advertiser?x_user_id=${user.id}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: cleanName,
+          account_type: forOthersAccountForm.account_type,
+          phone: cleanPhone
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setForOthersAccount({ ...data, id: data.user_id });
+        if (data.is_new_account) {
+          showToast(`تم إنشاء حساب "${data.name}" بنجاح!`);
+        } else {
+          showToast('تم العثور على حساب موجود مسبقاً، سيتم ربط الإعلان به');
+        }
+        setForOthersStep('listing');
+        openForOthersListingWizard(true);
+      } else {
+        const err = await res.json();
+        showToast(err.detail || 'فشل إيجاد أو إنشاء حساب المعلن');
+      }
+    } catch {
+      showToast('خطأ في الاتصال بالخادم');
+    } finally {
+      setForOthersAccountLoading(false);
     }
   };
 
@@ -1756,6 +1859,8 @@ export default function App() {
     if (!currentUser || !currentUser.id || isSubmittingListing) return;
     const isEditing = Boolean(editingListing && editingListing.id);
     const isAdminUser = currentUser.account_type === 'admin';
+    const isForOthersFlow = Boolean(forOthersAccount && !isEditing && forOthersStep === 'listing');
+    const listingOwner = isForOthersFlow ? forOthersAccount : currentUser;
     const targetContact = createForm.contact_phone !== undefined && createForm.contact_phone !== null ? createForm.contact_phone : '';
 
     const validPhotos = (createForm.photo_urls || []).filter(url => Boolean(url && String(url).trim()));
@@ -1769,7 +1874,7 @@ export default function App() {
       const isEditing = Boolean(editingListing && editingListing.id);
       showToast(isEditing ? "جاري حفظ التعديلات..." : "جاري نشر العقار...");
 
-      const isOwnerUser = (currentUser?.account_type === 'owner') || (editingListing && (editingListing.advertiser_account_type === 'owner' || editingListing.advertiser_type === 'owner'));
+      const isOwnerUser = (listingOwner?.account_type === 'owner') || (editingListing && (editingListing.advertiser_account_type === 'owner' || editingListing.advertiser_type === 'owner'));
 
       const cleanedConfigs = (createForm.room_configurations || []).map(c => {
         const roomType = c.room_type || 'single';
@@ -1832,7 +1937,8 @@ export default function App() {
         contact_phone: targetContact !== '' ? String(targetContact) : null,
         whatsapp_phone: createForm.no_whatsapp ? (createForm.whatsapp_phone ? String(createForm.whatsapp_phone) : String(targetContact)) : String(targetContact),
         room_configurations: cleanedConfigs,
-        advertiser_id: currentUser.id,
+        advertiser_id: listingOwner.id,
+        source: isForOthersFlow ? 'manual' : (createForm.source || 'normal'),
         near_university: Boolean(createForm.near_university),
         near_transit: Boolean(createForm.near_transit)
       };
@@ -1857,18 +1963,22 @@ export default function App() {
         showToast(isEditing ? "تم حفظ التعديلات بنجاح!" : "تم نشر العقار بنجاح وتفعيله على المنصة!");
         setIsCreateOpen(false);
         setEditingListing(null);
-        if (isEditing && publishedData?.id) {
-          openListingDetail(publishedData.id);
+        if (isForOthersFlow && publishedData?.id) {
+          setForOthersCreatedListing(publishedData);
+          setForOthersStep('done');
         } else {
-          setTab('browse');
+          if (isEditing && publishedData?.id) {
+            openListingDetail(publishedData.id);
+          } else {
+            setTab('browse');
+          }
+          if (!isEditing && publishedData) {
+            setPostPublishListing(publishedData);
+            setIsPostPublishModalOpen(true);
+          }
         }
         loadListings();
-        if (currentUser?.id) loadUserListings(currentUser.id);
-
-        if (!isEditing && publishedData) {
-          setPostPublishListing(publishedData);
-          setIsPostPublishModalOpen(true);
-        }
+        if (listingOwner?.id) loadUserListings(listingOwner.id);
       } else {
         const err = await res.json();
         showToast(err.detail || (isEditing ? "فشل حفظ التعديلات" : "فشل نشر العقار"));
@@ -3413,6 +3523,9 @@ export default function App() {
               <button className={adminTab === 'leaderboard' ? 'active-tab' : 'inactive-tab'} onClick={() => setAdminTab('leaderboard')}>الأعلى تقييماً</button>
               <button className={adminTab === 'governorates' ? 'active-tab' : 'inactive-tab'} onClick={() => { setAdminTab('governorates'); loadAdminGovernorates(); loadAdminWaitlist(); }}>إدارة المحافظات والانتظار</button>
               <button className={adminTab === 'send_msg' ? 'active-tab' : 'inactive-tab'} onClick={() => setAdminTab('send_msg')}>إرسال رسائل للمعلنين</button>
+              <button className={adminTab === 'add_for_others' ? 'active-tab' : 'btn-secondary'} onClick={() => { setAdminTab('add_for_others'); if (!forOthersAccount) setForOthersStep('account'); }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><UserPlus style={{ width: 15, height: 15 }} /> إضافة إعلانات للغير</span>
+              </button>
             </div>
 
             {/* Send Message to Advertisers subtab */}
@@ -3483,6 +3596,174 @@ export default function App() {
                     إرسال الرسالة إلى صندوق المعلن
                   </button>
                 </form>
+              </div>
+            )}
+
+            {/* Add Listings for Others (إضافة إعلانات للغير) workflow */}
+            {adminTab === 'add_for_others' && (
+              <div style={{ background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem', marginBottom: '2rem' }}>
+                <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.15rem', fontWeight: 700, color: '#0f172a' }}>
+                  إضافة إعلانات للغير
+                </h3>
+                <p style={{ margin: '0 0 1.25rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  أنشئ حساب معلن جديد أو استخدم حساباً موجوداً برقم هاتفه، ثم أضف الإعلان باسم المعلن مباشرة دون المرور بحساب الإدارة.
+                </p>
+
+                {/* STEP 1: Account setup */}
+                {forOthersStep === 'account' && (
+                  <div style={{ maxWidth: '480px', display: 'grid', gap: '1rem' }}>
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>اسم المعلن</label>
+                      <input
+                        type="text"
+                        placeholder="مثال: جاك"
+                        value={forOthersAccountForm.name}
+                        onChange={(e) => setForOthersAccountForm(prev => ({ ...prev, name: e.target.value }))}
+                        style={{ width: '100%', height: '42px', padding: '0 0.75rem', fontSize: '0.88rem', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#ffffff', outline: 'none' }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>نوع المعلن</label>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          type="button"
+                          className={forOthersAccountForm.account_type === 'owner' ? 'active-tab' : 'btn-secondary'}
+                          onClick={() => setForOthersAccountForm(prev => ({ ...prev, account_type: 'owner' }))}
+                        >
+                          مالك
+                        </button>
+                        <button
+                          type="button"
+                          className={forOthersAccountForm.account_type === 'broker' ? 'active-tab' : 'btn-secondary'}
+                          onClick={() => setForOthersAccountForm(prev => ({ ...prev, account_type: 'broker' }))}
+                        >
+                          وسيط
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.3rem' }}>رقم الهاتف (بيانات الدخول للحساب)</label>
+                      <input
+                        type="tel"
+                        placeholder="01xxxxxxxxx"
+                        value={forOthersAccountForm.phone}
+                        onChange={(e) => setForOthersAccountForm(prev => ({ ...prev, phone: e.target.value }))}
+                        dir="ltr"
+                        style={{ width: '100%', height: '42px', padding: '0 0.75rem', fontSize: '0.88rem', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: '#ffffff', outline: 'none', textAlign: 'left' }}
+                      />
+                    </div>
+
+                    <button
+                      className="btn-primary"
+                      onClick={handleCreateAdvertiserForOthers}
+                      disabled={forOthersAccountLoading}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', width: 'fit-content' }}
+                    >
+                      {forOthersAccountLoading ? (
+                        <Loader2 style={{ width: 15, height: 15 }} />
+                      ) : (
+                        <UserPlus style={{ width: 15, height: 15 }} />
+                      )}
+                      {forOthersAccountLoading ? 'جاري البحث أو الإنشاء...' : 'إيجاد أو إنشاء حساب المعلن'}
+                    </button>
+
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      ملاحظة: رقم الهاتف هو بيانات الدخول لحساب المعلن، ويمكن إدخال رقم تواصل مختلف داخل الإعلان لاحقاً.
+                    </p>
+                  </div>
+                )}
+
+                {/* STEP 2: Listing creation in progress */}
+                {forOthersStep === 'listing' && forOthersAccount && (
+                  <div style={{ maxWidth: '560px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '0.85rem 1rem', marginBottom: '0.9rem' }}>
+                      <User style={{ width: 18, height: 18, color: '#1d4ed8' }} />
+                      <span style={{ fontWeight: 700, color: '#1e3a8a' }}>{forOthersAccount.name}</span>
+                      <span style={{ fontSize: '0.75rem', background: forOthersAccount.is_new_account ? '#dcfce7' : '#fef3c7', color: forOthersAccount.is_new_account ? '#166534' : '#b45309', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
+                        {forOthersAccount.is_new_account ? 'حساب جديد' : 'حساب موجود'}
+                      </span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>{forOthersAccount.account_type === 'owner' ? 'مالك' : 'وسيط'} | <strong dir="ltr">{forOthersAccount.phone}</strong></span>
+                    </div>
+
+                    {forOthersAccount.is_new_account && forOthersAccount.temp_password && (
+                      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '0.65rem 1rem', color: '#166534', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.9rem' }}>
+                        <span>تم إنشاء حساب جديد. كلمة المرور المؤقتة:</span>
+                        <strong style={{ fontFamily: 'monospace', fontSize: '1rem', color: '#15803d' }} dir="ltr">{forOthersAccount.temp_password}</strong>
+                      </div>
+                    )}
+                    {!forOthersAccount.is_new_account && !forOthersAccount.has_existing_password && (
+                      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '0.65rem 1rem', color: '#92400e', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.9rem' }}>
+                        الحساب موجود مسبقاً. لم يتم تغيير كلمة المرور.
+                      </div>
+                    )}
+                    {!forOthersAccount.is_new_account && forOthersAccount.has_existing_password && (
+                      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '0.65rem 1rem', color: '#1e40af', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.9rem' }}>
+                        الحساب موجود ويمتلك كلمة مرور دائمة. سيتم ربط الإعلان الجديد بهذا الحساب.
+                      </div>
+                    )}
+
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                      نافذة إضافة الإعلان مفتوحة الآن، وسيتم ربط الإعلان بحساب <strong>{forOthersAccount.name}</strong> مباشرة بعد النشر.
+                    </p>
+
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <button className="btn-primary" onClick={() => openForOthersListingWizard(false)}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Plus style={{ width: 14, height: 14 }} /> متابعة إنشاء الإعلان</span>
+                      </button>
+                      <button className="btn-secondary" onClick={resetForOthersFlow}>إلغاء وتغيير المعلن</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* STEP 3: Completion */}
+                {forOthersStep === 'done' && forOthersAccount && (
+                  <div style={{ maxWidth: '600px' }}>
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '0.85rem 1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#166534', fontWeight: 700 }}>
+                      <CheckCircle style={{ width: 18, height: 18 }} /> تم نشر الإعلان بنجاح باسم المعلن
+                    </div>
+
+                    <div style={{ display: 'grid', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        <strong style={{ fontSize: '1rem' }}>{forOthersAccount.name}</strong>
+                        <span style={{ fontSize: '0.75rem', background: forOthersAccount.is_new_account ? '#dcfce7' : '#fef3c7', color: forOthersAccount.is_new_account ? '#166534' : '#b45309', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700 }}>
+                          {forOthersAccount.is_new_account ? 'تم إنشاء الحساب' : 'حساب موجود (تم إعادة الاستخدام)'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-light)' }}>
+                        {forOthersAccount.account_type === 'owner' ? 'مالك' : 'وسيط'} | رقم الهاتف (بيانات الدخول): <strong dir="ltr">{forOthersAccount.phone}</strong>
+                      </div>
+
+                      {forOthersAccount.is_new_account && forOthersAccount.temp_password && (
+                        <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                          <span style={{ color: '#92400e', fontWeight: 600 }}>كلمة المرور المؤقتة لحساب المعلن:</span>
+                          <strong style={{ fontFamily: 'monospace', fontSize: '1rem', color: '#b45309' }} dir="ltr">{forOthersAccount.temp_password}</strong>
+                        </div>
+                      )}
+
+                      {forOthersCreatedListing && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '0.85rem 1rem', background: '#f8fafc' }}>
+                          <div>
+                            <strong>{forOthersCreatedListing.title || 'سكن طلاب'}</strong>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>
+                              <MapPin style={{ width: 13, height: 13, display: 'inline', verticalAlign: 'middle' }} /> {forOthersCreatedListing.governorate}، {forOthersCreatedListing.city}، {forOthersCreatedListing.neighborhood}
+                            </div>
+                          </div>
+                          <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => openListingDetail(forOthersCreatedListing.id)}>عرض الإعلان</button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <button className="btn-primary" onClick={() => handleGenerateUserAccessLink(forOthersAccount.id)}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><Send style={{ width: 14, height: 14 }} /> إرسال رابط الوصول للحساب</span>
+                      </button>
+                      <button className="btn-outline" onClick={() => openForOthersListingWizard(true)}>إضافة إعلان آخر لنفس المعلن</button>
+                      <button className="btn-secondary" onClick={resetForOthersFlow}>إضافة معلن جديد</button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -4731,6 +5012,14 @@ export default function App() {
                 ))}
               </div>
             </div>
+
+            {forOthersStep === 'listing' && forOthersAccount && (
+              <div style={{ padding: '0.6rem 1.25rem', background: '#eff6ff', borderBottom: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, fontSize: '0.85rem', fontWeight: 600, color: '#1e40af', flexWrap: 'wrap' }}>
+                <User style={{ width: 15, height: 15 }} />
+                <span>الإعلان سيُنشر باسم: <strong>{forOthersAccount.name}</strong></span>
+                <span style={{ color: 'var(--text-light)' }}>{forOthersAccount.account_type === 'owner' ? 'مالك' : 'وسيط'} | <strong dir="ltr">{forOthersAccount.phone}</strong></span>
+              </div>
+            )}
             
             <div className="modal-body wizard-modal-body" ref={wizardBodyRef} style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
               {/* STEP 1: TERMS AND CONDITIONS AGREEMENT */}
