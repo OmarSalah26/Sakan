@@ -688,7 +688,8 @@ export default function App() {
   });
 
   // Progressive Media Upload state & handler
-  const [uploadingPhotoCount, setUploadingPhotoCount] = useState(0);
+  const [activeUploads, setActiveUploads] = useState([]);
+  const uploadingPhotoCount = activeUploads.length;
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
 
   const handleProgressivePhotoUpload = async (files) => {
@@ -700,17 +701,25 @@ export default function App() {
       return;
     }
 
-    setUploadingPhotoCount(prev => prev + toUpload.length);
     showToast('جاري رفع الصور...');
 
     let successCount = 0;
     let failCount = 0;
 
     await Promise.all(toUpload.map(async (file) => {
+      const uploadId = Math.random().toString(36).substr(2, 9);
+      const controller = new AbortController();
+
+      setActiveUploads(prev => [...prev, { id: uploadId, controller }]);
+
       const fd = new FormData();
       fd.append('file', file);
       try {
-        const res = await fetch(`${API_BASE}/upload/listing-photo`, { method: 'POST', body: fd });
+        const res = await fetch(`${API_BASE}/upload/listing-photo`, { 
+          method: 'POST', 
+          body: fd,
+          signal: controller.signal
+        });
         if (res.ok) {
           const data = await res.json();
           const formattedUrl = formatImageUrl(data.url);
@@ -719,10 +728,14 @@ export default function App() {
         } else {
           failCount++;
         }
-      } catch {
-        failCount++;
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          console.log("Upload canceled by user");
+        } else {
+          failCount++;
+        }
       } finally {
-        setUploadingPhotoCount(prev => Math.max(0, prev - 1));
+        setActiveUploads(prev => prev.filter(item => item.id !== uploadId));
       }
     }));
 
@@ -1744,15 +1757,6 @@ export default function App() {
     const isEditing = Boolean(editingListing && editingListing.id);
     const isAdminUser = currentUser.account_type === 'admin';
     const targetContact = createForm.contact_phone !== undefined && createForm.contact_phone !== null ? createForm.contact_phone : '';
-
-    if (!isEditing && !isAdminUser && targetContact !== '' && targetContact !== (currentUser.phone || '') && !createForm.contact_verified) {
-      const inputOtp = prompt(`تم إرسال كود التفعيل إلى الرقم ${targetContact}. أدخل الكود (123456):`);
-      if (inputOtp !== '123456') {
-        showToast('كود تفعيل رقم الهاتف للتواصل غير صحيح (الكود التجريبي: 123456)');
-        return;
-      }
-      setCreateForm(prev => ({ ...prev, contact_verified: true }));
-    }
 
     const validPhotos = (createForm.photo_urls || []).filter(url => Boolean(url && String(url).trim()));
     if (validPhotos.length < 5) {
@@ -4474,7 +4478,7 @@ export default function App() {
                       <select value={authForm.account_type} onChange={(e) => setAuthForm({ ...authForm, account_type: e.target.value })}>
                         <option value="student">طالب / مستخدم عادي</option>
                         <option value="owner">مالك عقار (بدون عمولة)</option>
-                        <option value="broker">سمسار عقاري</option>
+                        <option value="broker">وسيط عقاري</option>
                       </select>
                     </div>
                     
@@ -5851,10 +5855,22 @@ export default function App() {
                         ))}
 
                         {/* In-progress uploading placeholders */}
-                        {Array.from({ length: uploadingPhotoCount }).map((_, slotIdx) => (
-                          <div key={`uploading-${slotIdx}`} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', border: '1.5px dashed #3b82f6', background: '#eff6ff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', color: 'var(--primary)' }}>
+                        {activeUploads.map((upload) => (
+                          <div key={upload.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', border: '1.5px dashed #3b82f6', background: '#eff6ff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', color: 'var(--primary)' }}>
                             <Loader2 className="spin-loader" style={{ width: 22, height: 22 }} />
                             <span style={{ fontSize: '0.68rem', fontWeight: 700 }}>جاري الرفع...</span>
+                            <button
+                              type="button"
+                              onClick={() => upload.controller.abort()}
+                              style={{
+                                position: 'absolute', top: '4px', left: '4px',
+                                width: '22px', height: '22px', borderRadius: '50%',
+                                background: 'rgba(0,0,0,0.7)', color: '#fff', border: 'none',
+                                fontSize: '13px', cursor: 'pointer', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                                zIndex: 10
+                              }}
+                            >×</button>
                           </div>
                         ))}
                       </div>
@@ -6315,8 +6331,8 @@ export default function App() {
                       value={waitlistForm.work_volume_range}
                       onChange={(e) => setWaitlistForm(prev => ({ ...prev, work_volume_range: e.target.value }))}
                     >
-                      <option value="1-4">من 1 إلى 4 وحدات (مالك / سمسار صغير)</option>
-                      <option value="5-9">من 5 إلى 9 وحدات (سمسار متوسط)</option>
+                      <option value="1-4">من 1 إلى 4 وحدات (مالك / وسيط صغير)</option>
+                      <option value="5-9">من 5 إلى 9 وحدات (وسيط متوسط)</option>
                       <option value="10-19">من 10 إلى 19 وحدة (مكتب عقارات)</option>
                       <option value="20+">أكثر من 20 وحدة (شركة / محفظة كبرى)</option>
                     </select>

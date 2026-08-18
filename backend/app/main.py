@@ -911,6 +911,12 @@ class RegisterRequest(BaseModel):
     profile_photo_url: Optional[str] = None
 
 
+class CreateAdvertiserRequest(BaseModel):
+    name: str = Field(..., min_length=2)
+    account_type: Literal["owner", "broker"]
+    phone: str = Field(..., min_length=8)
+
+
 class VerifyRequest(BaseModel):
     phone: str
     otp_code: str
@@ -3412,6 +3418,68 @@ def list_governorates():
                 "waitlist_count": waitlist_count
             })
         return result
+    finally:
+        db.close()
+
+
+@app.post('/admin/create-advertiser')
+def admin_create_advertiser(
+    payload: CreateAdvertiserRequest,
+    x_user_id: Optional[int] = Query(None),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token")
+):
+    admin_id = x_user_id or x_user_id_h1 or x_user_id_h2
+    db = SessionLocal()
+    try:
+        verify_admin_user(db, x_user_id=admin_id, authorization=authorization, x_auth_token=x_auth_token)
+        
+        phone_clean = payload.phone.strip()
+        blocked = db.query(PhoneBlocklist).filter(PhoneBlocklist.phone == phone_clean).first()
+        if blocked:
+            raise HTTPException(status_code=403, detail="هذا الرقم محظور من التسجيل")
+
+        existing_user = db.query(User).filter(User.phone == phone_clean).first()
+        if existing_user:
+            return {
+                "status": "existing",
+                "user_id": existing_user.id,
+                "name": existing_user.name,
+                "phone": existing_user.phone,
+                "account_type": existing_user.account_type,
+                "is_new_account": False,
+                "temp_password": None,
+                "must_change_password": bool(existing_user.must_change_password),
+                "has_existing_password": bool(existing_user.password_hash)
+            }
+
+        gen_pwd = get_default_password_for_phone(phone_clean)
+        new_user = User(
+            phone=phone_clean,
+            name=payload.name.strip(),
+            account_type=payload.account_type,
+            password_hash=hash_password(gen_pwd),
+            must_change_password=True,
+            is_verified=True,
+            terms_accepted_at=datetime.utcnow()
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+
+        return {
+            "status": "created",
+            "user_id": new_user.id,
+            "name": new_user.name,
+            "phone": new_user.phone,
+            "account_type": new_user.account_type,
+            "is_new_account": True,
+            "temp_password": gen_pwd,
+            "must_change_password": True,
+            "has_existing_password": False
+        }
     finally:
         db.close()
 
