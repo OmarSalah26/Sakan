@@ -2373,6 +2373,10 @@ export default function App() {
       'x-user-id': String(activeUser.id),
       'x_user_id': String(activeUser.id)
     };
+    if (activeUser.auth_token) {
+      authHeaders['x-auth-token'] = activeUser.auth_token;
+      authHeaders['Authorization'] = `Bearer ${activeUser.auth_token}`;
+    }
 
     try {
       const resC = await fetch(`${API_BASE}/admin/complaints?x_user_id=${activeUser.id}`, { headers: authHeaders });
@@ -2404,7 +2408,9 @@ export default function App() {
   const loadAdminGovernorates = async () => {
     if (!user) return;
     try {
-      const res = await fetch(`${API_BASE}/admin/governorates?x_user_id=${user.id}`);
+      const headers = { 'x-user-id': String(user.id) };
+      if (user.auth_token) headers['Authorization'] = `Bearer ${user.auth_token}`;
+      const res = await fetch(`${API_BASE}/admin/governorates?x_user_id=${user.id}`, { headers });
       if (res.ok) setAdminGovernorates(await res.json());
     } catch {}
   };
@@ -2412,10 +2418,12 @@ export default function App() {
   const loadAdminWaitlist = async () => {
     if (!user) return;
     try {
+      const headers = { 'x-user-id': String(user.id) };
+      if (user.auth_token) headers['Authorization'] = `Bearer ${user.auth_token}`;
       const url = adminWaitlistFilterGov 
         ? `${API_BASE}/admin/waitlist?governorate_id=${adminWaitlistFilterGov}&x_user_id=${user.id}`
         : `${API_BASE}/admin/waitlist?x_user_id=${user.id}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { headers });
       if (res.ok) setAdminWaitlistEntries(await res.json());
     } catch {}
   };
@@ -2427,9 +2435,13 @@ export default function App() {
   }, [tab, adminTab, user]);
 
   const handleAdminAction = async (complaintId, action) => {
+    if (!user) return;
     try {
+      const headers = { 'x-user-id': String(user.id) };
+      if (user.auth_token) headers['Authorization'] = `Bearer ${user.auth_token}`;
       const res = await fetch(`${API_BASE}/admin/complaints/${complaintId}/${action}?x_user_id=${user.id}`, {
-        method: 'POST'
+        method: 'POST',
+        headers
       });
       if (res.ok) {
         showToast(`تم تنفيذ الإجراء (${action}) بنجاح`);
@@ -2441,10 +2453,14 @@ export default function App() {
   };
 
   const handleUserBanToggle = async (userId, currentlyBanned) => {
+    if (!user) return;
     try {
+      const headers = { 'x-user-id': String(user.id) };
+      if (user.auth_token) headers['Authorization'] = `Bearer ${user.auth_token}`;
       const action = currentlyBanned ? 'unban' : 'ban';
       const res = await fetch(`${API_BASE}/admin/users/${userId}/${action}?x_user_id=${user.id}`, {
-        method: 'POST'
+        method: 'POST',
+        headers
       });
       if (res.ok) {
         showToast(`تم ${currentlyBanned ? 'إلغاء حظر' : 'حظر'} المستخدم`);
@@ -2456,9 +2472,13 @@ export default function App() {
   };
 
   const handleListingDeactivate = async (listingId) => {
+    if (!user) return;
     try {
+      const headers = { 'x-user-id': String(user.id) };
+      if (user.auth_token) headers['Authorization'] = `Bearer ${user.auth_token}`;
       const res = await fetch(`${API_BASE}/admin/listings/${listingId}/deactivate?x_user_id=${user.id}`, {
-        method: 'POST'
+        method: 'POST',
+        headers
       });
       if (res.ok) {
         showToast("تم إلغاء تفعيل العقار");
@@ -2470,9 +2490,13 @@ export default function App() {
   };
 
   const handleAdminListingReactivate = async (listingId) => {
+    if (!user) return;
     try {
+      const headers = { 'x-user-id': String(user.id) };
+      if (user.auth_token) headers['Authorization'] = `Bearer ${user.auth_token}`;
       const res = await fetch(`${API_BASE}/admin/listings/${listingId}/reactivate?x_user_id=${user.id}`, {
-        method: 'POST'
+        method: 'POST',
+        headers
       });
       if (res.ok) {
         showToast("تم إعادة تفعيل العقار بنجاح (تجاوز باقة الاشتراكات)");
@@ -2482,6 +2506,7 @@ export default function App() {
       showToast("فشل تفعيل العقار");
     }
   };
+
 
   const handleAdminRemoveListing = async (listingId) => {
     if (!user) return;
