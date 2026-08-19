@@ -1984,6 +1984,7 @@ def list_listings(
     room_types: Optional[str] = None,   # Comma-separated list
     amenities: Optional[str] = None,    # Comma-separated list
     advertiser_type: Optional[str] = None,
+    min_commission: Optional[int] = None,
     max_commission: Optional[int] = None,
     services_inclusive: Optional[bool] = None,
     has_insurance: Optional[bool] = None,
@@ -2114,18 +2115,37 @@ def list_listings(
                 if not match_all_amenities:
                     continue
 
-            # 4. Commission filter
-            if max_commission is not None:
+            # 4. Commission percentage filter
+            if min_commission is not None or max_commission is not None:
+                adv_user = advertisers.get(item.advertiser_id)
+                is_owner = (
+                    item.listing_type_override == 'owner'
+                    or (item.listing_type_override is None and adv_user and adv_user.account_type == 'owner')
+                )
                 match_commission = False
-                for conf in configs:
-                    comm = conf.get("commission")
-                    if comm is not None and comm <= max_commission:
+                if is_owner:
+                    lo, hi = 0, 0
+                    if (max_commission is None or 0 <= max_commission) and (min_commission is None or 0 >= min_commission):
                         match_commission = True
-                        break
-                    # If commission is None, it means no commission, which passes the max_commission check
-                    elif comm is None:
-                        match_commission = True
-                        break
+                else:
+                    for conf in configs:
+                        is_range = conf.get("commission_type") == "range" or (conf.get("commission_min") is not None and conf.get("commission_max") is not None)
+                        if is_range:
+                            lo = conf.get("commission_min") if conf.get("commission_min") is not None else conf.get("commission_min_pct")
+                            hi = conf.get("commission_max") if conf.get("commission_max") is not None else conf.get("commission_max_pct")
+                        else:
+                            lo = conf.get("commission_pct") if conf.get("commission_pct") is not None else conf.get("commission")
+                            hi = lo
+                        try:
+                            lo = int(lo)
+                            hi = int(hi)
+                        except (TypeError, ValueError):
+                            continue
+                        if lo > 100 or hi > 100:
+                            continue
+                        if (max_commission is None or lo <= max_commission) and (min_commission is None or hi >= min_commission):
+                            match_commission = True
+                            break
                 if not match_commission:
                     continue
 

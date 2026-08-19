@@ -295,6 +295,101 @@ class TestListingFilters:
 
 
 # ══════════════════════════════════════════════
+#  5b. COMMISSION PERCENTAGE FILTER (min/max)
+# ══════════════════════════════════════════════
+class TestCommissionPercentageFilter:
+
+    def _setup(self):
+        broker = _register_and_verify("01077700001", "وسيط عمولة", "broker")
+
+        def add(title, config):
+            resp = _create_listing(broker["id"], title=title, room_configurations=[config])
+            assert resp.status_code == 200, f"create {title} failed: {resp.text}"
+            return resp.json()
+
+        owner = _register_and_verify("01077700002", "مالك", "owner")
+        owner_listing = _create_listing(owner["id"], title="OWNER_0").json()
+
+        listings = {
+            "OWNER_0": owner_listing,
+        }
+        listings["FIX_10"] = add("FIX_10", {"room_type": "single", "price_per_person": 1000, "commission": 10, "commission_pct": 10, "commission_type": "fixed"})
+        listings["FIX_20"] = add("FIX_20", {"room_type": "single", "price_per_person": 1000, "commission": 20, "commission_pct": 20, "commission_type": "fixed"})
+        listings["FIX_30"] = add("FIX_30", {"room_type": "single", "price_per_person": 1000, "commission": 30, "commission_pct": 30, "commission_type": "fixed"})
+        listings["FIX_40"] = add("FIX_40", {"room_type": "single", "price_per_person": 1000, "commission": 40, "commission_pct": 40, "commission_type": "fixed"})
+        listings["FIX_50"] = add("FIX_50", {"room_type": "single", "price_per_person": 1000, "commission": 50, "commission_pct": 50, "commission_type": "fixed"})
+
+        def rng(title, lo, hi):
+            return add(title, {"room_type": "single", "price_per_person": 1000, "commission_type": "range", "commission_min": lo, "commission_max": hi, "commission_min_pct": lo, "commission_max_pct": hi})
+
+        listings["R_20_50"] = rng("R_20_50", 20, 50)
+        listings["R_30_40"] = rng("R_30_40", 30, 40)
+        listings["R_40_60"] = rng("R_40_60", 40, 60)
+        listings["R_10_15"] = rng("R_10_15", 10, 15)
+        listings["R_40_50"] = rng("R_40_50", 40, 50)
+        listings["R_50_60"] = rng("R_50_60", 50, 60)
+        listings["R_50_70"] = rng("R_50_70", 50, 70)
+
+        listings["UNKNOWN"] = add("UNKNOWN", {"room_type": "single", "price_per_person": 1000, "commission": None})
+        listings["LEGACY_MONEY"] = add("LEGACY_MONEY", {"room_type": "single", "price_per_person": 1000, "commission": 750})
+        return listings
+
+    def _filter_titles(self, query):
+        r = client.get(f"/listings?{query}")
+        assert r.status_code == 200, f"status {r.status_code}: {r.text}"
+        return {item["title"] for item in r.json()}
+
+    def test_no_commission_params_returns_all(self):
+        self._setup()
+        titles = self._filter_titles("")
+        assert {"OWNER_0", "FIX_10", "FIX_20", "FIX_30", "FIX_40", "FIX_50", "R_20_50", "R_30_40", "R_40_60", "R_10_15", "R_40_50", "R_50_60", "R_50_70", "UNKNOWN", "LEGACY_MONEY"}.issubset(titles)
+
+    def test_filter_0_to_30(self):
+        self._setup()
+        titles = self._filter_titles("max_commission=30")
+        assert "OWNER_0" in titles
+        assert "FIX_10" in titles
+        assert "FIX_30" in titles
+        assert "FIX_40" not in titles
+        assert "R_20_50" in titles
+        assert "R_30_40" in titles
+        assert "R_40_60" not in titles
+        assert "UNKNOWN" not in titles
+        assert "LEGACY_MONEY" not in titles
+
+    def test_filter_min_only_20(self):
+        self._setup()
+        titles = self._filter_titles("min_commission=20")
+        assert "OWNER_0" not in titles
+        assert "FIX_30" in titles
+        assert "FIX_10" not in titles
+        assert "R_20_50" in titles
+        assert "R_10_15" not in titles
+
+    def test_filter_max_only_30(self):
+        self._setup()
+        titles = self._filter_titles("max_commission=30")
+        assert "OWNER_0" in titles
+        assert "FIX_20" in titles
+        assert "FIX_30" in titles
+        assert "FIX_40" not in titles
+        assert "R_20_50" in titles
+        assert "R_40_50" not in titles
+
+    def test_filter_min_20_max_40(self):
+        self._setup()
+        titles = self._filter_titles("min_commission=20&max_commission=40")
+        assert "OWNER_0" not in titles
+        assert "FIX_30" in titles
+        assert "FIX_10" not in titles
+        assert "FIX_50" not in titles
+        assert "R_20_50" in titles
+        assert "R_10_15" not in titles
+        assert "R_40_60" in titles
+        assert "R_50_60" not in titles
+
+
+# ══════════════════════════════════════════════
 #  6. BEDS UPDATE & REPUBLISH
 # ══════════════════════════════════════════════
 class TestBedsAndRepublish:
