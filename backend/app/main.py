@@ -47,14 +47,19 @@ import urllib.request
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 def _load_dotenv():
-    env_file = BASE_DIR / ".env"
-    if env_file.exists():
-        with open(env_file, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    os.environ.setdefault(k.strip(), v.strip().strip("'").strip('"'))
+    for env_name in [".env", "Sakan.env"]:
+        env_file = BASE_DIR / env_name
+        if env_file.exists():
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        # Normalize internal postgres URL to external for local dev if on localhost
+                        val = v.strip().strip("'").strip('"')
+                        if k.strip() == "DATABASE_URL" and "@dpg-" in val and not ".render.com" in val:
+                            val = val.replace("@dpg-", "@dpg-").replace("-a/", "-a.frankfurt-postgres.render.com/")
+                        os.environ.setdefault(k.strip(), val)
 
 _load_dotenv()
 
