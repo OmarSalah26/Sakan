@@ -5584,7 +5584,8 @@ export default function App() {
                     const price = Number(config.price_per_person) || 0;
                     const isRange = config.commission_type === 'range';
                     const activeUser = user;
-                    const isOwnerRole = activeUser?.account_type === 'owner' || (editingListing && (editingListing.advertiser_account_type === 'owner' || editingListing.advertiser_type === 'owner'));
+                    const targetAccount = (forOthersAccount && !editingListing && forOthersStep === 'listing') ? forOthersAccount : activeUser;
+                    const isOwnerRole = targetAccount?.account_type === 'owner' || (editingListing && (editingListing.advertiser_account_type === 'owner' || editingListing.advertiser_type === 'owner'));
                     
                     const displayCommissionPct = (config.commission_pct !== null && config.commission_pct !== undefined)
                       ? config.commission_pct
