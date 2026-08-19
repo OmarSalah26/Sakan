@@ -730,6 +730,7 @@ export default function App() {
   // Post-Publish Share Modal state
   const [postPublishListing, setPostPublishListing] = useState(null);
   const [isPostPublishModalOpen, setIsPostPublishModalOpen] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -2331,8 +2332,6 @@ export default function App() {
 
   const handleDeleteListing = async (listingId) => {
     if (!user) return;
-    if (!window.confirm('هل أنت تأكد من رغبتك في حذف هذا الإعلان بشكل نهائي؟')) return;
-
     try {
       const headers = {
         'Content-Type': 'application/json',
@@ -2494,7 +2493,6 @@ export default function App() {
 
   const handleAdminRemoveListing = async (listingId) => {
     if (!user) return;
-    if (!window.confirm("هل أنت تأكد من إيقاف وحذف هذا الإعلان نهائياً من المنصة؟")) return;
     try {
       const headers = {
         'Content-Type': 'application/json',
@@ -2728,7 +2726,14 @@ export default function App() {
               </div>
               <button 
                 className="btn-outline"
-                onClick={() => { setUser(null); showToast("تم تسجيل الخروج"); setTab('browse'); setMobileMenuOpen(false); }}
+                onClick={() => {
+                  setConfirmDialog({
+                    title: 'تسجيل الخروج',
+                    message: 'هل أنت متأكد من تسجيل الخروج من حسابك؟',
+                    confirmLabel: 'تسجيل الخروج',
+                    onConfirm: () => { setUser(null); showToast("تم تسجيل الخروج"); setTab('browse'); setMobileMenuOpen(false); }
+                  });
+                }}
                 style={{ 
                   display: 'inline-flex', 
                   alignItems: 'center', 
@@ -3519,7 +3524,14 @@ export default function App() {
 
                         <button 
                           className="btn-danger" 
-                          onClick={() => handleDeleteListing(item.id)}
+                          onClick={() => {
+                            setConfirmDialog({
+                              title: 'حذف الإعلان',
+                              message: 'هل أنت متأكد من رغبتك في حذف هذا الإعلان بشكل نهائي؟',
+                              confirmLabel: 'حذف نهائي',
+                              onConfirm: () => handleDeleteListing(item.id)
+                            });
+                          }}
                           style={{ padding: '0.4rem 0.85rem' }}
                         >
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>حذف الإعلان <Trash2 style={{ width: 14, height: 14 }} /></span>
@@ -3822,7 +3834,14 @@ export default function App() {
                           {c.status === 'submitted' && (
                             <>
                               <button className="btn-warning" style={{ fontSize: '0.85rem' }} onClick={() => handleAdminAction(c.id, 'warn')}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>توجيه تحذير <AlertTriangle style={{ width: 14, height: 14 }} /></span></button>
-                              <button className="btn-danger" style={{ fontSize: '0.85rem' }} onClick={() => handleAdminAction(c.id, 'ban')}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>حظر معلن <Ban style={{ width: 14, height: 14 }} /></span></button>
+                              <button className="btn-danger" style={{ fontSize: '0.85rem' }} onClick={() => {
+                                setConfirmDialog({
+                                  title: 'حظر المعلن',
+                                  message: 'هل أنت متأكد من حظر هذا المعلن نهائياً من المنصة؟',
+                                  confirmLabel: 'حظر',
+                                  onConfirm: () => handleAdminAction(c.id, 'ban')
+                                });
+                              }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>حظر معلن <Ban style={{ width: 14, height: 14 }} /></span></button>
                               <button className="btn-secondary" style={{ fontSize: '0.85rem' }} onClick={() => handleAdminAction(c.id, 'dismiss')}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>حفظ الشكوى <Trash2 style={{ width: 14, height: 14 }} /></span></button>
                             </>
                           )}
@@ -3908,7 +3927,15 @@ export default function App() {
                                 <button 
                                   className={u.is_banned ? 'btn-outline' : 'btn-danger'} 
                                   style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
-                                  onClick={() => handleUserBanToggle(u.id, u.is_banned)}
+                                  onClick={() => {
+                                  const banning = !u.is_banned;
+                                  setConfirmDialog({
+                                    title: banning ? 'حظر المستخدم' : 'إلغاء الحظر',
+                                    message: banning ? 'هل أنت متأكد من رغبتك في حظر هذا المستخدم نهائياً؟' : 'هل أنت متأكد من إلغاء حظر هذا المستخدم؟',
+                                    confirmLabel: banning ? 'حظر' : 'إلغاء الحظر',
+                                    onConfirm: () => handleUserBanToggle(u.id, u.is_banned)
+                                  });
+                                }}
                                 >
                                   {u.is_banned ? 'إلغاء الحظر' : 'حظر دائم'}
                                 </button>
@@ -3950,7 +3977,14 @@ export default function App() {
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إعادة تفعيل <Check style={{ width: 14, height: 14 }} /></span>
                           </button>
                         )}
-                        <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => handleAdminRemoveListing(l.id)}>
+                        <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => {
+                            setConfirmDialog({
+                              title: 'حذف الإعلان نهائياً',
+                              message: 'هل أنت متأكد من إيقاف وحذف هذا الإعلان نهائياً من المنصة؟',
+                              confirmLabel: 'حذف نهائي',
+                              onConfirm: () => handleAdminRemoveListing(l.id)
+                            });
+                          }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إيقاف وحذف الإعلان <Trash2 style={{ width: 14, height: 14 }} /></span>
                         </button>
                       </div>
@@ -4039,7 +4073,14 @@ export default function App() {
                           <button className="btn-outline" style={{ fontSize: '0.8rem', borderColor: 'var(--primary)', color: 'var(--primary)' }} onClick={() => shareListingMessage(l, showToast)}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}><Share2 style={{ width: 13, height: 13 }} /> مشاركة</span>
                           </button>
-                          <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => handleAdminRemoveListing(l.id)}>
+                          <button className="btn-danger" style={{ fontSize: '0.8rem' }} onClick={() => {
+                              setConfirmDialog({
+                                title: 'حذف الإعلان نهائياً',
+                                message: 'هل أنت متأكد من إيقاف وحذف هذا الإعلان نهائياً من المنصة؟',
+                                confirmLabel: 'حذف نهائي',
+                                onConfirm: () => handleAdminRemoveListing(l.id)
+                              });
+                            }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>إيقاف وحذف الإعلان <Trash2 style={{ width: 14, height: 14 }} /></span>
                           </button>
                         </div>
@@ -7026,6 +7067,47 @@ export default function App() {
                 }}
               >
                 <Share2 style={{ width: 18, height: 18 }} /> مشاركة الإعلان
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- SHARED CONFIRMATION DIALOG --- */}
+      {confirmDialog && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }} onClick={() => setConfirmDialog(null)}>
+          <div className="modal-content" style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem 1.5rem', borderRadius: '20px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ background: '#fef2f2', color: '#dc2626', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
+              <AlertTriangle style={{ width: 32, height: 32, color: '#dc2626' }} />
+            </div>
+
+            <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: 'var(--text-dark)', marginBottom: '0.5rem' }}>
+              {confirmDialog.title}
+            </h3>
+
+            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+              {confirmDialog.message}
+            </p>
+
+            <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="btn-outline"
+                style={{ padding: '0.65rem 1.1rem', fontWeight: 600, borderRadius: '12px' }}
+                onClick={() => setConfirmDialog(null)}
+              >
+                إلغاء
+              </button>
+
+              <button
+                className="btn-danger"
+                style={{ padding: '0.65rem 1.3rem', fontWeight: 800, borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                onClick={() => {
+                  const cb = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  if (cb) cb();
+                }}
+              >
+                {confirmDialog.confirmLabel}
               </button>
             </div>
           </div>
