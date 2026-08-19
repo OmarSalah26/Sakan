@@ -887,6 +887,7 @@ export default function App() {
   const [outreachSummaryModal, setOutreachSummaryModal] = useState(null);
   const [outreachModalData, setOutreachModalData] = useState(null);
   const [editingListing, setEditingListing] = useState(null);
+  const [adminCommissionOverride, setAdminCommissionOverride] = useState(null); // null | 'no_commission' | 'commission'
 
   const handleGenerateEditLink = async (listingId) => {
     if (!user) return;
@@ -1074,6 +1075,8 @@ export default function App() {
 
   const handleOpenEditFlow = (item) => {
     setEditingListing(item);
+    const isOwnerType = item.advertiser_account_type === 'owner' || item.advertiser_type === 'owner';
+    setAdminCommissionOverride(isOwnerType ? 'no_commission' : 'commission');
     const parseArr = (v) => {
       if (Array.isArray(v)) return v;
       if (typeof v === 'string' && v.trim().startsWith('[')) {
@@ -1874,7 +1877,10 @@ export default function App() {
       const isEditing = Boolean(editingListing && editingListing.id);
       showToast(isEditing ? "جاري حفظ التعديلات..." : "جاري نشر العقار...");
 
-      const isOwnerUser = (listingOwner?.account_type === 'owner') || (editingListing && (editingListing.advertiser_account_type === 'owner' || editingListing.advertiser_type === 'owner'));
+      const isAdminEditing = currentUser.account_type === 'admin' && editingListing;
+      const isOwnerUser = isAdminEditing
+        ? (adminCommissionOverride === 'no_commission')
+        : ((listingOwner?.account_type === 'owner') || (editingListing && (editingListing.advertiser_account_type === 'owner' || editingListing.advertiser_type === 'owner')));
 
       const cleanedConfigs = (createForm.room_configurations || []).map(c => {
         const roomType = c.room_type || 'single';
@@ -5020,6 +5026,50 @@ export default function App() {
                 <span style={{ color: 'var(--text-light)' }}>{forOthersAccount.account_type === 'owner' ? 'مالك' : 'وسيط'} | <strong dir="ltr">{forOthersAccount.phone}</strong></span>
               </div>
             )}
+
+            {user?.account_type === 'admin' && editingListing && (
+              <div style={{ padding: '0.6rem 1.25rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexShrink: 0, fontSize: '0.85rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#1e293b', fontWeight: 700 }}>
+                  <ShieldCheck style={{ width: 16, height: 16, color: '#1e40af' }} />
+                  <span>تعديل مسؤول الإدارة: <strong style={{ color: '#1e40af' }}>{editingListing.title || 'الإعلان'}</strong></span>
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: '#ffffff', padding: '0.25rem 0.5rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>حالة العمولة:</span>
+                  <button
+                    type="button"
+                    style={{
+                      padding: '0.2rem 0.55rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: adminCommissionOverride === 'no_commission' ? '1px solid #86efac' : '1px solid #cbd5e1',
+                      cursor: 'pointer',
+                      background: adminCommissionOverride === 'no_commission' ? '#dcfce7' : '#ffffff',
+                      color: adminCommissionOverride === 'no_commission' ? '#15803d' : '#64748b'
+                    }}
+                    onClick={() => setAdminCommissionOverride('no_commission')}
+                  >
+                    مالك مباشر - بدون عمولة
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      padding: '0.2rem 0.55rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      borderRadius: '6px',
+                      border: adminCommissionOverride === 'commission' ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+                      cursor: 'pointer',
+                      background: adminCommissionOverride === 'commission' ? '#e0f2fe' : '#ffffff',
+                      color: adminCommissionOverride === 'commission' ? '#0369a1' : '#64748b'
+                    }}
+                    onClick={() => setAdminCommissionOverride('commission')}
+                  >
+                    وسيط - بعمولة
+                  </button>
+                </div>
+              </div>
+            )}
             
             <div className="modal-body wizard-modal-body" ref={wizardBodyRef} style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
               {/* STEP 1: TERMS AND CONDITIONS AGREEMENT */}
@@ -5585,7 +5635,10 @@ export default function App() {
                     const isRange = config.commission_type === 'range';
                     const activeUser = user;
                     const targetAccount = (forOthersAccount && !editingListing && forOthersStep === 'listing') ? forOthersAccount : activeUser;
-                    const isOwnerRole = targetAccount?.account_type === 'owner' || (editingListing && (editingListing.advertiser_account_type === 'owner' || editingListing.advertiser_type === 'owner'));
+                    const isAdminEditing = activeUser?.account_type === 'admin' && editingListing;
+                    const isOwnerRole = isAdminEditing
+                      ? (adminCommissionOverride === 'no_commission')
+                      : (targetAccount?.account_type === 'owner' || (editingListing && (editingListing.advertiser_account_type === 'owner' || editingListing.advertiser_type === 'owner')));
                     
                     const displayCommissionPct = (config.commission_pct !== null && config.commission_pct !== undefined)
                       ? config.commission_pct

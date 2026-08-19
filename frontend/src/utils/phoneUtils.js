@@ -56,6 +56,8 @@ export function formatCommissionDisplay(config) {
     let minVal = config.commission_min !== null && config.commission_min !== undefined ? config.commission_min : (config.commission_min_pct ?? 30);
     let maxVal = config.commission_max !== null && config.commission_max !== undefined ? config.commission_max : (config.commission_max_pct ?? 100);
 
+    if (Number(minVal) === 0 && Number(maxVal) === 0) return null;
+
     if (typeof minVal === 'number' && minVal > 100 && price > 0) {
       minVal = Math.round((minVal / price) * 100);
     }
@@ -69,7 +71,7 @@ export function formatCommissionDisplay(config) {
   }
 
   let val = config.commission_pct !== null && config.commission_pct !== undefined ? config.commission_pct : config.commission;
-  if (val !== null && val !== undefined && val !== '') {
+  if (val !== null && val !== undefined && val !== '' && Number(val) > 0) {
     if (typeof val === 'number' && val > 100 && price > 0) {
       val = Math.round((val / price) * 100);
     }
