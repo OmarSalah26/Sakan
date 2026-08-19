@@ -16,6 +16,26 @@ export function AppProvider({ children }) {
 
   const [toastMessage, setToastMessage] = useState(null);
 
+  const [filters, setFilters] = useState({
+    governorate: '',
+    city: '',
+    neighborhood: '',
+    gender: '',
+    min_price: '',
+    max_price: '',
+    room_types: [],
+    amenities: [],
+    near_university: false,
+    near_transit: false,
+    advertiser_type: '',
+    min_commission: '',
+    max_commission: '',
+    services_inclusive: false,
+    has_insurance: false,
+    min_total_beds: '',
+    max_total_beds: ''
+  });
+
   useEffect(() => {
     if (user) {
       localStorage.setItem('sakan_user', JSON.stringify(user));
@@ -45,7 +65,7 @@ export function AppProvider({ children }) {
   };
 
   return (
-    <AppContext.Provider value={{ user, setUser, showToast, toastMessage }}>
+    <AppContext.Provider value={{ user, setUser, showToast, toastMessage, filters, setFilters }}>
       {children}
       {toastMessage && createPortal(
         <div className="alert-toast">

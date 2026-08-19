@@ -491,7 +491,7 @@ export async function shareListingMessage(listing, showToast) {
 }
 
 export default function App() {
-  const { user, setUser, showToast } = useApp();
+  const { user, setUser, showToast, filters, setFilters } = useApp();
   const navigate = useNavigate();
 
   const [tab, setTab] = useState('browse'); // 'browse' | 'dashboard' | 'admin' | 'saved' | 'guide' | 'about' | 'terms' | 'profile'
@@ -620,27 +620,6 @@ export default function App() {
   const [selectedInboxMsg, setSelectedInboxMsg] = useState(null);
   const [adminMsgForm, setAdminMsgForm] = useState({ recipient_id: '', msg_type: 'announcement', title: '', body: '' });
   const [pendingAction, setPendingAction] = useState(null); // callback after auth success
-  
-  // Filters state
-  const [filters, setFilters] = useState({
-    governorate: '',
-    city: '',
-    neighborhood: '',
-    gender: '',
-    min_price: '',
-    max_price: '',
-    room_types: [],
-    amenities: [],
-    near_university: false,
-    near_transit: false,
-    advertiser_type: '',
-    min_commission: '',
-    max_commission: '',
-    services_inclusive: false,
-    has_insurance: false,
-    min_total_beds: '',
-    max_total_beds: ''
-  });
 
   const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'oldest' | 'price_asc' | 'price_desc'
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
@@ -869,7 +848,7 @@ export default function App() {
   // Geo-scaling Waitlist State
   const [dbGovernorates, setDbGovernorates] = useState(DEFAULT_GOVERNORATES_LIST);
   const [isAreaGateOpen, setIsAreaGateOpen] = useState(false);
-  const [areaGateForm, setAreaGateForm] = useState({ governorate_id: DEFAULT_GOVERNORATES_LIST[0].id });
+  const [areaGateForm, setAreaGateForm] = useState({ governorate_id: (DEFAULT_GOVERNORATES_LIST.find(g => g.name === 'دمياط')?.id || DEFAULT_GOVERNORATES_LIST[0].id) });
   const [isWaitlistOpen, setIsWaitlistOpen] = useState(false);
   const [waitlistStep, setWaitlistStep] = useState('form'); // 'form' | 'otp' | 'success'
   const [waitlistForm, setWaitlistForm] = useState({
@@ -1816,7 +1795,7 @@ export default function App() {
       }
     }
     setIsAreaGateOpen(true);
-    setAreaGateForm({ governorate_id: dbGovernorates[0]?.id || 1 });
+    setAreaGateForm({ governorate_id: (dbGovernorates.find(g => g.name === 'دمياط')?.id || dbGovernorates[0]?.id || 1) });
   };
 
   const handleStep2Next = () => {
