@@ -127,6 +127,8 @@ export function formatUnifiedShareText(listing) {
     : listing.gender === 'male' 
       ? '👨‍🦱 *سكن طلاب*' 
       : '👨‍🦱👧 *سكن طلاب / طالبات*';
+
+  const advertiserTypeLine = listing.advertiser_type === 'owner' ? 'من المالك مباشرة' : null;
   
   // Location: City only (without Governorates as requested)
   const city = (listing.city || '').trim();
@@ -147,7 +149,7 @@ export function formatUnifiedShareText(listing) {
   if (Array.isArray(configs) && configs.length > 0) {
     configs.forEach(c => {
       const roomType = c.room_type || 'single';
-      const label = roomType === 'single' ? 'مفردة' : roomType === 'double' ? 'مزدوجة' : roomType === 'triple' ? 'ثلاثية' : 'رباعية';
+      const label = roomType === 'single' ? 'فرديه' : roomType === 'double' ? 'مزدوجة' : roomType === 'triple' ? 'ثلاثية' : 'رباعية';
       const count = Number(c.count) || 1;
       const countStr = count === 1 ? `غرفة ${label}` : `${count} غرف ${label}`;
 
@@ -180,13 +182,14 @@ export function formatUnifiedShareText(listing) {
     `🏠 *سكن | ${title}*`,
     '',
     genderLine,
+    advertiserTypeLine,
     city ? `📍 *الموقع:* ${city}` : null,
     address ? `📌 *العنوان:* ${address}` : null,
     '',
-    '🛏️ *تكوين الغرف*',
+    '🛏️ *نوع الغرف*',
     roomLines.length > 0 ? roomLines.join('\n') : '• بيانات الغرف متوفرة عند التواصل',
     '',
-    priceStr ? `💰 *إجمالي سعر الإيجار:* ${priceStr}` : null,
+    priceStr ? `💰 *إجمالي سعر الإيجار الشهري:* ${priceStr}` : null,
     '',
     '✨ *شاهد الصور والفيديو وجميع تفاصيل السكن:*',
     shareUrl ? `🔗 ${shareUrl}` : null

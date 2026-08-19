@@ -1978,12 +1978,10 @@ export default function App() {
           setForOthersCreatedListing(publishedData);
           setForOthersStep('done');
         } else {
-          if (isEditing && publishedData?.id) {
-            openListingDetail(publishedData.id);
-          } else {
+          if (!isEditing) {
             setTab('browse');
           }
-          if (!isEditing && publishedData) {
+          if (publishedData) {
             setPostPublishListing(publishedData);
             setIsPostPublishModalOpen(true);
           }
