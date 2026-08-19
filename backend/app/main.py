@@ -276,6 +276,7 @@ class Listing(Base):
     not_vacant_reports = Column(Integer, default=0)        # count of not vacant reports
     near_university = Column(Boolean, default=False)       # True if near university
     near_transit = Column(Boolean, default=False)          # True if near public transit
+    listing_type_override = Column(String, nullable=True)  # Admin-only: "owner" | "broker" | None (uses advertiser account_type)
 
     advertiser = relationship("User", back_populates="listings")
     ratings = relationship("Rating", back_populates="listing")
@@ -510,6 +511,8 @@ def ensure_schema():
                 connection.execute(text(f"ALTER TABLE listings ADD COLUMN near_university {bool_dflt_false}"))
             if "near_transit" not in listing_cols:
                 connection.execute(text(f"ALTER TABLE listings ADD COLUMN near_transit {bool_dflt_false}"))
+            if "listing_type_override" not in listing_cols:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN listing_type_override VARCHAR"))
 
         # Startup migration for 3-state insurance: convert legacy empty/unspecified/0 insurance_price in existing room_configurations to None (null)
         try:
@@ -993,6 +996,7 @@ class ListingCreate(BaseModel):
     totalPrice: Optional[Union[float, int]] = None
     total_price: Optional[Union[float, int]] = None
     pricing_mode: Optional[str] = "room_based"
+    listing_type_override: Optional[str] = None  # Admin-only: "owner" | "broker" | None
 
 
 class ListingOut(BaseModel):
@@ -1040,6 +1044,7 @@ class ListingOut(BaseModel):
     not_vacant_reports: int = 0
     near_university: bool = False
     near_transit: bool = False
+    listing_type_override: Optional[str] = None
 
 
 def safe_int(val, default=None):
@@ -1105,7 +1110,7 @@ def build_listing_out(item: Listing, advertiser: Optional[User] = None) -> Listi
         contact_phone=item.contact_phone,
         whatsapp_phone=item.whatsapp_phone,
         advertiser_name=advertiser.name if advertiser else None,
-        advertiser_type="broker" if advertiser and advertiser.account_type == "admin" else (advertiser.account_type if advertiser else None),
+        advertiser_type=item.listing_type_override if item.listing_type_override else ("broker" if advertiser and advertiser.account_type == "admin" else (advertiser.account_type if advertiser else None)),
         advertiser_verified=advertiser.verified_by_sakan if advertiser else False,
         source=item.source or "normal",
         full_edit_available=bool(item.full_edit_available),
@@ -1115,6 +1120,7 @@ def build_listing_out(item: Listing, advertiser: Optional[User] = None) -> Listi
         not_vacant_reports=safe_int(item.not_vacant_reports, 0),
         near_university=bool(item.near_university),
         near_transit=bool(item.near_transit),
+        listing_type_override=item.listing_type_override,
         totalPrice=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None),
         total_price=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None),
         pricing_mode=item.pricing_mode or "room_based"
@@ -3750,6 +3756,13 @@ def update_listing(
             # Consume the one-time full edit flag for scraped/bulk ads
             if source != "normal" and full_edit_avail:
                 listing.full_edit_available = False
+
+            # Admin commission override: persist explicit listing type if provided
+            if payload.listing_type_override in ("owner", "broker"):
+                listing.listing_type_override = payload.listing_type_override
+            elif payload.listing_type_override is None and hasattr(payload, 'listing_type_override'):
+                # If Admin explicitly passes null/None, clear the override (revert to account_type logic)
+                pass  # keep existing override intact unless Admin provides a new explicit value
 
         listing.updated_at = datetime.utcnow()
         db.commit()

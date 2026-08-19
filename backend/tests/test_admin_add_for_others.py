@@ -373,7 +373,7 @@ def test_admin_commission_status_correction_for_existing_listings():
     assert listing['advertiser_id'] == owner_user['id']
     assert listing['advertiser_type'] == 'owner'
 
-    # 3. Admin opens and edits listing, ensuring 0 commission is retained
+    # 3. Admin opens and edits listing, explicitly overriding listing type to "owner"
     admin_edit = client.put(
         f"/listings/{listing['id']}?x_user_id={admin_user['id']}",
         json={
@@ -392,13 +392,15 @@ def test_admin_commission_status_correction_for_existing_listings():
             }],
             'photo_urls': ['/1.jpg', '/2.jpg', '/3.jpg', '/4.jpg', '/5.jpg'],
             'advertiser_id': owner_user['id'],
-            'contact_phone': '01666666666'
+            'contact_phone': '01666666666',
+            'listing_type_override': 'owner'
         }
     )
     assert admin_edit.status_code == 200
     updated = admin_edit.json()
     assert updated['advertiser_id'] == owner_user['id']
     assert updated['advertiser_type'] == 'owner'
+    assert updated['listing_type_override'] == 'owner'
     assert updated['room_configurations'][0]['commission'] == 0
 
 

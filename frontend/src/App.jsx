@@ -1075,8 +1075,18 @@ export default function App() {
 
   const handleOpenEditFlow = (item) => {
     setEditingListing(item);
-    const isOwnerType = item.advertiser_account_type === 'owner' || item.advertiser_type === 'owner';
-    setAdminCommissionOverride(isOwnerType ? 'no_commission' : 'commission');
+    // listing_type_override is stored on the listing (set by Admin). If present, use it as the authoritative state.
+    // Otherwise fall back to advertiser_type from the API response.
+    let initialOverride;
+    if (item.listing_type_override === 'owner') {
+      initialOverride = 'no_commission';
+    } else if (item.listing_type_override === 'broker') {
+      initialOverride = 'commission';
+    } else {
+      const isOwnerType = item.advertiser_account_type === 'owner' || item.advertiser_type === 'owner';
+      initialOverride = isOwnerType ? 'no_commission' : 'commission';
+    }
+    setAdminCommissionOverride(initialOverride);
     const parseArr = (v) => {
       if (Array.isArray(v)) return v;
       if (typeof v === 'string' && v.trim().startsWith('[')) {
@@ -1946,7 +1956,10 @@ export default function App() {
         advertiser_id: listingOwner.id,
         source: isForOthersFlow ? 'manual' : (createForm.source || 'normal'),
         near_university: Boolean(createForm.near_university),
-        near_transit: Boolean(createForm.near_transit)
+        near_transit: Boolean(createForm.near_transit),
+        ...(isAdminEditing && adminCommissionOverride ? {
+          listing_type_override: adminCommissionOverride === 'no_commission' ? 'owner' : 'broker'
+        } : {})
       };
 
       const url = isEditing ? `${API_BASE}/listings/${editingListing.id}?x_user_id=${currentUser.id}` : `${API_BASE}/listings`;
