@@ -403,4 +403,11 @@ def test_admin_commission_status_correction_for_existing_listings():
     assert updated['listing_type_override'] == 'owner'
     assert updated['room_configurations'][0]['commission'] == 0
 
+    # 4. Verify search filter GET /listings?advertiser_type=owner returns this listing
+    filter_res = client.get('/listings?advertiser_type=owner')
+    assert filter_res.status_code == 200
+    filtered_items = filter_res.json()
+    matching_ids = [item['id'] for item in filtered_items if item['id'] == listing['id']]
+    assert len(matching_ids) == 1
+
 

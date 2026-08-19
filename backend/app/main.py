@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text, or_
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text, or_, and_
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 import cloudinary
@@ -2019,11 +2019,35 @@ def list_listings(
             query = query.filter(Listing.gender == gender)
         if advertiser_type:
             if advertiser_type == 'broker':
-                query = query.filter(User.account_type.in_(['broker', 'admin']))
+                query = query.filter(
+                    or_(
+                        Listing.listing_type_override == 'broker',
+                        and_(
+                            Listing.listing_type_override.is_(None),
+                            User.account_type.in_(['broker', 'admin'])
+                        )
+                    )
+                )
             elif advertiser_type == 'owner':
-                query = query.filter(User.account_type == 'owner')
+                query = query.filter(
+                    or_(
+                        Listing.listing_type_override == 'owner',
+                        and_(
+                            Listing.listing_type_override.is_(None),
+                            User.account_type == 'owner'
+                        )
+                    )
+                )
             else:
-                query = query.filter(User.account_type == advertiser_type)
+                query = query.filter(
+                    or_(
+                        Listing.listing_type_override == advertiser_type,
+                        and_(
+                            Listing.listing_type_override.is_(None),
+                            User.account_type == advertiser_type
+                        )
+                    )
+                )
 
         listings = query.order_by(Listing.created_at.desc()).all()
 
