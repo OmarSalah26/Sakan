@@ -343,3 +343,62 @@ def test_owner_broker_commission_matrix():
     assert hb_cfg0['commission'] == 750
     assert hb_cfg0['commission_pct'] == 50
 
+
+def test_admin_commission_status_correction_for_existing_listings():
+    # 1. Register Owner user & Admin user
+    owner_user = register_and_verify('01666666666', 'Historical Owner', 'owner')
+    admin_user = register_and_verify('01777777777', 'Admin Corrector', 'admin')
+
+    # 2. Simulate listing belonging to Owner that has 0 commission
+    listing_res = client.post('/listings', json={
+        'title': 'Owner Historical Property',
+        'governorate': 'أسيوط',
+        'city': 'أسيوط',
+        'neighborhood': 'شارع الجامعة',
+        'gender': 'female',
+        'available_beds': 1,
+        'room_configurations': [{
+            'room_type': 'single',
+            'price_per_person': 1500,
+            'commission': 0,
+            'commission_pct': 0,
+            'count': 1
+        }],
+        'photo_urls': ['/1.jpg', '/2.jpg', '/3.jpg', '/4.jpg', '/5.jpg'],
+        'advertiser_id': owner_user['id'],
+        'contact_phone': '01666666666'
+    })
+    assert listing_res.status_code == 200
+    listing = listing_res.json()
+    assert listing['advertiser_id'] == owner_user['id']
+    assert listing['advertiser_type'] == 'owner'
+
+    # 3. Admin opens and edits listing, ensuring 0 commission is retained
+    admin_edit = client.put(
+        f"/listings/{listing['id']}?x_user_id={admin_user['id']}",
+        json={
+            'title': 'Owner Historical Property Corrected',
+            'governorate': 'أسيوط',
+            'city': 'أسيوط',
+            'neighborhood': 'شارع الجامعة',
+            'gender': 'female',
+            'available_beds': 1,
+            'room_configurations': [{
+                'room_type': 'single',
+                'price_per_person': 1600,
+                'commission': 0,
+                'commission_pct': 0,
+                'count': 1
+            }],
+            'photo_urls': ['/1.jpg', '/2.jpg', '/3.jpg', '/4.jpg', '/5.jpg'],
+            'advertiser_id': owner_user['id'],
+            'contact_phone': '01666666666'
+        }
+    )
+    assert admin_edit.status_code == 200
+    updated = admin_edit.json()
+    assert updated['advertiser_id'] == owner_user['id']
+    assert updated['advertiser_type'] == 'owner'
+    assert updated['room_configurations'][0]['commission'] == 0
+
+
