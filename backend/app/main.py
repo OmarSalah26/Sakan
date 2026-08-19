@@ -555,7 +555,6 @@ def ensure_schema():
                     pass
         except Exception:
             pass
->>>>>>> b48a16f8618da9170ee12fc8020a69abd98b3968
 
         # Check ratings table
         if "ratings" in inspector.get_table_names():
