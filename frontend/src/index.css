@@ -6,6 +6,8 @@
    ============================================ */
 
 :root {
+  color-scheme: light;
+
   /* Colors – matching production palette */
   --primary:       #0D63EA;  /* blue-primary */
   --primary-dark:  #094bb8;  /* blue-700 */
