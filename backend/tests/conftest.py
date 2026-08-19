@@ -39,6 +39,8 @@ def isolated_test_db():
     # Patch engine & session factory inside the app module
     main_module.engine = TEST_ENGINE
     main_module.SessionLocal = TEST_SESSION_LOCAL
+    main_module.IS_TESTING = True
+
 
     # Create all tables
     Base.metadata.create_all(bind=TEST_ENGINE)

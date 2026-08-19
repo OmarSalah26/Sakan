@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Play, ShieldCheck, Wind
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice } from '../utils/phoneUtils';
+import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText } from '../utils/phoneUtils';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '/api');
 
@@ -43,6 +43,28 @@ function getTimeAgo(dateStr) {
   return `منذ ${diffDays} يوماً`;
 }
 
+function formatFloorDisplay(val) {
+  if (val === null || val === undefined || val === '') return '';
+  const str = String(val).trim();
+  const num = parseInt(str, 10);
+  const ordinals = [
+    'الأرضي', 'الأول', 'الثاني', 'الثالث', 'الرابع', 
+    'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'
+  ];
+  if (!isNaN(num) && num >= 0) {
+    if (num < ordinals.length) return `الدور ${ordinals[num]}`;
+    return `الدور ${num}`;
+  }
+  if (str.startsWith('الدور')) return str;
+  return `الدور ${str}`;
+}
+
+function isFloorOnlyText(text) {
+  if (!text) return false;
+  const s = text.trim();
+  return /^(الدور\s*)?(\d+|الأرضي|الارضي|الأول|الاول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|أرضي|ارضي|أول|اول|ثاني|ثالث|رابع|خامس|سادس|سابع|ثامن|تاسع|عاشر)$/i.test(s);
+}
+
 function extractAmenityName(amenity) {
   if (!amenity) return '';
   if (typeof amenity === 'object' && amenity !== null) {
@@ -51,6 +73,11 @@ function extractAmenityName(amenity) {
   if (typeof amenity === 'string') {
     const trimmed = amenity.trim();
     if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.map(extractAmenityName);
+        if (parsed && typeof parsed === 'object') return parsed.name || parsed.title || '';
+      } catch {}
       const match = trimmed.match(/'name':\s*'([^']+)'/) || trimmed.match(/"name":\s*"([^"]+)"/);
       if (match && match[1]) return match[1];
     }
@@ -59,90 +86,40 @@ function extractAmenityName(amenity) {
   return String(amenity);
 }
 
+const AMENITY_ALIASES = {
+  "تكييف": "مكيفة",
+  "مراوح": "مروحة",
+  "مياه ساخنة": "سخان",
+  "سخان مياه": "سخان",
+  "منشر": "منشر ملابس",
+  "أدوات مطبخ": "أجهزة مطبخ",
+  "فلتر مياه": "أجهزة مطبخ",
+  "صالة جلوس مشتركة": "غرفة معيشة مفروشة",
+  "غرفة مذاكرة": "غرفة معيشة مفروشة",
+  "أمن 24 ساعة": "حارس عقار",
+  "عيادة طبية": "مستشفى",
+  "واي فاي مجاني": "واي فاي",
+  "جيم (Gym)": "جيم",
+  "بوتاجاز / ميكروويف": "بوتاجاز",
+  "سرير إضافي": "تجهيزات الشقة"
+};
+
 const INDOOR_AMENITIES = [
-  "واي فاي مجاني", "تكييف", "مراوح", "سخان مياه", "ثلاجة", 
-  "غسالة", "بوتاجاز / ميكروويف", "فلتر مياه", "سرير إضافي", "مكتب للمذاكرة", "دولاب ملابس"
+  "واي فاي", "واي فاي مجاني", "تكييف", "مراوح", "مياه ساخنة", "سخان مياه",
+  "مولد كهرباء / كهرباء احتياطية", "ثلاجة", "بوتاجاز", "ميكروويف", "بوتاجاز / ميكروويف",
+  "فلتر مياه", "أدوات مطبخ", "مكتب للمذاكرة", "كرسي مكتب", "دولاب ملابس", "سرير إضافي",
+  "غسالة", "منشر", "مكواة", "كاميرات مراقبة", "أمن 24 ساعة", "تنظيف دوري",
+  "صيانة", "مصعد", "غرفة مذاكرة", "صالة جلوس مشتركة", "بلكونة"
 ];
 
 const OUTDOOR_AMENITIES = [
-  "قريب من الجامعة", "قريب من المواصلات العامة", "سوبر ماركت", 
-  "مطاعم", "كافيهات", "صيدلية", "عيادة طبية", "جيم (Gym)", "ماكينة صراف آلي (ATM)"
+  "قريب من الجامعة", "قريب من المواصلات العامة", "سوبر ماركت", "مخبز",
+  "مطاعم", "كافيهات", "صيدلية", "مستشفى", "عيادة طبية", "جيم", "جيم (Gym)",
+  "مسجد", "كنيسة", "ماكينة صراف آلي (ATM)", "بنك", "محل طباعة وتصوير", "مكتبة"
 ];
 
 export function formatShareText(listing) {
-  if (!listing) return '';
-  const genderStr = listing.gender === 'male' ? 'سكن طلاب (شباب)' : 'سكن طالبات (بنات)';
-  
-  const configs = Array.isArray(listing.room_configurations) 
-    ? listing.room_configurations 
-    : typeof listing.room_configurations === 'string'
-      ? JSON.parse(listing.room_configurations || '[]')
-      : [];
-
-  let totalBeds = 0;
-  let servicesInclusive = false;
-  let hasInsurance = false;
-  let insuranceAmount = null;
-  let unitTotalPrice = 0;
-  const roomTypesList = [];
-
-  if (Array.isArray(configs) && configs.length > 0) {
-    configs.forEach(c => {
-      const roomType = c.room_type || 'single';
-      const label = roomType === 'single' ? 'فردية' : roomType === 'double' ? 'ثنائية' : roomType === 'triple' ? 'ثلاثية' : 'رباعية';
-      const multiplier = roomType === 'double' ? 2 : roomType === 'triple' ? 3 : roomType === 'quadruple' ? 4 : 1;
-      const count = c.count || 1;
-      const price = c.price_per_person || 0;
-      
-      totalBeds += multiplier * count;
-      unitTotalPrice += (price * count * multiplier);
-      roomTypesList.push(`${count} غرفة ${label}`);
-
-      if (c.services_inclusive) servicesInclusive = true;
-      if (c.insurance_price) {
-        hasInsurance = true;
-        insuranceAmount = c.insurance_price;
-      }
-    });
-  }
-
-  if (totalBeds === 0) {
-    totalBeds = listing.available_beds || 1;
-  }
-  if (!unitTotalPrice && listing.price_per_person) {
-    unitTotalPrice = listing.price_per_person;
-  }
-
-  const locationParts = [listing.governorate, listing.city, listing.neighborhood].filter(Boolean);
-  const locationStr = locationParts.join('، ');
-  const availStr = `${listing.available_beds || 1} سرير متاح من أصل ${totalBeds}`;
-
-  let depositStr = 'بدون تأمين';
-  if (hasInsurance && insuranceAmount) {
-    depositStr = `تأمين: ${insuranceAmount} ج.م`;
-  } else if (hasInsurance) {
-    depositStr = 'يتطلب دفع تأمين';
-  }
-
-  const servicesStr = servicesInclusive ? 'الخدمات مشمولة' : 'الخدمات غير مشمولة';
-  const priceStr = unitTotalPrice ? `${unitTotalPrice.toLocaleString()} ج.م/شهرياً` : '';
-
-  const lines = [
-    `*${listing.title || 'سكن رائع'}*`,
-    `📍 ${locationStr}`,
-    '',
-    `• *النوع:* ${genderStr}`,
-    roomTypesList.length > 0 ? `• *الغرف:* ${roomTypesList.join('، ')}` : null,
-    `• *الأسرة:* ${availStr}`,
-    `• *التأمين:* ${depositStr}`,
-    `• *الخدمات:* ${servicesStr}`,
-    priceStr ? `• *السعر:* ${priceStr}` : null,
-    '',
-    '🔗 *شاهد الصور والتفاصيل كاملة:*',
-    `https://sakan-egy.com/listings/${listing.id}`
-  ].filter(Boolean);
-
-  return lines.join('\n');
+  return formatUnifiedShareText(listing);
 }
 
 export default function ListingDetailPage() {
@@ -234,20 +211,20 @@ export default function ListingDetailPage() {
 
   const handleShare = async () => {
     const shareText = formatShareText(listing);
-    const shareUrl = window.location.href;
     if (navigator.share) {
       try {
         await navigator.share({
-          title: listing.title,
-          text: shareText,
-          url: shareUrl
+          title: listing.title || 'سكن',
+          text: shareText
         });
         return;
       } catch (err) {
-        if (err.name !== 'AbortError') console.error(err);
+        if (err.name !== 'AbortError' && navigator.clipboard) {
+          await navigator.clipboard.writeText(shareText);
+          showToast('تم نسخ رابط وتفاصيل الإعلان بنجاح!');
+        }
       }
-    }
-    if (navigator.clipboard) {
+    } else if (navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(shareText);
         showToast('تم نسخ رابط وتفاصيل الإعلان بنجاح!');
@@ -514,10 +491,10 @@ export default function ListingDetailPage() {
             </div>
           )}
 
-          {listing.floor && (
+          {(listing.floor !== null && listing.floor !== undefined && listing.floor !== '') && (
             <div style={{ background: '#f1f5f9', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Home style={{ width: 16, height: 16, color: 'var(--primary)' }} />
-              الدور: {String(listing.floor).replace(/^الدور\s*/, '')}
+              {formatFloorDisplay(listing.floor)}
             </div>
           )}
 
@@ -542,21 +519,29 @@ export default function ListingDetailPage() {
           {/* Room Configurations */}
           <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
-              فئات الغرف والأسعار المتاحة
+              {listing.pricing_mode === 'total_based' ? 'فئات الغرف المتاحة' : 'فئات الغرف والأسعار المتاحة'}
             </h3>
             <div style={{ display: 'grid', gap: '0.85rem' }}>
               {(() => {
-                const validConfigs = (listing.room_configurations || []).filter(c => Number(c.price_per_person) > 0);
+                const validConfigs = (listing.room_configurations || []).filter(c => Number(c.price_per_person) > 0 || listing.pricing_mode === 'total_based');
                 if (validConfigs.length > 0) {
                   return validConfigs.map((c, idx) => (
                     <div key={idx} style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                         <span style={{ fontWeight: 700, fontSize: '1rem' }}>
-                          {c.room_type === 'single' ? 'غرفة فردية' : c.room_type === 'double' ? 'غرفة ثنائية' : c.room_type === 'triple' ? 'غرفة ثلاثية' : 'غرفة رباعية'} ({c.available_beds !== undefined ? c.available_beds : (c.count || 1)} أسرة متوفرة)
+                          {(() => {
+                            const roomCount = c.count || 1;
+                            const typeName = c.room_type === 'single' ? 'فردية' : c.room_type === 'double' ? 'ثنائية' : c.room_type === 'triple' ? 'ثلاثية' : 'رباعية';
+                            const roomLabel = roomCount > 1 ? `${roomCount} غرف ${typeName}` : `غرفة ${typeName}`;
+                            const availText = c.available_beds !== undefined ? ` (${c.available_beds} أسرة متوفرة)` : '';
+                            return `${roomLabel}${availText}`;
+                          })()}
                         </span>
-                        <strong style={{ color: 'var(--primary)', fontSize: '1.2rem', fontWeight: 800 }}>
-                          {c.price_per_person} ج.م <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ شهرياً</span>
-                        </strong>
+                        {listing.pricing_mode !== 'total_based' && (
+                          <strong style={{ color: 'var(--primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                            {c.price_per_person} ج.م <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ شهرياً</span>
+                          </strong>
+                        )}
                       </div>
 
                       <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -576,15 +561,17 @@ export default function ListingDetailPage() {
                           </span>
                         )}
 
-                        {c.insurance_price ? (
-                          <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                            <Shield style={{ width: 13, height: 13 }} /> تأمين: {c.insurance_price} ج.م
-                          </span>
-                        ) : (
-                          <span style={{ background: '#f1f5f9', color: '#475569', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
-                            بدون تأمين
-                          </span>
-                        )}
+                        {c.insurance_price !== null && c.insurance_price !== undefined && c.insurance_price !== '' ? (
+                          Number(c.insurance_price) > 0 ? (
+                            <span style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                              <Shield style={{ width: 13, height: 13 }} /> تأمين: {Number(c.insurance_price).toLocaleString()} ج.م
+                            </span>
+                          ) : Number(c.insurance_price) === 0 ? (
+                            <span style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
+                              لا يوجد تأمين
+                            </span>
+                          ) : null
+                        ) : null}
                         {c.services_inclusive ? (
                           <span style={{ background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                             <Zap style={{ width: 13, height: 13 }} /> شامل الخدمات (مياه/كهرباء/إنترنت)
@@ -613,42 +600,52 @@ export default function ListingDetailPage() {
           </div>
 
           {/* Full Address */}
-          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
-              العنوان بالتفصيل
-            </h3>
-            <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-dark)', fontSize: '0.95rem' }}>{listing.address}</span>
-            </div>
+          {(() => {
+            const rawAddr = (listing.address || '').trim();
+            const isFloorOnly = isFloorOnlyText(rawAddr);
+            const displayAddress = (!rawAddr || isFloorOnly) ? '' : rawAddr;
 
-            {/* Embedded Google Map (only rendered if precise coordinates exist) */}
-            {hasCoords && (listing.location_precise || listing.location_precise === undefined) && (() => {
-              const { latitude, longitude } = listing;
-              const gmSrc = `https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`;
-              const osmSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${longitude-0.006},${latitude-0.004},${longitude+0.006},${latitude+0.004}&layer=mapnik&marker=${latitude},${longitude}`;
-              return (
-                <div style={{ marginTop: '1rem', width: '100%', height: '228px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
-                  <iframe
-                    key={gmSrc}
-                    src={gmSrc}
-                    width="100%"
-                    height={195}
-                    style={{ border: 0, display: 'block', flex: '0 0 195px' }}
-                    allowFullScreen=""
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    title="Listing Location Map"
-                    onError={(e) => { e.target.src = osmSrc; }}
-                  />
-                  <div style={{ height: '33px', flex: '0 0 33px', background: '#f8fafc', fontSize: '0.8rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border)' }}>
-                    <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                      فتح الموقع في خرائط جوجل <MapPin style={{ width: 14, height: 14 }} />
-                    </a>
-                  </div>
+            return (
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                  العنوان بالتفصيل
+                </h3>
+                <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-dark)', fontSize: '0.95rem' }}>
+                    {displayAddress || 'لم يتم إضافة عنوان تفصيلي'}
+                  </span>
                 </div>
-              );
-            })()}
-          </div>
+
+                {/* Embedded Google Map (only rendered if precise coordinates exist) */}
+                {hasCoords && (listing.location_precise || listing.location_precise === undefined) && (() => {
+                  const { latitude, longitude } = listing;
+                  const gmSrc = `https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`;
+                  const osmSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${longitude-0.006},${latitude-0.004},${longitude+0.006},${latitude+0.004}&layer=mapnik&marker=${latitude},${longitude}`;
+                  return (
+                    <div style={{ marginTop: '1rem', width: '100%', height: '228px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+                      <iframe
+                        key={gmSrc}
+                        src={gmSrc}
+                        width="100%"
+                        height={195}
+                        style={{ border: 0, display: 'block', flex: '0 0 195px' }}
+                        allowFullScreen=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        title="Listing Location Map"
+                        onError={(e) => { e.target.src = osmSrc; }}
+                      />
+                      <div style={{ height: '33px', flex: '0 0 33px', background: '#f8fafc', fontSize: '0.8rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border)' }}>
+                        <a href={googleMapsLink} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                          فتح الموقع في خرائط جوجل <MapPin style={{ width: 14, height: 14 }} />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            );
+          })()}
 
           {/* Description */}
           {listing.description && (
@@ -717,7 +714,7 @@ export default function ListingDetailPage() {
             {/* CTAs */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <a 
-                href={`https://wa.me/${formatPhoneWaDigits(listing.contact_phone || advertiser.phone)}?text=${encodeURIComponent(`سلام عليكم أستاذ ${advertiser.name || ''}، شفت إعلان السكن "${listing.title}" في ${listing.governorate}، ${listing.city} على منصة سكن ومحتاج أستفسر عن التفاصيل.`)}`}
+                href={`https://wa.me/${formatPhoneWaDigits(listing.contact_phone || advertiser.phone)}?text=${encodeURIComponent(`سلام عليكم أستاذ ${advertiser.name || ''}، شفت إعلان السكن "${listing.title}" في ${listing.governorate}، ${listing.city} على منصة سكن ومحتاج أستفسر عن التفاصيل.\nhttps://sakan-egy.com/listings/${listing.id}`)}`}
                 target="_blank" 
                 rel="noreferrer"
                 style={{ background: '#22c55e', color: '#fff', textDecoration: 'none', padding: '0.75rem', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.95rem' }}
@@ -777,49 +774,138 @@ export default function ListingDetailPage() {
           الخدمات والمرافق المتوفرة
         </h3>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-          {(() => {
-            const cleanAmenities = (listing.amenities || []).map(extractAmenityName).filter(Boolean);
-            const hasAcRoom = listing.room_configurations?.some(c => c.has_ac);
-            if (hasAcRoom && !cleanAmenities.some(a => a.includes('تكييف') || a.includes('مكيفة'))) {
-              cleanAmenities.push('❄️ مكيفة');
-            }
-            const indoorList = cleanAmenities.filter(a => INDOOR_AMENITIES.includes(a) || a.includes('مكيفة'));
-            const outdoorList = cleanAmenities.filter(a => OUTDOOR_AMENITIES.includes(a));
-            const otherList = cleanAmenities.filter(a => !INDOOR_AMENITIES.includes(a) && !OUTDOOR_AMENITIES.includes(a) && !a.includes('مكيفة'));
+        {(() => {
+          const rawList = Array.isArray(listing.amenities)
+            ? listing.amenities
+            : typeof listing.amenities === 'string'
+              ? (() => {
+                  try {
+                    const p = JSON.parse(listing.amenities || '[]');
+                    return Array.isArray(p) ? p : [listing.amenities];
+                  } catch {
+                    return [listing.amenities];
+                  }
+                })()
+              : [];
 
-            return (
-              <>
-                <div>
-                  <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق سكنية داخلية</h4>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    {indoorList.map((amen, i) => (
-                      <span key={i} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                        {amen}
+          const cleanAmenities = rawList.flatMap(extractAmenityName).filter(Boolean);
+          
+          const hasNearUniv = Boolean(listing.near_university || cleanAmenities.includes('قريب من الجامعة'));
+          const hasNearTransit = Boolean(listing.near_transit || cleanAmenities.includes('قريب من المواصلات العامة'));
+
+          const filteredAmenities = cleanAmenities
+            .filter(a => a !== 'قريب من الجامعة' && a !== 'قريب من المواصلات العامة')
+            .map(a => AMENITY_ALIASES[a] || a);
+
+          const hasAcRoom = listing.room_configurations?.some(c => c.has_ac);
+          if (hasAcRoom && !filteredAmenities.some(a => a.includes('تكييف') || a.includes('مكيفة'))) {
+            filteredAmenities.push('مكيفة');
+          }
+
+          const uniqueAmenities = Array.from(new Set(filteredAmenities));
+
+          const INDOOR_GROUPS = [
+            { title: "تجهيزات الشقة", items: ["مكيفة", "مروحة", "تلفزيون", "مكتب للمذاكرة", "كرسي مكتب", "دولاب ملابس", "سخان", "غسالة", "منشر ملابس", "مكواة", "واي فاي"] },
+            { title: "المطبخ", items: ["مطبخ", "ثلاجة", "بوتاجاز", "ميكروويف", "أجهزة مطبخ", "أطباق وأدوات مائدة"] },
+            { title: "أخرى / خدمات", items: ["بلكونة", "غرفة معيشة مفروشة", "مولد كهرباء / كهرباء احتياطية", "مصعد", "تنظيف دوري", "صيانة", "كاميرات مراقبة", "حارس عقار"] }
+          ];
+
+          const OUTDOOR_GROUPS = [
+            { title: "الخدمات الأساسية القريبة", items: ["سوبر ماركت", "مخبز", "صيدلية", "مستشفى", "بنك", "ماكينة صراف آلي (ATM)"] },
+            { title: "الأماكن والأنشطة القريبة", items: ["مطاعم", "كافيهات", "جيم", "مسجد", "كنيسة", "محل طباعة وتصوير", "مكتبة"] }
+          ];
+
+          const allDefinedIndoor = INDOOR_GROUPS.flatMap(g => g.items);
+          const allDefinedOutdoor = OUTDOOR_GROUPS.flatMap(g => g.items);
+
+          const unclassified = uniqueAmenities.filter(a => !allDefinedIndoor.includes(a) && !allDefinedOutdoor.includes(a));
+
+          return (
+            <div>
+              {/* 1. Location Features (Green Badges ABOVE all amenities) */}
+              {(hasNearUniv || hasNearTransit) && (
+                <div style={{ marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+                  <h4 style={{ fontWeight: 700, color: '#15803d', marginBottom: '0.6rem', fontSize: '0.95rem' }}>مميزات موقع العقار</h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+                    {hasNearUniv && (
+                      <span style={{ background: '#dcfce7', color: '#15803d', border: '1.5px solid #86efac', padding: '0.45rem 0.9rem', borderRadius: '999px', fontSize: '0.88rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <CheckCircle style={{ width: 16, height: 16, color: '#16a34a' }} /> قريب من الجامعة
                       </span>
-                    ))}
-                    {otherList.map((amen, i) => (
-                      <span key={`oth-${i}`} style={{ background: '#f8fafc', color: '#475569', border: '1px solid var(--border)', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                        {amen}
+                    )}
+                    {hasNearTransit && (
+                      <span style={{ background: '#dcfce7', color: '#15803d', border: '1.5px solid #86efac', padding: '0.45rem 0.9rem', borderRadius: '999px', fontSize: '0.88rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <CheckCircle style={{ width: 16, height: 16, color: '#16a34a' }} /> قريب من المواصلات العامة
                       </span>
-                    ))}
+                    )}
                   </div>
                 </div>
+              )}
 
-                <div>
-                  <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.75rem', fontSize: '0.95rem' }}>مرافق وخدمات مجاورة</h4>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    {outdoorList.map((amen, i) => (
-                      <span key={`out-${i}`} style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.35rem 0.75rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
-                        {amen}
-                      </span>
-                    ))}
+              {/* 2. خدمات داخلية */}
+              {INDOOR_GROUPS.some(g => g.items.some(i => uniqueAmenities.includes(i))) || unclassified.length > 0 ? (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h4 style={{ fontWeight: 800, color: 'var(--primary)', marginBottom: '0.85rem', fontSize: '1rem', borderBottom: '2px solid #e0f2fe', paddingBottom: '0.4rem' }}>
+                    خدمات داخلية
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                    {INDOOR_GROUPS.map(grp => {
+                      const groupItems = grp.items.filter(i => uniqueAmenities.includes(i));
+                      if (grp.title === "أخرى / خدمات" && unclassified.length > 0) {
+                        groupItems.push(...unclassified);
+                      }
+                      if (!groupItems.length) return null;
+                      return (
+                        <div key={grp.title} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+                          <h5 style={{ fontWeight: 700, color: '#334155', fontSize: '0.88rem', marginBottom: '0.6rem' }}>{grp.title}</h5>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                            {groupItems.map((amen, i) => (
+                              <span key={i} style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '0.3rem 0.65rem', borderRadius: '999px', fontSize: '0.82rem', fontWeight: 600 }}>
+                                {amen}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </>
-            );
-          })()}
-        </div>
+              ) : null}
+
+              {/* 3. خدمات مجاورة */}
+              {OUTDOOR_GROUPS.some(g => g.items.some(i => uniqueAmenities.includes(i))) ? (
+                <div>
+                  <h4 style={{ fontWeight: 800, color: '#0369a1', marginBottom: '0.85rem', fontSize: '1rem', borderBottom: '2px solid #bae6fd', paddingBottom: '0.4rem' }}>
+                    خدمات مجاورة
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                    {OUTDOOR_GROUPS.map(grp => {
+                      const groupItems = grp.items.filter(i => uniqueAmenities.includes(i));
+                      if (!groupItems.length) return null;
+                      return (
+                        <div key={grp.title} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+                          <h5 style={{ fontWeight: 700, color: '#334155', fontSize: '0.88rem', marginBottom: '0.6rem' }}>{grp.title}</h5>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                            {groupItems.map((amen, i) => (
+                              <span key={i} style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.3rem 0.65rem', borderRadius: '999px', fontSize: '0.82rem', fontWeight: 600 }}>
+                                {amen}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {!uniqueAmenities.length && !hasNearUniv && !hasNearTransit && (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>
+                  لم يتم إضافة مرافق أو خدمات محددة في هذا الإعلان.
+                </p>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ─── Ratings & Trust Section ─── */}

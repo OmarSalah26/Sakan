@@ -40,6 +40,7 @@ def test_admin_can_view_and_update_complaints():
         'room_type': 'single',
         'description': 'Nice place',
         'amenities': ['wifi'],
+        'photo_urls': ['/img1.jpg', '/img2.jpg', '/img3.jpg', '/img4.jpg', '/img5.jpg'],
         'advertiser_id': advertiser['id'],
     })
     complaint_response = client.post('/complaints', json={

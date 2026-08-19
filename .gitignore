@@ -32,4 +32,13 @@ credentials/
 serviceAccountKey.json
 *.pem
 *.key
+.env
+*.env
 
+# Local Dev Uploads & Scratch
+backend/static/uploads/
+backend/scratch/
+*.json
+!package.json
+!frontend/package.json
+!backend/package.json

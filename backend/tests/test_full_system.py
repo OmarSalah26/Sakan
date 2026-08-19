@@ -23,7 +23,8 @@ import app.main as main_module
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi.testclient import TestClient
-from app.main import app, PhoneBlocklist
+from datetime import datetime, timedelta
+from app.main import app, PhoneBlocklist, OTPVerification
 
 # ──────────────────────────────────────────────
 #  Test client & DB reset before every test
@@ -65,6 +66,7 @@ def _create_listing(advertiser_id, **kwargs):
         "price_per_person": 1500,
         "room_type": "single",
         "description": "وحدة رائعة",
+        "photo_urls": ["/img1.jpg", "/img2.jpg", "/img3.jpg", "/img4.jpg", "/img5.jpg"],
         "room_configurations": [
             {"room_type": "single", "price_per_person": 1500, "commission": 750}
         ],
@@ -95,7 +97,7 @@ class TestRegistration:
         assert r.json()["phone"] == "01000000001"
 
     def test_broker_registration_succeeds(self):
-        r = _register("01000000002", "محمد سمسار", "broker")
+        r = _register("01000000002", "محمد وسيط", "broker")
         assert r.status_code == 200
         assert "otp_code" in r.json()
 
@@ -118,6 +120,20 @@ class TestRegistration:
         _register("01000000005", "Test", "student")
         v = _verify("01000000005", "000000")
         assert v.status_code == 400
+
+    def test_expired_otp_is_rejected(self):
+        r = _register("01000000099", "ExpiredUser", "student")
+        otp = r.json()["otp_code"]
+        db = main_module.SessionLocal()
+        entry = db.query(OTPVerification).filter(OTPVerification.phone == "01000000099").first()
+        assert entry is not None
+        entry.created_at = datetime.utcnow() - timedelta(minutes=15)
+        db.commit()
+        db.close()
+        v = _verify("01000000099", otp)
+        assert v.status_code == 400
+        assert "صلاحية" in v.json()["detail"]
+
 
     def test_duplicate_registration_is_rejected(self):
         _register_and_verify("01000000006", "User", "student")
@@ -174,7 +190,7 @@ class TestLogin:
 class TestListingCRUD:
 
     def test_broker_can_create_listing(self):
-        broker = _register_and_verify("01044444441", "سمسار", "broker")
+        broker = _register_and_verify("01044444441", "وسيط", "broker")
         r = _create_listing(broker["id"])
         assert r.status_code == 200
         data = r.json()
@@ -198,14 +214,14 @@ class TestListingCRUD:
         assert "غير مصرح" in r.json()["detail"]
 
     def test_listings_appear_in_browse_feed(self):
-        broker = _register_and_verify("01044444445", "سمسار", "broker")
+        broker = _register_and_verify("01044444445", "وسيط", "broker")
         _create_listing(broker["id"])
         r = client.get("/listings")
         assert r.status_code == 200
         assert len(r.json()) >= 1
 
     def test_get_listing_detail(self):
-        broker = _register_and_verify("01044444446", "سمسار", "broker")
+        broker = _register_and_verify("01044444446", "وسيط", "broker")
         listing = _create_listing(broker["id"]).json()
         r = client.get(f"/listings/{listing['id']}")
         assert r.status_code == 200
@@ -219,7 +235,7 @@ class TestListingCRUD:
         assert r.status_code == 404
 
     def test_listing_not_shown_if_advertiser_is_banned(self):
-        broker = _register_and_verify("01044444447", "سمسار محظور", "broker")
+        broker = _register_and_verify("01044444447", "وسيط محظور", "broker")
         _create_listing(broker["id"])
         admin = _register_and_verify("01044444448", "مسؤول", "admin")
         client.post(f"/admin/users/{broker['id']}/ban?x_user_id={admin['id']}")
@@ -234,7 +250,7 @@ class TestListingCRUD:
 class TestListingFilters:
 
     def _setup_listings(self):
-        broker = _register_and_verify("01055500001", "سمسار", "broker")
+        broker = _register_and_verify("01055500001", "وسيط", "broker")
         _create_listing(broker["id"], governorate="القاهرة", gender="female",
                         room_configurations=[{"room_type": "single", "price_per_person": 1000, "commission": 500}])
         _create_listing(broker["id"], governorate="الجيزة", gender="male",
@@ -284,24 +300,27 @@ class TestListingFilters:
 class TestBedsAndRepublish:
 
     def test_update_available_beds(self):
-        broker = _register_and_verify("01066600001", "سمسار", "broker")
+        broker = _register_and_verify("01066600001", "وسيط", "broker")
+        headers = {"Authorization": f"Bearer {broker.get('auth_token')}"} if broker.get("auth_token") else {"x-user-id": str(broker["id"])}
         listing = _create_listing(broker["id"]).json()
-        r = client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 5})
+        r = client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 5}, headers=headers)
         assert r.status_code == 200
         assert r.json()["available_beds"] == 5
 
     def test_beds_to_zero_marks_listing_inactive(self):
-        broker = _register_and_verify("01066600002", "سمسار", "broker")
+        broker = _register_and_verify("01066600002", "وسيط", "broker")
+        headers = {"Authorization": f"Bearer {broker.get('auth_token')}"} if broker.get("auth_token") else {"x-user-id": str(broker["id"])}
         listing = _create_listing(broker["id"]).json()
-        r = client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 0})
+        r = client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 0}, headers=headers)
         assert r.status_code == 200
         assert r.json()["status"] == "inactive"
 
     def test_republish_reactivates_listing(self):
-        broker = _register_and_verify("01066600003", "سمسار", "broker")
+        broker = _register_and_verify("01066600003", "وسيط", "broker")
+        headers = {"Authorization": f"Bearer {broker.get('auth_token')}"} if broker.get("auth_token") else {"x-user-id": str(broker["id"])}
         listing = _create_listing(broker["id"]).json()
-        client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 0})
-        r = client.post(f"/listings/{listing['id']}/republish", json={"available_beds": 3})
+        client.post(f"/listings/{listing['id']}/beds", json={"available_beds": 0}, headers=headers)
+        r = client.post(f"/listings/{listing['id']}/republish", json={"available_beds": 3}, headers=headers)
         assert r.status_code == 200
         assert r.json()["status"] == "active"
         assert r.json()["available_beds"] == 3
@@ -314,7 +333,7 @@ class TestRatings:
 
     def _setup(self):
         student = _register_and_verify("01077700001", "طالب", "student")
-        broker = _register_and_verify("01077700002", "سمسار", "broker")
+        broker = _register_and_verify("01077700002", "وسيط", "broker")
         listing = _create_listing(broker["id"]).json()
         return student, broker, listing
 
@@ -371,7 +390,7 @@ class TestComplaints:
 
     def _setup(self):
         student = _register_and_verify("01088800001", "طالب", "student")
-        broker = _register_and_verify("01088800002", "سمسار", "broker")
+        broker = _register_and_verify("01088800002", "وسيط", "broker")
         listing = _create_listing(broker["id"]).json()
         return student, broker, listing
 
@@ -405,7 +424,7 @@ class TestAdminPrivileges:
 
     def _setup(self):
         admin = _register_and_verify("01099900001", "مسؤول", "admin")
-        broker = _register_and_verify("01099900002", "سمسار", "broker")
+        broker = _register_and_verify("01099900002", "وسيط", "broker")
         student = _register_and_verify("01099900003", "طالب", "student")
         listing = _create_listing(broker["id"]).json()
         complaint = client.post("/complaints", json={
@@ -440,7 +459,7 @@ class TestAdminPrivileges:
 
     def test_second_warning_triggers_auto_ban(self):
         admin = _register_and_verify("01099910001", "مسؤول", "admin")
-        broker = _register_and_verify("01099910002", "سمسار", "broker")
+        broker = _register_and_verify("01099910002", "وسيط", "broker")
         student = _register_and_verify("01099910003", "طالب", "student")
         listing = _create_listing(broker["id"]).json()
 
@@ -503,7 +522,7 @@ class TestAdminPrivileges:
         assert r.status_code == 403
 
     def test_broker_cannot_access_admin_endpoints(self):
-        broker = _register_and_verify("01099920002", "سمسار", "broker")
+        broker = _register_and_verify("01099920002", "وسيط", "broker")
         r = client.get(f"/admin/users?x_user_id={broker['id']}")
         assert r.status_code == 403
 

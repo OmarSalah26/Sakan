@@ -56,6 +56,8 @@ export function formatCommissionDisplay(config) {
     let minVal = config.commission_min !== null && config.commission_min !== undefined ? config.commission_min : (config.commission_min_pct ?? 30);
     let maxVal = config.commission_max !== null && config.commission_max !== undefined ? config.commission_max : (config.commission_max_pct ?? 100);
 
+    if (Number(minVal) === 0 && Number(maxVal) === 0) return null;
+
     if (typeof minVal === 'number' && minVal > 100 && price > 0) {
       minVal = Math.round((minVal / price) * 100);
     }
@@ -69,7 +71,7 @@ export function formatCommissionDisplay(config) {
   }
 
   let val = config.commission_pct !== null && config.commission_pct !== undefined ? config.commission_pct : config.commission;
-  if (val !== null && val !== undefined && val !== '') {
+  if (val !== null && val !== undefined && val !== '' && Number(val) > 0) {
     if (typeof val === 'number' && val > 100 && price > 0) {
       val = Math.round((val / price) * 100);
     }
@@ -82,8 +84,16 @@ export function formatCommissionDisplay(config) {
 
 export function calculateListingTotalPrice(item) {
   if (!item) return 0;
-  const configs = item.room_configurations || [];
+  const pricingMode = item.pricing_mode || 'room_based';
+  const storedTotal = item.totalPrice !== undefined && item.totalPrice !== null 
+    ? Number(item.totalPrice) 
+    : (item.total_price !== undefined && item.total_price !== null ? Number(item.total_price) : null);
 
+  if (pricingMode === 'total_based' && storedTotal !== null && !isNaN(storedTotal) && storedTotal > 0) {
+    return storedTotal;
+  }
+
+  const configs = item.room_configurations || [];
   const validConfigs = configs.filter(c => Number(c.price_per_person) > 0);
   if (validConfigs.length > 0) {
     let totalFromRooms = 0;
@@ -97,10 +107,6 @@ export function calculateListingTotalPrice(item) {
     return totalFromRooms;
   }
 
-  const storedTotal = item.totalPrice !== undefined && item.totalPrice !== null 
-    ? Number(item.totalPrice) 
-    : (item.total_price !== undefined && item.total_price !== null ? Number(item.total_price) : null);
-
   if (storedTotal !== null && !isNaN(storedTotal) && storedTotal > 0) {
     return storedTotal;
   }
@@ -110,6 +116,96 @@ export function calculateListingTotalPrice(item) {
   }
 
   return 0;
+}
+
+export function formatUnifiedShareText(listing) {
+  if (!listing) return '';
+
+  const title = (listing.title || 'سكن رائع').trim();
+  const genderLine = listing.gender === 'female' 
+    ? '👧 *سكن طالبات*' 
+    : listing.gender === 'male' 
+      ? '👨‍🦱 *سكن طلاب*' 
+      : '👨‍🦱👧 *سكن طلاب / طالبات*';
+  
+  // Location: City only (without Governorates as requested)
+  const city = (listing.city || '').trim();
+
+  // Full Address
+  const address = (listing.full_address || listing.address || listing.street || '').trim();
+
+  // Room Configurations
+  const configs = Array.isArray(listing.room_configurations)
+    ? listing.room_configurations
+    : typeof listing.room_configurations === 'string'
+      ? (function() { try { return JSON.parse(listing.room_configurations || '[]'); } catch { return []; } })()
+      : [];
+
+  const isTotalBased = listing.pricing_mode === 'total_based';
+
+  const roomLines = [];
+  if (Array.isArray(configs) && configs.length > 0) {
+    configs.forEach(c => {
+      const roomType = c.room_type || 'single';
+      const label = roomType === 'single' ? 'مفردة' : roomType === 'double' ? 'مزدوجة' : roomType === 'triple' ? 'ثلاثية' : 'رباعية';
+      const count = Number(c.count) || 1;
+      const countStr = count === 1 ? `غرفة ${label}` : `${count} غرف ${label}`;
+
+      const multiplier = roomType === 'double' ? 2 : roomType === 'triple' ? 3 : roomType === 'quadruple' ? 4 : 1;
+      const maxCap = multiplier * count;
+      const availBeds = c.available_beds !== undefined && c.available_beds !== null && c.available_beds !== ''
+        ? Number(c.available_beds)
+        : maxCap;
+      
+      const bedLabel = availBeds === 1 ? '1 سرير متاح' : `${availBeds} أسرة متاحة`;
+      const price = Number(c.price_per_person) || 0;
+
+      if (!isTotalBased && price > 0) {
+        roomLines.push(`• ${countStr} | ${price.toLocaleString()} جنيه/فرد | ${bedLabel}`);
+      } else {
+        roomLines.push(`• ${countStr} | ${bedLabel}`);
+      }
+    });
+  }
+
+  // Total Rent Price
+  const totalRent = calculateListingTotalPrice(listing);
+  const priceStr = totalRent ? `${totalRent.toLocaleString()} جنيه` : '';
+
+  // Canonical Listing Link
+  const listingId = listing.id || '';
+  const shareUrl = listingId ? `https://sakan-egy.com/listings/${listingId}` : '';
+
+  const lines = [
+    `🏠 *سكن | ${title}*`,
+    '',
+    genderLine,
+    city ? `📍 *الموقع:* ${city}` : null,
+    address ? `📌 *العنوان:* ${address}` : null,
+    '',
+    '🛏️ *تكوين الغرف*',
+    roomLines.length > 0 ? roomLines.join('\n') : '• بيانات الغرف متوفرة عند التواصل',
+    '',
+    priceStr ? `💰 *إجمالي سعر الإيجار:* ${priceStr}` : null,
+    '',
+    '✨ *شاهد الصور والفيديو وجميع تفاصيل السكن:*',
+    shareUrl ? `🔗 ${shareUrl}` : null
+  ].filter(line => line !== null);
+
+  return lines.join('\n');
+}
+
+export function stripFloorFromAddress(addr) {
+  if (!addr || typeof addr !== 'string') return '';
+  return addr
+    .replace(/(?:،|,)?\s*الدور\s+(?:الأرضي|الارضي|الأول|الاول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|\d+)/gi, '')
+    .replace(/(?:،|,)?\s*دور\s+(?:أرضي|ارضي|أول|اول|ثاني|ثالث|رابع|خامس|سادس|سابع|ثامن|تاسع|عاشر|\d+)/gi, '')
+    .replace(/,\s*,/g, ',')
+    .replace(/،\s*،/g, '،')
+    .trim()
+    .replace(/^،|،$/g, '')
+    .replace(/^,|,$/g, '')
+    .trim();
 }
 
 
