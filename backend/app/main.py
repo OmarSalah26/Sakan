@@ -1,5 +1,6 @@
 import ast
 import html
+import io
 import json
 import os
 import shutil
@@ -19,6 +20,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, inspect, text, or_
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+
+import cloudinary
+from cloudinary import uploader
 
 import json
 import shutil
@@ -64,6 +68,17 @@ else:
     engine = create_engine(f"sqlite:///{DB_FILE}", connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+)
+CLOUDINARY_CONFIGURED = all([
+    os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    os.environ.get("CLOUDINARY_API_KEY"),
+    os.environ.get("CLOUDINARY_API_SECRET"),
+])
 
 
 def format_phone_e164(phone: str) -> str:
@@ -1185,6 +1200,24 @@ def health_check():
 
 # ─── File Upload Endpoints ────────────────────────────────────────────────────
 
+def upload_image_to_cloudinary(contents: bytes, folder: str) -> str:
+    """Upload image bytes to Cloudinary and return an optimized delivery URL."""
+    if not CLOUDINARY_CONFIGURED:
+        raise HTTPException(status_code=502, detail="خدمة تخزين الصور غير مهيأة، يرجى مراجعة إعدادات الخادم")
+    try:
+        result = uploader.upload(
+            io.BytesIO(contents),
+            folder=folder,
+            eager=[{"fetch_format": "auto", "quality": "auto"}]
+        )
+    except Exception:
+        raise HTTPException(status_code=502, detail="تعذر رفع الصورة إلى خادم التخزين، حاول مرة أخرى")
+    secure_url = result.get("secure_url", "")
+    if not secure_url:
+        raise HTTPException(status_code=502, detail="تعذر رفع الصورة إلى خادم التخزين، حاول مرة أخرى")
+    return secure_url.replace("/image/upload/", "/image/upload/f_auto,q_auto,w_1200/", 1)
+
+
 @app.post('/upload/avatar')
 def upload_avatar(user_id: int, file: UploadFile = File(...)):
     """Upload a profile photo for a user. Returns the URL to store."""
@@ -1195,11 +1228,7 @@ def upload_avatar(user_id: int, file: UploadFile = File(...)):
         contents = file.file.read()
         if len(contents) > MAX_FILE_SIZE:
             raise HTTPException(status_code=400, detail="حجم الملف كبير جداً. الحد الأقصى 10 ميجابايت.")
-        ext = Path(file.filename).suffix.lower() or ".jpg"
-        filename = f"{uuid.uuid4().hex}{ext}"
-        dest = AVATAR_DIR / filename
-        dest.write_bytes(contents)
-        url = f"/static/uploads/avatars/{filename}"
+        url = upload_image_to_cloudinary(contents, "sakan/avatars")
         # Persist to user record
         user = db.query(User).filter(User.id == user_id).first()
         if user:
@@ -1219,12 +1248,8 @@ def upload_listing_photo(file: UploadFile = File(...)):
     contents = file.file.read()
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="حجم الملف كبير جداً. الحد الأقصى 10 ميجابايت.")
-    ext = Path(file.filename).suffix.lower() or ".jpg"
-    filename = f"{uuid.uuid4().hex}{ext}"
-    dest = LISTING_DIR / filename
-    dest.write_bytes(contents)
     file.file.close()
-    return {"url": f"/static/uploads/listings/{filename}"}
+    return {"url": upload_image_to_cloudinary(contents, "sakan/listings")}
 
 
 @app.post('/webhook')
