@@ -165,7 +165,7 @@ function MapPickerModal({ city, cityFallback, governorate, initialLat, initialLn
               اسحب الدبوس الأحمر أو اضغط على الخريطة لضبط الموقع بدقة.
             </p>
           </div>
-          <button className="modal-close" style={{ fontSize: '1.5rem', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem 0.5rem', flexShrink: 0 }} onClick={onClose}>×</button>
+          <button className="modal-close" type="button" onClick={onClose} aria-label="إغلاق">×</button>
         </div>
 
         <div className="map-picker-controls">
@@ -634,6 +634,7 @@ export default function App() {
     near_university: false,
     near_transit: false,
     advertiser_type: '',
+    min_commission: '',
     max_commission: '',
     services_inclusive: false,
     has_insurance: false,
@@ -1218,6 +1219,7 @@ export default function App() {
       if (filters.near_university) q.append('near_university', 'true');
       if (filters.near_transit) q.append('near_transit', 'true');
       if (filters.advertiser_type) q.append('advertiser_type', filters.advertiser_type);
+      if (filters.min_commission) q.append('min_commission', filters.min_commission);
       if (filters.max_commission) q.append('max_commission', filters.max_commission);
       if (filters.services_inclusive) q.append('services_inclusive', 'true');
       if (filters.no_insurance) q.append('no_insurance', 'true');
@@ -1337,6 +1339,16 @@ export default function App() {
           setProfileUserId(user.id);
         }
         setTab('profile');
+      } else if (hash.startsWith('#/login')) {
+        const phone = new URLSearchParams(hash.split('?')[1]).get('phone') || '';
+        if (user) {
+          navigateTo('#/dashboard');
+        } else {
+          handleStartAuth('login', null, () => navigateTo('#/dashboard'), phone);
+        }
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState({}, '', window.location.pathname + '#/browse');
+        }
       } else {
         navigateTo(hash || '#/browse');
       }
@@ -2801,7 +2813,7 @@ export default function App() {
                 <h3 style={{ margin: 0, paddingBottom: '0.25rem' }}>
                   <span>تصفية النتائج</span>
                   <button className="btn-secondary" style={{ padding: '0.15rem 0.45rem', fontSize: '0.72rem' }} onClick={() => setFilters({
-                    governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', max_commission: '', services_inclusive: false, no_insurance: false, fully_vacant: false, min_total_beds: '', max_total_beds: ''
+                    governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', min_commission: '', max_commission: '', services_inclusive: false, no_insurance: false, fully_vacant: false, min_total_beds: '', max_total_beds: ''
                   })}>مسح الكل</button>
                 </h3>
                 
@@ -3063,17 +3075,33 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 8. Max Commission + Amenities Modal Button (2-column paired row) */}
+                {/* 8. Commission % (Min/Max) + Amenities Modal Button (2-column paired row) */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem', borderTop: '1px solid #dbeafe', paddingTop: '0.45rem' }}>
-                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
-                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>أقصى عمولة (ج.م)</label>
-                    <input 
-                      type="number" 
-                      placeholder="1000" 
-                      value={filters.max_commission} 
-                      onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
-                      style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
-                    />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                      <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>الحد الأدنى للعمولة %</label>
+                      <input 
+                        type="number" 
+                        min="0" 
+                        max="100" 
+                        placeholder="0" 
+                        value={filters.min_commission} 
+                        onChange={(e) => setFilters({ ...filters, min_commission: e.target.value })}
+                        style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
+                      />
+                    </div>
+                    <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                      <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>الحد الأقصى للعمولة %</label>
+                      <input 
+                        type="number" 
+                        min="0" 
+                        max="100" 
+                        placeholder="100" 
+                        value={filters.max_commission} 
+                        onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
+                        style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
+                      />
+                    </div>
                   </div>
 
                   <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
@@ -5016,10 +5044,11 @@ export default function App() {
       {isCreateOpen && (
         <div className="modal-overlay" style={{ zIndex: 99999 }}>
           <div className="modal-content" style={{ maxWidth: '640px', height: '85vh', maxHeight: '720px', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
-            <div className="modal-header" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
-                <h3 style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem' }}>إضافة إعلان سكن طلابي جديد ({createStep} من 5)</h3>
-                <button className="modal-close" onClick={() => setIsCreateOpen(false)}>×</button>
+            <div className="modal-header" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', flexShrink: 0, flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '0.75rem' }}>
+                <button className="modal-close modal-close-with-label" onClick={() => setIsCreateOpen(false)} aria-label="خروج">×<span className="modal-close-label">خروج</span></button>
+                <h3 style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem', textAlign: 'center' }}>إضافة إعلان سكن طلابي جديد ({createStep} من 5)</h3>
+                <div />
               </div>
               <div className="wizard-progress" style={{ margin: 0 }}>
                 <div className="progress-bar-fill" style={{ width: `${(createStep - 1) * 25}%` }} />
@@ -7379,17 +7408,33 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 8. Max Commission + Amenities Modal Button (2-column paired row) */}
+              {/* 8. Commission % (Min/Max) + Amenities Modal Button (2-column paired row) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.45rem' }}>
-                <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
-                  <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>أقصى عمولة (ج.م)</label>
-                  <input 
-                    type="number" 
-                    placeholder="1000" 
-                    value={filters.max_commission} 
-                    onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
-                    style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
-                  />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>الحد الأدنى للعمولة %</label>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      max="100" 
+                      placeholder="0" 
+                      value={filters.min_commission} 
+                      onChange={(e) => setFilters({ ...filters, min_commission: e.target.value })}
+                      style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                  <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
+                    <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>الحد الأقصى للعمولة %</label>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      max="100" 
+                      placeholder="100" 
+                      value={filters.max_commission} 
+                      onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
+                      style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
+                    />
+                  </div>
                 </div>
 
                 <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
@@ -7426,7 +7471,7 @@ export default function App() {
                 className="btn-outline" 
                 style={{ flex: 1, padding: '0.65rem' }}
                 onClick={() => {
-                  setFilters({ governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], near_university: false, near_transit: false, advertiser_type: '', max_commission: '', services_inclusive: false, no_insurance: false, min_total_beds: '', max_total_beds: '' });
+                  setFilters({ governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], near_university: false, near_transit: false, advertiser_type: '', min_commission: '', max_commission: '', services_inclusive: false, no_insurance: false, min_total_beds: '', max_total_beds: '' });
                 }}
               >
                 مسح الكل
