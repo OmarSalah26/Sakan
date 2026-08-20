@@ -805,7 +805,7 @@ def get_authenticated_user(
     elif auth_token:
         token = auth_token.strip()
 
-    if token:
+    if token and token.lower() not in ["none", "null", "undefined", ""]:
         user = db.query(User).filter(User.auth_token == token).first()
         if user and not user.is_banned:
             return user
@@ -1233,6 +1233,36 @@ def upload_image_to_cloudinary(contents: bytes, folder: str) -> str:
     if not secure_url:
         raise HTTPException(status_code=502, detail="تعذر رفع الصورة إلى خادم التخزين، حاول مرة أخرى")
     return secure_url.replace("/image/upload/", "/image/upload/f_auto,q_auto,w_1200/", 1)
+
+
+def extract_cloudinary_public_id(url: Optional[str]) -> Optional[str]:
+    """Extract public_id from Cloudinary URL (e.g. sakan/listings/abc123xyz or sakan/avatars/avatar1)."""
+    if not url or not isinstance(url, str) or "res.cloudinary.com" not in url:
+        return None
+    try:
+        parts = url.split("/image/upload/")
+        if len(parts) < 2:
+            return None
+        path = parts[1]
+        if "sakan/" in path:
+            sakan_part = path[path.index("sakan/"):]
+            public_id = sakan_part.rsplit(".", 1)[0]
+            return public_id
+    except Exception as e:
+        print(f"[CLOUDINARY] Failed to parse public_id from {url}: {e}")
+    return None
+
+
+def delete_cloudinary_image(url: Optional[str]):
+    """Delete an image asset from Cloudinary by its URL."""
+    if not CLOUDINARY_CONFIGURED or not url or IS_TESTING or "dummy" in (url or ""):
+        return
+    public_id = extract_cloudinary_public_id(url)
+    if public_id:
+        try:
+            uploader.destroy(public_id, invalidate=True)
+        except Exception as e:
+            print(f"[CLOUDINARY DELETE ERROR] Failed to delete {public_id}: {e}")
 
 
 @app.post('/upload/avatar')
@@ -3013,6 +3043,117 @@ def admin_unban_user(user_id: int, x_user_id: Optional[int] = None):
 
         db.commit()
         return {"id": user.id, "is_banned": user.is_banned}
+    finally:
+        db.close()
+
+
+@app.delete('/admin/users/{user_id}')
+@app.post('/admin/users/{user_id}/delete')
+def admin_delete_user(
+    user_id: int,
+    authorization: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None, alias="x-auth-token"),
+    x_user_id_h1: Optional[int] = Header(None, alias="x-user-id"),
+    x_user_id_h2: Optional[int] = Header(None, alias="x_user_id"),
+    auth_token: Optional[str] = Query(None),
+    x_user_id: Optional[int] = Query(None)
+):
+    """
+    Permanently delete an Owner or Broker account and all associated data.
+    Atomic cascade delete:
+    - User profile photo (Cloudinary + DB)
+    - All listings by this user, and their photos/videos (Cloudinary + DB)
+    - All ratings and complaints associated with this user or their listings
+    - All bookmarks associated with this user or their listings
+    - All messages sent to or from this user
+    - Phone blocklist and OTP records for this user
+    - User account itself
+    """
+    db = SessionLocal()
+    try:
+        admin = verify_admin_user(
+            db,
+            x_user_id=x_user_id or x_user_id_h1 or x_user_id_h2,
+            authorization=authorization,
+            x_auth_token=x_auth_token,
+            auth_token=auth_token
+        )
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+
+        if user.id == admin.id or user.account_type == "admin":
+            raise HTTPException(status_code=400, detail="لا يمكن حذف حساب مسؤول المنصة")
+
+        if user.account_type not in ["owner", "broker"]:
+            raise HTTPException(status_code=400, detail="خاصية الحذف النهائي مخصصة لحسابات الملاك والوسطاء فقط")
+
+        # 1. Collect Cloudinary URLs to delete after successful DB commit
+        cloudinary_urls = []
+        if user.profile_photo_url:
+            cloudinary_urls.append(user.profile_photo_url)
+
+        user_listings = db.query(Listing).filter(Listing.advertiser_id == user.id).all()
+        user_listing_ids = [l.id for l in user_listings]
+
+        for l in user_listings:
+            for p in safe_json_loads(l.photo_urls, []):
+                if p:
+                    cloudinary_urls.append(p)
+            for v in safe_json_loads(l.video_urls, []):
+                if v:
+                    cloudinary_urls.append(v)
+
+        if user_listing_ids:
+            ratings = db.query(Rating).filter(Rating.listing_id.in_(user_listing_ids)).all()
+            for r in ratings:
+                for p in safe_json_loads(r.photo_urls, []):
+                    if p:
+                        cloudinary_urls.append(p)
+            complaints = db.query(Complaint).filter(Complaint.listing_id.in_(user_listing_ids)).all()
+            for c in complaints:
+                for ev in safe_json_loads(c.evidence_urls, []):
+                    if ev:
+                        cloudinary_urls.append(ev)
+
+        # 2. Atomic Database Cascade Deletion
+        target_user_id = user.id
+        user_phone = user.phone
+        db.expunge_all()
+
+        if user_listing_ids:
+            db.query(Bookmark).filter(Bookmark.listing_id.in_(user_listing_ids)).delete(synchronize_session=False)
+            db.query(Rating).filter(Rating.listing_id.in_(user_listing_ids)).delete(synchronize_session=False)
+            db.query(Complaint).filter(Complaint.listing_id.in_(user_listing_ids)).delete(synchronize_session=False)
+            db.query(Listing).filter(Listing.advertiser_id == target_user_id).delete(synchronize_session=False)
+
+        # Delete any bookmarks created by this user
+        db.query(Bookmark).filter(Bookmark.user_id == target_user_id).delete(synchronize_session=False)
+        # Delete any ratings created by this user
+        db.query(Rating).filter(Rating.student_id == target_user_id).delete(synchronize_session=False)
+        # Delete any complaints created by or against this user
+        db.query(Complaint).filter(or_(Complaint.student_id == target_user_id, Complaint.advertiser_id == target_user_id)).delete(synchronize_session=False)
+        # Delete any advertiser messages to or from this user
+        db.query(AdvertiserMessage).filter(or_(AdvertiserMessage.recipient_id == target_user_id, AdvertiserMessage.sender_id == target_user_id)).delete(synchronize_session=False)
+        # Delete phone blocklist entry if any
+        db.query(PhoneBlocklist).filter(PhoneBlocklist.phone == user_phone).delete(synchronize_session=False)
+        # Delete any pending OTP records for this phone
+        db.query(OTPVerification).filter(OTPVerification.phone == user_phone).delete(synchronize_session=False)
+        # Delete user record
+        db.query(User).filter(User.id == target_user_id).delete(synchronize_session=False)
+
+        db.commit()
+
+        # 3. Purge Cloudinary Assets (after DB commit is guaranteed)
+        for c_url in set(cloudinary_urls):
+            delete_cloudinary_image(c_url)
+
+        return {"id": user_id, "phone": user_phone, "status": "deleted"}
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"فشلت عملية حذف الحساب: {str(e)}")
     finally:
         db.close()
 

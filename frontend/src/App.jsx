@@ -2463,6 +2463,42 @@ export default function App() {
     }
   };
 
+  const handleAdminDeleteUser = async (targetUser) => {
+    if (!user || !targetUser) return;
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-id': String(user.id),
+        'x_user_id': String(user.id)
+      };
+      if (user.auth_token) {
+        headers['Authorization'] = `Bearer ${user.auth_token}`;
+      }
+
+      let res = await fetch(`${API_BASE}/admin/users/${targetUser.id}?x_user_id=${user.id}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (!res.ok && res.status === 405) {
+        res = await fetch(`${API_BASE}/admin/users/${targetUser.id}/delete?x_user_id=${user.id}`, {
+          method: 'POST',
+          headers
+        });
+      }
+
+      if (res.ok) {
+        showToast("تم حذف الحساب وجميع عقاراته وملفاته نهائياً بنجاح");
+        setAdminUsers(prev => prev.filter(u => u.id !== targetUser.id));
+        loadAdminData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showToast(errData.detail || "فشل حذف الحساب");
+      }
+    } catch (err) {
+      showToast("حدث خطأ أثناء حذف الحساب");
+    }
+  };
+
   const handleListingDeactivate = async (listingId) => {
     try {
       const res = await fetch(`${API_BASE}/admin/listings/${listingId}/deactivate?x_user_id=${user.id}`, {
@@ -3939,6 +3975,22 @@ export default function App() {
                                 >
                                   {u.is_banned ? 'إلغاء الحظر' : 'حظر دائم'}
                                 </button>
+                                {(u.account_type === 'owner' || u.account_type === 'broker') && (
+                                  <button 
+                                    className="btn-danger" 
+                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', backgroundColor: '#991b1b', borderColor: '#7f1d1d', fontWeight: 'bold' }}
+                                    onClick={() => {
+                                      setConfirmDialog({
+                                        title: 'حذف الحساب نهائياً وفورياً',
+                                        message: `تحذير شديد: سيتم مسح حساب "${u.name}" (${u.phone}) نهائياً ولا يمكن التراجع عن هذا الإجراء إطلاقاً. سيتم حذف الحساب بالكامل وجميع العقارات التابعة له، والصور المرفوعة على السيرفر السحابي، والتقييمات، والرسائل. هل تريد المتابعة؟`,
+                                        confirmLabel: 'حذف نهائي لا رجعة فيه',
+                                        onConfirm: () => handleAdminDeleteUser(u)
+                                      });
+                                    }}
+                                  >
+                                    حذف نهائي
+                                  </button>
+                                )}
                               </div>
                             )}
                           </td>
