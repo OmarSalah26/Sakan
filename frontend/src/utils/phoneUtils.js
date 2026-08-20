@@ -171,8 +171,9 @@ export function formatUnifiedShareText(listing) {
   }
 
   // Total Rent Price
+  const showTotalPrice = listing.show_total_price !== false && listing.show_total_price !== 0;
   const totalRent = calculateListingTotalPrice(listing);
-  const priceStr = totalRent ? `${totalRent.toLocaleString()} جنيه` : '';
+  const priceStr = (showTotalPrice && totalRent) ? `${totalRent.toLocaleString()} جنيه` : '';
 
   // Canonical Listing Link
   const listingId = listing.id || '';

@@ -512,7 +512,7 @@ export default function ListingDetailPage() {
 
           {(() => {
             const calculatedTotal = calculateListingTotalPrice(listing);
-            if (!calculatedTotal) return null;
+            if (!calculatedTotal || listing.show_total_price === false || listing.show_total_price === 0) return null;
             return (
               <div style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 إجمالي إيجار الوحدة: {calculatedTotal.toLocaleString()} ج.م / شهرياً

@@ -281,6 +281,7 @@ class Listing(Base):
     not_vacant_reports = Column(Integer, default=0)        # count of not vacant reports
     near_university = Column(Boolean, default=False)       # True if near university
     near_transit = Column(Boolean, default=False)          # True if near public transit
+    show_total_price = Column(Boolean, default=False)      # True if total price should be displayed on listing card
     listing_type_override = Column(String, nullable=True)  # Admin-only: "owner" | "broker" | None (uses advertiser account_type)
 
     advertiser = relationship("User", back_populates="listings")
@@ -516,6 +517,12 @@ def ensure_schema():
                 connection.execute(text(f"ALTER TABLE listings ADD COLUMN near_university {bool_dflt_false}"))
             if "near_transit" not in listing_cols:
                 connection.execute(text(f"ALTER TABLE listings ADD COLUMN near_transit {bool_dflt_false}"))
+            if "show_total_price" not in listing_cols:
+                connection.execute(text(f"ALTER TABLE listings ADD COLUMN show_total_price {bool_dflt_false}"))
+                if is_postgres:
+                    connection.execute(text("UPDATE listings SET show_total_price = TRUE WHERE show_total_price IS NULL OR show_total_price = FALSE"))
+                else:
+                    connection.execute(text("UPDATE listings SET show_total_price = 1 WHERE show_total_price IS NULL OR show_total_price = 0"))
             if "listing_type_override" not in listing_cols:
                 connection.execute(text("ALTER TABLE listings ADD COLUMN listing_type_override VARCHAR"))
 
@@ -994,6 +1001,7 @@ class ListingCreate(BaseModel):
     not_vacant_reports: int = 0
     near_university: bool = False
     near_transit: bool = False
+    show_total_price: Optional[bool] = False
 
     # Legacy fields for test compatibility
     price_per_person: Optional[Union[float, int]] = None
@@ -1049,6 +1057,7 @@ class ListingOut(BaseModel):
     not_vacant_reports: int = 0
     near_university: bool = False
     near_transit: bool = False
+    show_total_price: bool = False
     listing_type_override: Optional[str] = None
 
 
@@ -1125,6 +1134,7 @@ def build_listing_out(item: Listing, advertiser: Optional[User] = None) -> Listi
         not_vacant_reports=safe_int(item.not_vacant_reports, 0),
         near_university=bool(item.near_university),
         near_transit=bool(item.near_transit),
+        show_total_price=bool(item.show_total_price) if item.show_total_price is not None else False,
         listing_type_override=item.listing_type_override,
         totalPrice=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None),
         total_price=safe_int(item.total_price, None) if (item.total_price is not None and float(item.total_price).is_integer()) else (item.total_price if item.total_price is not None else None),
@@ -1753,6 +1763,7 @@ def create_listing(payload: ListingCreate):
             cover_photo_index=payload.cover_photo_index or 0,
             near_university=bool(payload.near_university),
             near_transit=bool(payload.near_transit),
+            show_total_price=bool(payload.show_total_price) if payload.show_total_price is not None else False,
             total_price=payload.totalPrice if payload.totalPrice is not None else payload.total_price,
             pricing_mode=payload.pricing_mode or "room_based"
         )
@@ -3945,6 +3956,8 @@ def update_listing(
             listing.near_transit = bool(payload.near_transit)
             if payload.pricing_mode:
                 listing.pricing_mode = payload.pricing_mode
+            if payload.show_total_price is not None:
+                listing.show_total_price = bool(payload.show_total_price)
             total_val = payload.totalPrice if payload.totalPrice is not None else payload.total_price
             if total_val is not None:
                 listing.total_price = total_val

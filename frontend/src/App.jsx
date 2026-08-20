@@ -671,7 +671,8 @@ export default function App() {
     tier: 'regular',
     min_lease_months: null,
     pricing_mode: 'room_based',
-    total_price: null
+    total_price: null,
+    show_total_price: false
   });
 
   // Progressive Media Upload state & handler
@@ -999,7 +1000,8 @@ export default function App() {
         tier: 'regular',
         min_lease_months: null,
         pricing_mode: 'room_based',
-        total_price: null
+        total_price: null,
+        show_total_price: false
       });
     }
     setShowMapPicker(false);
@@ -1138,6 +1140,7 @@ export default function App() {
       min_lease_months: item.min_lease_months || null,
       pricing_mode: item.pricing_mode || 'room_based',
       total_price: item.totalPrice !== undefined && item.totalPrice !== null ? item.totalPrice : (item.total_price !== undefined && item.total_price !== null ? item.total_price : null),
+      show_total_price: item.show_total_price !== undefined && item.show_total_price !== null ? Boolean(item.show_total_price) : true,
       source: item.source || 'normal',
       full_edit_available: item.full_edit_available || false,
       location_precise: item.location_precise || false,
@@ -1786,7 +1789,8 @@ export default function App() {
             video_urls: [],
             description: '',
             tier: 'regular',
-            min_lease_months: null
+            min_lease_months: null,
+            show_total_price: false
           }));
           setShowMapPicker(false);
           setIsCreateOpen(true);
@@ -1965,6 +1969,7 @@ export default function App() {
         source: isForOthersFlow ? 'manual' : (createForm.source || 'normal'),
         near_university: Boolean(createForm.near_university),
         near_transit: Boolean(createForm.near_transit),
+        show_total_price: Boolean(createForm.show_total_price),
         ...(isAdminEditing && adminCommissionOverride ? {
           listing_type_override: adminCommissionOverride === 'no_commission' ? 'owner' : 'broker'
         } : {})
@@ -3302,23 +3307,25 @@ export default function App() {
                             </div>
 
                             {/* Focal Point 1: Hero Price Summary (Total Unit Rent as Hero) */}
-                            <div style={{ background: '#f8fafc', padding: '0.75rem 0.85rem', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
-                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
-                                <span style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--primary-dark)', letterSpacing: '-0.02em' }}>
-                                  {totalUnitRent ? totalUnitRent.toLocaleString() : (minPrice ? minPrice.toLocaleString() : '---')} ج.م
-                                </span>
-                                <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>
-                                  / شهرياً (إيجار الشقة بالكامل)
-                                </span>
-                              </div>
+                            {Boolean(item.show_total_price) && (
+                              <div style={{ background: '#f8fafc', padding: '0.75rem 0.85rem', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
+                                  <span style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--primary-dark)', letterSpacing: '-0.02em' }}>
+                                    {totalUnitRent ? totalUnitRent.toLocaleString() : (minPrice ? minPrice.toLocaleString() : '---')} ج.م
+                                  </span>
+                                  <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>
+                                    / شهرياً (إيجار الشقة بالكامل)
+                                  </span>
+                                </div>
 
-                              {/* Inline Inclusive Services Badge */}
-                              {servicesInclusive && (
-                                <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', padding: '0.2rem 0.55rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                                  <Zap style={{ width: 12, height: 12 }} /> شامل الخدمات
-                                </span>
-                              )}
-                            </div>
+                                {/* Inline Inclusive Services Badge */}
+                                {servicesInclusive && (
+                                  <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', padding: '0.2rem 0.55rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <Zap style={{ width: 12, height: 12 }} /> شامل الخدمات
+                                  </span>
+                                )}
+                              </div>
+                            )}
 
                             {/* Grouped Per-Room Configurations (Room Type + AC + Price + Commission) */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.1rem' }}>
@@ -5705,6 +5712,16 @@ export default function App() {
                           )}
                         </div>
                       </div>
+                      <div style={{ marginTop: '0.75rem', paddingTop: '0.65rem', borderTop: '1px solid #f1f5f9' }}>
+                        <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', color: '#1e40af', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={Boolean(createForm.show_total_price)}
+                            onChange={(e) => setCreateForm(prev => ({ ...prev, show_total_price: e.target.checked }))}
+                          />
+                          إظهار إجمالي الإيجار على كارت الإعلان (يمثل إيجار الشقة بالكامل)
+                        </label>
+                      </div>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem', display: 'block', lineHeight: 1.4 }}>
                         {createForm.pricing_mode === 'total_based' 
                           ? 'ملاحظة: السعر الإجمالي يدوي (محدد من قبلك). اضغط "إرجاع تلقائي" لاستعادة التسعير حسب الغرف.'
@@ -6717,7 +6734,8 @@ export default function App() {
                       video_urls: [],
                       description: '',
                       tier: 'regular',
-                      min_lease_months: null
+                      min_lease_months: null,
+                      show_total_price: false
                     });
                     setShowMapPicker(false);
                     setIsCreateOpen(true);
