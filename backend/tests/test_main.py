@@ -31,6 +31,10 @@ def test_health_check():
     assert response.status_code == 200
     assert response.json() == {'status': 'ok'}
 
+    db_response = client.get('/health?check_db=true')
+    assert db_response.status_code == 200
+    assert db_response.json() == {'status': 'ok'}
+
 
 def test_register_user():
     data = register_and_verify('201000000001', 'Test User', 'student')

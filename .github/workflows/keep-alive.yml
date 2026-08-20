@@ -1,0 +1,24 @@
+name: Backend Keep-Alive
+
+on:
+  schedule:
+    # Run every 10 minutes (safely below Render's 15-minute inactivity spin-down)
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab to verify immediately
+
+jobs:
+  ping:
+    name: Keep Render Backend Awake
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Backend Health Endpoint
+        run: |
+          echo "Sending keep-alive request to https://api.sakan-egy.com/health?check_db=true..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 45 "https://api.sakan-egy.com/health?check_db=true")
+          echo "Response HTTP Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "Success: Backend is active and responded with HTTP 200."
+          else
+            echo "Warning: Health endpoint returned HTTP $HTTP_STATUS"
+            exit 1
+          fi

@@ -1205,7 +1205,13 @@ class WaitlistOut(BaseModel):
 # --- Endpoints ---
 
 @app.get('/health')
-def health_check():
+def health_check(check_db: bool = False):
+    if check_db:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+        finally:
+            db.close()
     return {'status': 'ok'}
 
 
