@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import { useNavigate } from './router/Router';
 import { useApp } from './context/AppContext';
 import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText, stripFloorFromAddress } from './utils/phoneUtils';
+import { trackEvent } from './utils/analytics';
 
 import { 
   Bell, BookOpen, Plus, Search, MapPin, CheckCircle, CheckCircle2, ShieldCheck, 
@@ -493,6 +494,11 @@ export async function shareListingMessage(listing, showToast) {
 export default function App() {
   const { user, setUser, showToast, filters, setFilters } = useApp();
   const navigate = useNavigate();
+
+  const updateFilter = (filterType, nextVal) => {
+    setFilters(nextVal);
+    trackEvent('filter_apply', { filter_type: filterType });
+  };
 
   const [tab, setTab] = useState('browse'); // 'browse' | 'dashboard' | 'admin' | 'saved' | 'guide' | 'about' | 'terms' | 'profile'
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -1454,6 +1460,7 @@ export default function App() {
           showToast("مرحباً بك! يرجى تعيين كلمة مرور جديدة لحسابك لمتابعة استخدام المنصة");
         } else {
           setUser(data);
+          trackEvent('sign_in', { user_role: data.account_type || 'student' });
           setIsAuthOpen(false);
           showToast(`تم تسجيل الدخول بنجاح! مرحباً بك، ${data.name || ''}`);
           if (pendingActionRef.current) {
@@ -1498,6 +1505,7 @@ export default function App() {
       const data = await res.json();
       if (res.ok) {
         setUser(data);
+        trackEvent('sign_in', { user_role: data.account_type || 'student' });
         setMustChangeUser(null);
         setIsAuthOpen(false);
         showToast("تم تعيين كلمة المرور الجديدة بنجاح!");
@@ -1562,6 +1570,7 @@ export default function App() {
       if (res.ok) {
         if (authMode === 'register' && data.id) {
           setUser(data);
+          trackEvent('sign_in', { user_role: data.account_type || 'student' });
           setIsAuthOpen(false);
           showToast(`تم إنشاء الحساب بنجاح! مرحباً بك، ${data.name || ''}`);
           if (pendingActionRef.current) {
@@ -1646,9 +1655,11 @@ export default function App() {
         } else {
           if (data.account_type !== 'student' && (!data.name || data.name === "مستخدم جديد")) {
             setUser(finalUser);
+            trackEvent('sign_in', { user_role: finalUser.account_type || 'student' });
             setAuthStep('details');
           } else {
             setUser(finalUser);
+            trackEvent('sign_in', { user_role: finalUser.account_type || 'student' });
             setIsAuthOpen(false);
             showToast(`تم تسجيل الدخول بنجاح! مرحباً بك، ${data.name || ''}`);
             if (pendingActionRef.current) {
@@ -1730,6 +1741,10 @@ export default function App() {
 
   // --- Create Listing wizard flow ---
   const handleOpenCreateFlow = () => {
+    trackEvent('add_ad_start', {
+      advertiser_type: user?.account_type || '',
+      is_signed_in: Boolean(user)
+    });
     let userGovs = [];
     if (user && user.governorates) {
       if (Array.isArray(user.governorates)) {
@@ -1972,6 +1987,13 @@ export default function App() {
       });
       if (res.ok) {
         const publishedData = await res.json();
+        if (!isEditing) {
+          trackEvent('listing_publish', {
+            advertiser_type: publishedData?.advertiser_type || createForm.advertiser_type || user?.account_type || '',
+            governorate: publishedData?.governorate || createForm.governorate || '',
+            pricing_mode: createForm.pricing_mode || 'room_based'
+          });
+        }
         showToast(isEditing ? "تم حفظ التعديلات بنجاح!" : "تم نشر العقار بنجاح وتفعيله على المنصة!");
         setIsCreateOpen(false);
         setEditingListing(null);
@@ -2830,7 +2852,7 @@ export default function App() {
               <aside className="filter-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                 <h3 style={{ margin: 0, paddingBottom: '0.25rem' }}>
                   <span>تصفية النتائج</span>
-                  <button className="btn-secondary" style={{ padding: '0.15rem 0.45rem', fontSize: '0.72rem' }} onClick={() => setFilters({
+                  <button className="btn-secondary" style={{ padding: '0.15rem 0.45rem', fontSize: '0.72rem' }} onClick={() => updateFilter('reset', {
                     governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], advertiser_type: '', min_commission: '', max_commission: '', services_inclusive: false, no_insurance: false, fully_vacant: false, min_total_beds: '', max_total_beds: ''
                   })}>مسح الكل</button>
                 </h3>
@@ -2839,7 +2861,7 @@ export default function App() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
                   <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
                     <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المحافظة</label>
-                    <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })} style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}>
+                    <select value={filters.governorate} onChange={(e) => updateFilter('governorate', { ...filters, governorate: e.target.value })} style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}>
                       <option value="">جميع المحافظات</option>
                       <optgroup label="المتاحة حالياً">
                         {dbGovernorates.filter(g => g.status === 'live').map(g => (
@@ -2862,7 +2884,7 @@ export default function App() {
                       type="text" 
                       placeholder="مدينة نصر، الدقي..." 
                       value={filters.neighborhood} 
-                      onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value })}
+                      onChange={(e) => updateFilter('neighborhood', { ...filters, neighborhood: e.target.value })}
                       style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
                     />
                   </div>
@@ -2880,7 +2902,7 @@ export default function App() {
                       <button
                         key={chip.id}
                         type="button"
-                        onClick={() => setFilters({ ...filters, gender: chip.id })}
+                        onClick={() => updateFilter('gender', { ...filters, gender: chip.id })}
                         style={{
                           flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
                           border: filters.gender === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
@@ -2907,7 +2929,7 @@ export default function App() {
                       <button
                         key={chip.id}
                         type="button"
-                        onClick={() => setFilters({ ...filters, advertiser_type: chip.id })}
+                        onClick={() => updateFilter('advertiser_type', { ...filters, advertiser_type: chip.id })}
                         style={{
                           flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
                           border: filters.advertiser_type === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
@@ -2934,7 +2956,7 @@ export default function App() {
                         onClick={() => {
                           const cur = Number(filters.min_price) || 0;
                           const next = Math.max(0, cur - 50);
-                          setFilters({ ...filters, min_price: next === 0 ? '' : String(next) });
+                          updateFilter('price', { ...filters, min_price: next === 0 ? '' : String(next) });
                         }}
                         style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
                         title="-50 ج.م"
@@ -2945,7 +2967,7 @@ export default function App() {
                         type="number" 
                         placeholder="الأدنى" 
                         value={filters.min_price} 
-                        onChange={(e) => setFilters({ ...filters, min_price: e.target.value })} 
+                        onChange={(e) => updateFilter('price', { ...filters, min_price: e.target.value })} 
                         style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none' }}
                       />
                       <button
@@ -2953,7 +2975,7 @@ export default function App() {
                         onClick={() => {
                           const cur = Number(filters.min_price) || 0;
                           const next = cur + 100;
-                          setFilters({ ...filters, min_price: String(next) });
+                          updateFilter('price', { ...filters, min_price: String(next) });
                         }}
                         style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
                         title="+100 ج.م"
@@ -2969,7 +2991,7 @@ export default function App() {
                         onClick={() => {
                           const cur = Number(filters.max_price) || 0;
                           const next = Math.max(0, cur - 50);
-                          setFilters({ ...filters, max_price: next === 0 ? '' : String(next) });
+                          updateFilter('price', { ...filters, max_price: next === 0 ? '' : String(next) });
                         }}
                         style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
                         title="-50 ج.م"
@@ -2980,7 +3002,7 @@ export default function App() {
                         type="number" 
                         placeholder="الأقصى" 
                         value={filters.max_price} 
-                        onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
+                        onChange={(e) => updateFilter('price', { ...filters, max_price: e.target.value })} 
                         style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none' }}
                       />
                       <button
@@ -2988,7 +3010,7 @@ export default function App() {
                         onClick={() => {
                           const cur = Number(filters.max_price) || 0;
                           const next = cur + 100;
-                          setFilters({ ...filters, max_price: String(next) });
+                          updateFilter('price', { ...filters, max_price: String(next) });
                         }}
                         style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
                         title="+100 ج.م"
@@ -3009,7 +3031,7 @@ export default function App() {
                       placeholder="الأدنى (1)" 
                       min="1"
                       value={filters.min_total_beds} 
-                      onChange={(e) => setFilters({ ...filters, min_total_beds: e.target.value })} 
+                      onChange={(e) => updateFilter('beds', { ...filters, min_total_beds: e.target.value })} 
                       style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
                     />
                     <input 
@@ -3017,7 +3039,7 @@ export default function App() {
                       placeholder="الأقصى (10)" 
                       min="1"
                       value={filters.max_total_beds} 
-                      onChange={(e) => setFilters({ ...filters, max_total_beds: e.target.value })} 
+                      onChange={(e) => updateFilter('beds', { ...filters, max_total_beds: e.target.value })} 
                       style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
                     />
                   </div>
@@ -3042,7 +3064,7 @@ export default function App() {
                             const updated = isSelected 
                               ? filters.room_types.filter(t => t !== chip.id)
                               : [...filters.room_types, chip.id];
-                            setFilters({ ...filters, room_types: updated });
+                            updateFilter('room_type', { ...filters, room_types: updated });
                           }}
                           style={{
                             flex: '1 1 22%', padding: '0.35rem 0.3rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
@@ -3065,7 +3087,7 @@ export default function App() {
                   <div style={{ display: 'flex', gap: '0.35rem' }}>
                     <button
                       type="button"
-                      onClick={() => setFilters({ ...filters, services_inclusive: !filters.services_inclusive })}
+                      onClick={() => updateFilter('services', { ...filters, services_inclusive: !filters.services_inclusive })}
                       style={{
                         flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
                         border: filters.services_inclusive ? '2px solid #16a34a' : '1px solid #cbd5e1',
@@ -3079,7 +3101,7 @@ export default function App() {
 
                     <button
                       type="button"
-                      onClick={() => setFilters({ ...filters, no_insurance: !filters.no_insurance })}
+                      onClick={() => updateFilter('insurance', { ...filters, no_insurance: !filters.no_insurance })}
                       style={{
                         flex: 1, padding: '0.35rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
                         border: filters.no_insurance ? '2px solid #059669' : '1px solid #cbd5e1',
@@ -3104,7 +3126,7 @@ export default function App() {
                         max="100" 
                         placeholder="0" 
                         value={filters.min_commission} 
-                        onChange={(e) => setFilters({ ...filters, min_commission: e.target.value })}
+                        onChange={(e) => updateFilter('commission', { ...filters, min_commission: e.target.value })}
                         style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
                       />
                     </div>
@@ -3116,7 +3138,7 @@ export default function App() {
                         max="100" 
                         placeholder="100" 
                         value={filters.max_commission} 
-                        onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
+                        onChange={(e) => updateFilter('commission', { ...filters, max_commission: e.target.value })}
                         style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem' }}
                       />
                     </div>
@@ -3140,7 +3162,7 @@ export default function App() {
                     {filters.amenities.map(a => (
                       <span key={a} style={{ fontSize: '0.7rem', background: 'var(--primary-light)', color: 'var(--primary-dark)', padding: '0.12rem 0.4rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.2rem', border: '1px solid #bfdbfe' }}>
                         {a}
-                        <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => setFilters(prev => ({ ...prev, amenities: prev.amenities.filter(x => x !== a) }))}>×</span>
+                        <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => updateFilter('amenity', prev => ({ ...prev, amenities: prev.amenities.filter(x => x !== a) }))}>×</span>
                       </span>
                     ))}
                   </div>
@@ -6535,7 +6557,7 @@ export default function App() {
                   <input 
                     type="checkbox" 
                     checked={filters.near_university || false} 
-                    onChange={(e) => setFilters(prev => ({ ...prev, near_university: e.target.checked }))} 
+                    onChange={(e) => updateFilter('proximity', prev => ({ ...prev, near_university: e.target.checked }))} 
                   />
                   قريب من الجامعة
                 </label>
@@ -6543,7 +6565,7 @@ export default function App() {
                   <input 
                     type="checkbox" 
                     checked={filters.near_transit || false} 
-                    onChange={(e) => setFilters(prev => ({ ...prev, near_transit: e.target.checked }))} 
+                    onChange={(e) => updateFilter('proximity', prev => ({ ...prev, near_transit: e.target.checked }))} 
                   />
                   قريب من المواصلات العامة
                 </label>
@@ -6565,7 +6587,7 @@ export default function App() {
                         <label key={amenity.name} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', padding: '0.35rem', background: isChecked ? '#e0f2fe' : '#ffffff', borderRadius: '4px', cursor: 'pointer', border: isChecked ? '1px solid #0284c7' : '1px solid var(--border)' }}>
                           <input type="checkbox" checked={isChecked} onChange={() => {
                             const updated = isChecked ? filters.amenities.filter(a => a !== amenity.name) : [...filters.amenities, amenity.name];
-                            setFilters(prev => ({ ...prev, amenities: updated }));
+                            updateFilter('amenity', prev => ({ ...prev, amenities: updated }));
                           }} />
                           {amenity.name}
                         </label>
@@ -6591,7 +6613,7 @@ export default function App() {
                         <label key={amenity.name} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', padding: '0.35rem', background: isChecked ? '#e0f2fe' : '#ffffff', borderRadius: '4px', cursor: 'pointer', border: isChecked ? '1px solid #0284c7' : '1px solid var(--border)' }}>
                           <input type="checkbox" checked={isChecked} onChange={() => {
                             const updated = isChecked ? filters.amenities.filter(a => a !== amenity.name) : [...filters.amenities, amenity.name];
-                            setFilters(prev => ({ ...prev, amenities: updated }));
+                            updateFilter('amenity', prev => ({ ...prev, amenities: updated }));
                           }} />
                           {amenity.name}
                         </label>
@@ -7265,7 +7287,7 @@ export default function App() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
                 <div className="form-group" style={{ gap: '0.2rem', marginBottom: 0 }}>
                   <label style={{ fontWeight: 700, fontSize: '0.78rem' }}>المحافظة</label>
-                  <select value={filters.governorate} onChange={(e) => setFilters({ ...filters, governorate: e.target.value })} style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}>
+                  <select value={filters.governorate} onChange={(e) => updateFilter('governorate', { ...filters, governorate: e.target.value })} style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}>
                     <option value="">جميع المحافظات</option>
                     <optgroup label="المحافظات المتاحة حالياً">
                       {dbGovernorates.filter(g => g.status === 'live').map(g => (
@@ -7288,7 +7310,7 @@ export default function App() {
                     type="text" 
                     placeholder="مدينة نصر، الدقي..." 
                     value={filters.neighborhood} 
-                    onChange={(e) => setFilters({ ...filters, neighborhood: e.target.value })}
+                    onChange={(e) => updateFilter('neighborhood', { ...filters, neighborhood: e.target.value })}
                     style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
                   />
                 </div>
@@ -7306,7 +7328,7 @@ export default function App() {
                     <button
                       key={chip.id}
                       type="button"
-                      onClick={() => setFilters({ ...filters, gender: chip.id })}
+                      onClick={() => updateFilter('gender', { ...filters, gender: chip.id })}
                       style={{
                         flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
                         border: filters.gender === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
@@ -7333,7 +7355,7 @@ export default function App() {
                     <button
                       key={chip.id}
                       type="button"
-                      onClick={() => setFilters({ ...filters, advertiser_type: chip.id })}
+                      onClick={() => updateFilter('advertiser_type', { ...filters, advertiser_type: chip.id })}
                       style={{
                         flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
                         border: filters.advertiser_type === chip.id ? '2px solid var(--primary)' : '1px solid #cbd5e1',
@@ -7360,7 +7382,7 @@ export default function App() {
                       onClick={() => {
                         const cur = Number(filters.min_price) || 0;
                         const next = Math.max(0, cur - 50);
-                        setFilters({ ...filters, min_price: next === 0 ? '' : String(next) });
+                        updateFilter('price', { ...filters, min_price: next === 0 ? '' : String(next) });
                       }}
                       style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
                       title="-50 ج.م"
@@ -7371,7 +7393,7 @@ export default function App() {
                       type="number" 
                       placeholder="الأدنى" 
                       value={filters.min_price} 
-                      onChange={(e) => setFilters({ ...filters, min_price: e.target.value })} 
+                      onChange={(e) => updateFilter('price', { ...filters, min_price: e.target.value })} 
                       style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none', background: 'transparent' }}
                     />
                     <button
@@ -7379,7 +7401,7 @@ export default function App() {
                       onClick={() => {
                         const cur = Number(filters.min_price) || 0;
                         const next = cur + 100;
-                        setFilters({ ...filters, min_price: String(next) });
+                        updateFilter('price', { ...filters, min_price: String(next) });
                       }}
                       style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
                       title="+100 ج.م"
@@ -7395,7 +7417,7 @@ export default function App() {
                       onClick={() => {
                         const cur = Number(filters.max_price) || 0;
                         const next = Math.max(0, cur - 50);
-                        setFilters({ ...filters, max_price: next === 0 ? '' : String(next) });
+                        updateFilter('price', { ...filters, max_price: next === 0 ? '' : String(next) });
                       }}
                       style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
                       title="-50 ج.م"
@@ -7406,7 +7428,7 @@ export default function App() {
                       type="number" 
                       placeholder="الأقصى" 
                       value={filters.max_price} 
-                      onChange={(e) => setFilters({ ...filters, max_price: e.target.value })} 
+                      onChange={(e) => updateFilter('price', { ...filters, max_price: e.target.value })} 
                       style={{ width: '100%', border: 'none', padding: '0.35rem 0.2rem', fontSize: '0.8rem', textAlign: 'center', outline: 'none', background: 'transparent' }}
                     />
                     <button
@@ -7414,7 +7436,7 @@ export default function App() {
                       onClick={() => {
                         const cur = Number(filters.max_price) || 0;
                         const next = cur + 100;
-                        setFilters({ ...filters, max_price: String(next) });
+                        updateFilter('price', { ...filters, max_price: String(next) });
                       }}
                       style={{ padding: '0.35rem 0.55rem', background: '#f1f5f9', border: 'none', borderRight: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem', color: '#334155' }}
                       title="+100 ج.م"
@@ -7435,7 +7457,7 @@ export default function App() {
                     placeholder="الأدنى (1)" 
                     min="1"
                     value={filters.min_total_beds} 
-                    onChange={(e) => setFilters({ ...filters, min_total_beds: e.target.value })} 
+                    onChange={(e) => updateFilter('beds', { ...filters, min_total_beds: e.target.value })} 
                     style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
                   />
                   <input 
@@ -7443,7 +7465,7 @@ export default function App() {
                     placeholder="الأقصى (10)" 
                     min="1"
                     value={filters.max_total_beds} 
-                    onChange={(e) => setFilters({ ...filters, max_total_beds: e.target.value })} 
+                    onChange={(e) => updateFilter('beds', { ...filters, max_total_beds: e.target.value })} 
                     style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
                   />
                 </div>
@@ -7468,7 +7490,7 @@ export default function App() {
                           const updated = isSelected 
                             ? filters.room_types.filter(t => t !== chip.id)
                             : [...filters.room_types, chip.id];
-                          setFilters({ ...filters, room_types: updated });
+                          updateFilter('room_type', { ...filters, room_types: updated });
                         }}
                         style={{
                           flex: '1 1 22%', padding: '0.4rem 0.3rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
@@ -7491,7 +7513,7 @@ export default function App() {
                 <div style={{ display: 'flex', gap: '0.35rem' }}>
                   <button
                     type="button"
-                    onClick={() => setFilters({ ...filters, services_inclusive: !filters.services_inclusive })}
+                    onClick={() => updateFilter('services', { ...filters, services_inclusive: !filters.services_inclusive })}
                     style={{
                       flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
                       border: filters.services_inclusive ? '2px solid #16a34a' : '1px solid #cbd5e1',
@@ -7505,7 +7527,7 @@ export default function App() {
 
                   <button
                     type="button"
-                    onClick={() => setFilters({ ...filters, no_insurance: !filters.no_insurance })}
+                    onClick={() => updateFilter('insurance', { ...filters, no_insurance: !filters.no_insurance })}
                     style={{
                       flex: 1, padding: '0.4rem 0.4rem', borderRadius: '999px', fontSize: '0.76rem', fontWeight: 700,
                       border: filters.no_insurance ? '2px solid #059669' : '1px solid #cbd5e1',
@@ -7530,7 +7552,7 @@ export default function App() {
                       max="100" 
                       placeholder="0" 
                       value={filters.min_commission} 
-                      onChange={(e) => setFilters({ ...filters, min_commission: e.target.value })}
+                      onChange={(e) => updateFilter('commission', { ...filters, min_commission: e.target.value })}
                       style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
                     />
                   </div>
@@ -7542,7 +7564,7 @@ export default function App() {
                       max="100" 
                       placeholder="100" 
                       value={filters.max_commission} 
-                      onChange={(e) => setFilters({ ...filters, max_commission: e.target.value })}
+                      onChange={(e) => updateFilter('commission', { ...filters, max_commission: e.target.value })}
                       style={{ padding: '0.45rem 0.5rem', background: '#ffffff', border: '1.5px solid #94a3b8', borderRadius: 'var(--r-sm)', fontSize: '0.8rem' }}
                     />
                   </div>
@@ -7582,7 +7604,7 @@ export default function App() {
                 className="btn-outline" 
                 style={{ flex: 1, padding: '0.65rem' }}
                 onClick={() => {
-                  setFilters({ governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], near_university: false, near_transit: false, advertiser_type: '', min_commission: '', max_commission: '', services_inclusive: false, no_insurance: false, min_total_beds: '', max_total_beds: '' });
+                  updateFilter('reset', { governorate: '', city: '', neighborhood: '', gender: '', min_price: '', max_price: '', room_types: [], amenities: [], near_university: false, near_transit: false, advertiser_type: '', min_commission: '', max_commission: '', services_inclusive: false, no_insurance: false, min_total_beds: '', max_total_beds: '' });
                 }}
               >
                 مسح الكل

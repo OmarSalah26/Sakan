@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText } from '../utils/phoneUtils';
+import { trackEvent } from '../utils/analytics';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '/api');
 
@@ -135,6 +136,7 @@ export default function ListingDetailPage() {
   const [showComplaintForm, setShowComplaintForm] = useState(false);
   const [ratingInput, setRatingInput] = useState({ star_count: 5, review_text: '', photo_urls: [] });
   const [complaintInput, setComplaintInput] = useState({ violation_type: 'السعر المطلوب أعلى من المعلن', description: '', evidence_urls: [] });
+  const hasTrackedViewRef = useRef(null);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -147,6 +149,16 @@ export default function ListingDetailPage() {
       const genderStr = l.gender === 'male' ? 'طلاب (شباب)' : 'طالبات (بنات)';
       const pageTitle = `${l.title} - ${genderStr} | سكن Sakan`;
       document.title = pageTitle;
+
+      // Track listing_view once per unique listing load
+      if (hasTrackedViewRef.current !== l.id) {
+        hasTrackedViewRef.current = l.id;
+        trackEvent('listing_view', {
+          listing_id: l.id,
+          advertiser_type: l.advertiser_type || data.advertiser?.account_type || '',
+          governorate: l.governorate || ''
+        });
+      }
 
       const setMeta = (propName, content) => {
         let el = document.querySelector(`meta[property="${propName}"]`) || document.querySelector(`meta[name="${propName}"]`);
@@ -717,6 +729,14 @@ export default function ListingDetailPage() {
                 href={`https://wa.me/${formatPhoneWaDigits(listing.contact_phone || advertiser.phone)}?text=${encodeURIComponent(`سلام عليكم أستاذ ${advertiser.name || ''}، شفت إعلان السكن "${listing.title}" في ${listing.governorate}، ${listing.city} على منصة سكن ومحتاج أستفسر عن التفاصيل.\nhttps://sakan-egy.com/listings/${listing.id}`)}`}
                 target="_blank" 
                 rel="noreferrer"
+                onClick={() => {
+                  trackEvent('contact_click', {
+                    listing_id: listing.id,
+                    advertiser_type: listing.advertiser_type || advertiser?.account_type || '',
+                    governorate: listing.governorate || '',
+                    is_signed_in: Boolean(user)
+                  });
+                }}
                 style={{ background: '#22c55e', color: '#fff', textDecoration: 'none', padding: '0.75rem', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.95rem' }}
               >
                 <MessageSquare style={{ width: 18, height: 18 }} /> تواصل عبر الواتساب
@@ -724,6 +744,14 @@ export default function ListingDetailPage() {
 
               <a 
                 href={`tel:${formatPhoneInternational(listing.contact_phone || advertiser.phone)}`}
+                onClick={() => {
+                  trackEvent('contact_click', {
+                    listing_id: listing.id,
+                    advertiser_type: listing.advertiser_type || advertiser?.account_type || '',
+                    governorate: listing.governorate || '',
+                    is_signed_in: Boolean(user)
+                  });
+                }}
                 style={{ background: 'var(--bg-muted)', color: '#334155', border: '1px solid var(--border)', textDecoration: 'none', padding: '0.75rem', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.95rem' }}
               >
                 <Phone style={{ width: 18, height: 18 }} /> اتصال هاتفي (<span dir="ltr" style={{ unicodeBidi: 'plaintext', direction: 'ltr', display: 'inline-block' }}>{formatPhoneInternational(listing.contact_phone || advertiser.phone)}</span>)
