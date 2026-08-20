@@ -155,6 +155,7 @@ export default function ListingDetailPage() {
         hasTrackedViewRef.current = l.id;
         trackEvent('listing_view', {
           listing_id: l.id,
+          title: l.title || '',
           advertiser_type: l.advertiser_type || data.advertiser?.account_type || '',
           governorate: l.governorate || ''
         });
