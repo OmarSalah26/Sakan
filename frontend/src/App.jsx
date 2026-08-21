@@ -446,7 +446,18 @@ const AMENITY_ALIASES = {
   "واي فاي مجاني": "واي فاي",
   "جيم (Gym)": "جيم",
   "بوتاجاز / ميكروويف": "بوتاجاز",
-  "سرير إضافي": "تجهيزات الشقة"
+  "سرير إضافي": "تجهيزات الشقة",
+  "ac": "مكيفة",
+  "wifi": "واي فاي",
+  "elevator": "مصعد",
+  "kitchen": "مطبخ",
+  "furnished": "تجهيزات الشقة",
+  "washing_machine": "غسالة",
+  "security": "حارس عقار",
+  "parking": "موقف سيارات",
+  "gas": "غاز طبيعي",
+  "water": "مياه",
+  "private_bathroom": "حمام خاص"
 };
 
 function normalizeAmenityName(name) {
