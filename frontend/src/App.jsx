@@ -4,7 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useNavigate } from './router/Router';
 import { useApp } from './context/AppContext';
-import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText, stripFloorFromAddress } from './utils/phoneUtils';
+import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText, stripFloorFromAddress, isListingNewToday } from './utils/phoneUtils';
 import { trackEvent } from './utils/analytics';
 
 import { 
@@ -683,7 +683,11 @@ export default function App() {
     min_lease_months: null,
     pricing_mode: 'room_based',
     total_price: null,
-    show_total_price: false
+    show_total_price: false,
+    contact_phone: '',
+    whatsapp_phone: '',
+    no_whatsapp: false,
+    contact_verified: false
   });
 
   // Progressive Media Upload state & handler
@@ -986,8 +990,10 @@ export default function App() {
     setEditingListing(null);
   };
 
-  const openForOthersListingWizard = (fresh = true) => {
+  const openForOthersListingWizard = (fresh = true, targetAccount = null) => {
     if (fresh) {
+      const targetAcc = targetAccount || forOthersAccount;
+      const targetPhone = (targetAcc?.phone || forOthersAccountForm?.phone || '').trim();
       setCreateForm({
         title: '',
         governorate: '',
@@ -1012,7 +1018,11 @@ export default function App() {
         min_lease_months: null,
         pricing_mode: 'room_based',
         total_price: null,
-        show_total_price: false
+        show_total_price: false,
+        contact_phone: targetPhone,
+        whatsapp_phone: targetPhone,
+        no_whatsapp: false,
+        contact_verified: true
       });
     }
     setShowMapPicker(false);
@@ -1055,14 +1065,15 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        setForOthersAccount({ ...data, id: data.user_id });
+        const targetData = { ...data, id: data.user_id };
+        setForOthersAccount(targetData);
         if (data.is_new_account) {
           showToast(`تم إنشاء حساب "${data.name}" بنجاح!`);
         } else {
           showToast('تم العثور على حساب موجود مسبقاً، سيتم ربط الإعلان به');
         }
         setForOthersStep('listing');
-        openForOthersListingWizard(true);
+        openForOthersListingWizard(true, targetData);
       } else {
         const err = await res.json();
         showToast(err.detail || 'فشل إيجاد أو إنشاء حساب المعلن');
@@ -1125,7 +1136,22 @@ export default function App() {
 
     const cleanedAddress = stripFloorFromAddress(item.address || item.full_address || '');
     const floorVal = parseFloorValue(item.floor || item.address);
-    const existingContact = item.contact_phone !== undefined && item.contact_phone !== null ? item.contact_phone : (item.phone || '');
+    const rawContact = item.contact_phone !== undefined && item.contact_phone !== null && String(item.contact_phone).trim() !== ''
+      ? String(item.contact_phone).trim()
+      : (item.phone !== undefined && item.phone !== null && String(item.phone).trim() !== '' ? String(item.phone).trim() : '');
+
+    let finalContact = rawContact;
+    if (!finalContact) {
+      if (user && user.account_type !== 'admin') {
+        finalContact = (user.phone || '').trim();
+      } else if (item.advertiser_phone) {
+        finalContact = String(item.advertiser_phone).trim();
+      }
+    }
+
+    const rawWhatsapp = item.whatsapp_phone !== undefined && item.whatsapp_phone !== null && String(item.whatsapp_phone).trim() !== ''
+      ? String(item.whatsapp_phone).trim()
+      : finalContact;
 
     setCreateForm({
       title: item.title || '',
@@ -1155,9 +1181,9 @@ export default function App() {
       source: item.source || 'normal',
       full_edit_available: item.full_edit_available || false,
       location_precise: item.location_precise || false,
-      contact_phone: existingContact,
-      whatsapp_phone: item.whatsapp_phone || existingContact,
-      no_whatsapp: Boolean(item.whatsapp_phone && existingContact && item.whatsapp_phone !== existingContact),
+      contact_phone: finalContact,
+      whatsapp_phone: rawWhatsapp,
+      no_whatsapp: Boolean(rawWhatsapp && finalContact && rawWhatsapp !== finalContact),
       contact_verified: true
     });
     setShowMapPicker(false);
@@ -1778,6 +1804,7 @@ export default function App() {
       const matchGov = dbGovernorates.find(g => g.name === targetGovName || userGovs.includes(g.name));
       if (matchGov) {
         if (matchGov.status === 'live') {
+          const defaultContactPhone = (user && user.account_type !== 'admin') ? (user.phone || '').trim() : '';
           setCreateForm(prev => ({
             ...prev,
             title: '',
@@ -1801,7 +1828,15 @@ export default function App() {
             description: '',
             tier: 'regular',
             min_lease_months: null,
-            show_total_price: false
+            show_total_price: false,
+            contact_phone: (prev.contact_phone !== undefined && prev.contact_phone !== null && String(prev.contact_phone).trim() !== '')
+              ? prev.contact_phone
+              : defaultContactPhone,
+            whatsapp_phone: (prev.whatsapp_phone !== undefined && prev.whatsapp_phone !== null && String(prev.whatsapp_phone).trim() !== '')
+              ? prev.whatsapp_phone
+              : defaultContactPhone,
+            no_whatsapp: false,
+            contact_verified: Boolean(defaultContactPhone && defaultContactPhone === user?.phone)
           }));
           setShowMapPicker(false);
           setIsCreateOpen(true);
@@ -3267,6 +3302,12 @@ export default function App() {
                           <div className="card-img-wrapper" style={{ position: 'relative' }}>
                             <img className="card-img" src={coverImage} alt={item.title} onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"; }} />
                             
+                            {isListingNewToday(item.created_at) && (
+                              <span className="badge-new-today">
+                                جديد
+                              </span>
+                            )}
+
                             <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 2, display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
                               <span className={`badge-gender ${item.gender === 'male' ? 'gender-male' : 'gender-female'}`}>
                                 {item.gender === 'male' ? 'طلاب' : 'طالبات'}
@@ -4767,8 +4808,13 @@ export default function App() {
                     <div className="listings-grid">
                       {profileData.listings.map(item => (
                         <article key={item.id} id={`listing-card-${item.id}`} className="listing-card" onClick={() => handleCardClick(item.id)}>
-                          <div className="card-img-wrapper">
+                          <div className="card-img-wrapper" style={{ position: 'relative' }}>
                             <img className="card-img" src={formatImageUrl(item.photo_urls?.[0]) || "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"} alt={item.title} onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80"; }} />
+                            {isListingNewToday(item.created_at) && (
+                              <span className="badge-new-today">
+                                جديد
+                              </span>
+                            )}
                           </div>
                           <div className="card-content">
                             <div className="card-location"><MapPin style={{ width: 16, height: 16, display: 'inline', verticalAlign: 'middle' }} /> {item.city}، {item.neighborhood}</div>
@@ -6724,6 +6770,7 @@ export default function App() {
 
                   if (selectedGov.status === 'live') {
                     // Live path: Proceed to 7-step full listing wizard
+                    const defaultContactPhone = (user && user.account_type !== 'admin') ? (user.phone || '').trim() : '';
                     setCreateForm({
                       title: '',
                       governorate: selectedGov.name,
@@ -6746,7 +6793,11 @@ export default function App() {
                       description: '',
                       tier: 'regular',
                       min_lease_months: null,
-                      show_total_price: false
+                      show_total_price: false,
+                      contact_phone: defaultContactPhone,
+                      whatsapp_phone: defaultContactPhone,
+                      no_whatsapp: false,
+                      contact_verified: Boolean(defaultContactPhone && defaultContactPhone === user?.phone)
                     });
                     setShowMapPicker(false);
                     setIsCreateOpen(true);

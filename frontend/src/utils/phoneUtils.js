@@ -212,5 +212,64 @@ export function stripFloorFromAddress(addr) {
     .trim();
 }
 
+/**
+ * Safely parses a UTC date string or timestamp into a Date object.
+ * Naive ISO strings (e.g. "2026-08-28T01:22:54") without timezone indicator
+ * are treated as UTC so they reflect the exact UTC timestamp saved by backend.
+ */
+export function parseUtcDate(dateInput) {
+  if (!dateInput) return null;
+  if (dateInput instanceof Date) {
+    return isNaN(dateInput.getTime()) ? null : dateInput;
+  }
+  let s = String(dateInput).trim();
+  if (!s) return null;
+  if (s.includes('T') || s.includes(' ')) {
+    s = s.replace(' ', 'T');
+    if (!s.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
+      s += 'Z';
+    }
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
 
+/**
+ * Returns 'YYYY-MM-DD' representing the calendar date in Egypt local time (Africa/Cairo).
+ */
+export function getEgyptDateString(dateInput) {
+  const d = parseUtcDate(dateInput);
+  if (!d) return null;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Cairo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  return formatter.format(d);
+}
 
+/**
+ * Checks dynamically whether a listing was created today in Egypt local time.
+ */
+export function isListingNewToday(createdAt) {
+  if (!createdAt) return false;
+  const listingDay = getEgyptDateString(createdAt);
+  if (!listingDay) return false;
+  const todayEgypt = getEgyptDateString(new Date());
+  return listingDay === todayEgypt;
+}
+
+/**
+ * Formats a listing creation date into ar-EG locale date string (Egypt local time).
+ */
+export function formatListingDate(dateInput) {
+  const d = parseUtcDate(dateInput);
+  if (!d) return '';
+  return d.toLocaleDateString('ar-EG', {
+    timeZone: 'Africa/Cairo',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric'
+  });
+}

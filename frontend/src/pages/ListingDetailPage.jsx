@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Play, ShieldCheck, Wind
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText } from '../utils/phoneUtils';
+import { formatPhoneInternational, formatPhoneWaDigits, cleanCommissionText, formatCommissionDisplay, calculateListingTotalPrice, formatUnifiedShareText, formatListingDate } from '../utils/phoneUtils';
 import { trackEvent } from '../utils/analytics';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '/api');
@@ -519,6 +519,13 @@ export default function ListingDetailPage() {
             <div style={{ background: '#f1f5f9', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Home style={{ width: 16, height: 16, color: 'var(--primary)' }} />
               {formatFloorDisplay(listing.floor)}
+            </div>
+          )}
+
+          {listing.created_at && (
+            <div style={{ background: '#f1f5f9', padding: '0.4rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Calendar style={{ width: 16, height: 16, color: 'var(--primary)' }} />
+              تاريخ النشر: {formatListingDate(listing.created_at)}
             </div>
           )}
 

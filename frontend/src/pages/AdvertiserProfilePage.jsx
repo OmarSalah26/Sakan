@@ -5,6 +5,7 @@ import {
   MessageSquare, Phone, ArrowRight, ShieldCheck 
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { isListingNewToday } from '../utils/phoneUtils';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.sakan-egy.com' : '/api');
 
@@ -163,8 +164,13 @@ export default function AdvertiserProfilePage() {
 
               return (
                 <article key={item.id} className="listing-card" onClick={() => navigate(`/listings/${item.id}`)}>
-                  <div className="card-img-wrapper">
+                  <div className="card-img-wrapper" style={{ position: 'relative' }}>
                     <img className="card-img" src={coverImage} alt={item.title} />
+                    {isListingNewToday(item.created_at) && (
+                      <span className="badge-new-today">
+                        جديد
+                      </span>
+                    )}
                   </div>
                   <div className="card-content">
                     <div className="card-location"><MapPin style={{ width: 14, height: 14, display: 'inline', verticalAlign: 'middle' }} /> {item.city}، {item.neighborhood}</div>
