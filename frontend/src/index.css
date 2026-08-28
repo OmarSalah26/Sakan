@@ -81,6 +81,25 @@ img, video { display: block; max-width: 100%; }
 button { cursor: pointer; font-family: inherit; }
 input, select, textarea { font-family: inherit; font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
 a { color: inherit; text-decoration: none; }
+button, a, summary, [role="button"] { -webkit-tap-highlight-color: transparent; }
+
+/* Focus management: Remove blue focus square for mouse/pointer clicks while preserving keyboard accessibility */
+:focus:not(:focus-visible) {
+  outline: none !important;
+  box-shadow: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[role="button"]:focus-visible,
+[type="button"]:focus-visible,
+[type="submit"]:focus-visible,
+[type="reset"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
 
 /* ============================================
    LAYOUT

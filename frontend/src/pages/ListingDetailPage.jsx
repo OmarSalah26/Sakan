@@ -576,15 +576,18 @@ export default function ListingDetailPage() {
                       </div>
 
                       <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                        {(c.commission_type === 'range' || (c.commission_min && c.commission_max)) ? (
-                          <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
-                            <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {formatCommissionDisplay(c)} (تفاوضي)
-                          </span>
-                        ) : c.commission != null ? (
-                          <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
-                            <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {formatCommissionDisplay(c)}
-                          </span>
-                        ) : null}
+                        {(() => {
+                          const isOwner = listing.advertiser_type === 'owner' || advertiser?.account_type === 'owner';
+                          if (isOwner) return null;
+                          const commText = formatCommissionDisplay(c);
+                          if (!commText) return null;
+                          const isRange = c.commission_type === 'range' || (c.commission_min && c.commission_max);
+                          return (
+                            <span style={{ background: '#f5f3ff', color: '#6b21a8', border: '1px solid #ddd6fe', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.3rem', boxShadow: '0 1px 3px rgba(107,33,168,0.1)' }}>
+                              <Briefcase style={{ width: 14, height: 14, color: '#7e22ce' }} /> عمولة: {commText}{isRange ? ' (تفاوضي)' : ''}
+                            </span>
+                          );
+                        })()}
 
                         {c.has_ac && (
                           <span style={{ background: '#e0f2fe', color: '#0284c7', border: '1px solid #bae6fd', padding: '0.25rem 0.65rem', borderRadius: '8px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>

@@ -3418,6 +3418,7 @@ export default function App() {
 
                                       {/* Room Commission */}
                                       {(() => {
+                                        if (item.advertiser_type === 'owner') return null;
                                         const commText = formatCommissionDisplay(config);
                                         if (!commText) return null;
                                         return (
