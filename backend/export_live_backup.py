@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
 try:
-    from sqlalchemy import create_engine, inspect, text
+    from sqlalchemy import create_engine, inspect, text 
 except ImportError:
     print("SQLAlchemy is required. Install with: pip install sqlalchemy")
     sys.exit(1)
