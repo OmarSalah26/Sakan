@@ -2067,7 +2067,17 @@ def list_listings(
         if city:
             query = query.filter(Listing.city == city)
         if neighborhood:
-            query = query.filter(Listing.neighborhood.like(f"%{neighborhood}%"))
+            search_term = f"%{neighborhood}%"
+            query = query.filter(
+                or_(
+                    Listing.title.ilike(search_term),
+                    Listing.governorate.ilike(search_term),
+                    Listing.city.ilike(search_term),
+                    Listing.neighborhood.ilike(search_term),
+                    Listing.address.ilike(search_term),
+                    Listing.description.ilike(search_term)
+                )
+            )
         if gender:
             query = query.filter(Listing.gender == gender)
         if advertiser_type:
