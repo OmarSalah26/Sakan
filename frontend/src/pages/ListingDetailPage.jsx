@@ -681,17 +681,7 @@ export default function ListingDetailPage() {
             );
           })()}
 
-          {/* Description */}
-          {listing.description && (
-            <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
-                وصف السكن
-              </h3>
-              <p style={{ whiteSpace: 'pre-line', color: '#475569', lineHeight: 1.7, fontSize: '0.95rem', margin: 0 }}>
-                {listing.description}
-              </p>
-            </div>
-          )}
+
 
         </div>
 
@@ -957,6 +947,18 @@ export default function ListingDetailPage() {
           );
         })()}
       </div>
+
+      {/* ─── Description Section ─── */}
+      {listing.description && (
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+            وصف السكن
+          </h3>
+          <p style={{ whiteSpace: 'pre-line', color: '#475569', lineHeight: 1.7, fontSize: '0.95rem', margin: 0 }}>
+            {listing.description}
+          </p>
+        </div>
+      )}
 
       {/* ─── Ratings & Trust Section ─── */}
       <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '1.5rem' }}>

@@ -1,4 +1,5 @@
-﻿import sys
+# -*- coding: utf-8 -*-
+import sys
 import os
 from pathlib import Path
 
@@ -6,12 +7,13 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.main import app, SessionLocal, Listing, User
+import app.main as main_module
+from app.main import app, Listing, User
 
 client = TestClient(app)
 
 def setup_search_test_data():
-    db = SessionLocal()
+    db = main_module.SessionLocal()
     # Ensure previous tests don't interfere (or we can just create unique ones)
     
     # Create advertiser
