@@ -49,7 +49,7 @@ export function cleanCommissionText(comm) {
 
 export function formatCommissionDisplay(config) {
   if (!config) return null;
-  const isRange = config.commission_type === 'range' || (config.commission_min != null && config.commission_max != null);
+  const isRange = config.commission_type === 'range' || (config.commission_type !== 'fixed' && config.commission_min != null && config.commission_max != null);
   const price = Number(config.price_per_person) || 0;
 
   if (isRange) {
@@ -250,14 +250,24 @@ export function getEgyptDateString(dateInput) {
 }
 
 /**
- * Checks dynamically whether a listing was created today in Egypt local time.
+ * Checks dynamically whether a listing was created within the last 72 hours (or custom hours).
+ */
+export function isListingNew(createdAt, maxHours = 72) {
+  if (!createdAt) return false;
+  const d = parseUtcDate(createdAt);
+  if (!d) return false;
+  const diffMs = Date.now() - d.getTime();
+  const maxMs = maxHours * 60 * 60 * 1000;
+  // Allow slight clock drift (up to 5 minutes) and up to maxHours
+  return diffMs >= -5 * 60 * 1000 && diffMs <= maxMs;
+}
+
+/**
+ * Checks dynamically whether a listing was created within the last 72 hours.
+ * Kept for backward compatibility with existing components.
  */
 export function isListingNewToday(createdAt) {
-  if (!createdAt) return false;
-  const listingDay = getEgyptDateString(createdAt);
-  if (!listingDay) return false;
-  const todayEgypt = getEgyptDateString(new Date());
-  return listingDay === todayEgypt;
+  return isListingNew(createdAt, 72);
 }
 
 /**

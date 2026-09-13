@@ -3276,9 +3276,6 @@ export default function App() {
 
                       const servicesInclusive = configs.some(c => c.services_inclusive);
                       const hasAc = configs.some(c => c.has_ac);
-                      const hasPositiveIns = configs.some(c => c.insurance_price !== null && c.insurance_price !== undefined && Number(c.insurance_price) > 0);
-                      const allExplicitNoIns = configs.length > 0 && configs.every(c => c.insurance_price === 0 || c.insurance_price === '0');
-                      const sampleInsAmt = configs.find(c => c.insurance_price && Number(c.insurance_price) > 0)?.insurance_price;
 
                       // Calculate total monthly rent price of the entire unit using source-of-truth priority rules
                       const totalUnitRent = calculateListingTotalPrice(item);
@@ -3388,7 +3385,7 @@ export default function App() {
                                     const roomCount = config.count || 1;
                                     let typeName = config.room_type === 'single' ? 'فردية' : config.room_type === 'double' ? 'ثنائية' : config.room_type === 'triple' ? 'ثلاثية' : 'رباعية';
                                     const roomLabel = roomCount > 1 ? `${roomCount} غرف ${typeName}` : `غرفة ${typeName}`;
-                                    const isRange = config.commission_type === 'range' || (config.commission_min && config.commission_max);
+                                    const isRange = config.commission_type === 'range' || (config.commission_type !== 'fixed' && (config.commission_min && config.commission_max));
                                     const availText = config.available_beds !== undefined ? ` (${config.available_beds} أسرة متوفرة)` : '';
 
                                     return (
@@ -3416,15 +3413,35 @@ export default function App() {
                                         )}
                                       </div>
 
-                                      {/* Room Commission */}
+                                      {/* Room Details: Commission & Insurance */}
                                       {(() => {
-                                        if (item.advertiser_type === 'owner') return null;
-                                        const commText = formatCommissionDisplay(config);
-                                        if (!commText) return null;
+                                        const isOwner = item.advertiser_type === 'owner' || item.advertiser_account_type === 'owner';
+                                        const commText = !isOwner ? formatCommissionDisplay(config) : null;
+                                        const hasInsurance = config.insurance_price !== null && config.insurance_price !== undefined && config.insurance_price !== '' && Number(config.insurance_price) > 0;
+                                        const isNoInsurance = !hasInsurance && (config.insurance_price === 0 || config.insurance_price === '0' || config._insurance_type === 'none');
+
+                                        if (!commText && !hasInsurance && !isNoInsurance) return null;
+
                                         return (
-                                          <div style={{ fontSize: '0.75rem', color: isRange ? '#b45309' : '#475569', fontWeight: isRange ? 700 : 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                            <Briefcase style={{ width: 12, height: 12 }} />
-                                            <span>عمولة: {commText}{isRange ? ' (تفاوضي)' : ''}</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.1rem' }}>
+                                            {commText && (
+                                              <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                <Briefcase style={{ width: 12, height: 12 }} />
+                                                <span>عمولة: {commText}{isRange ? ' (تفاوضي)' : ''}</span>
+                                              </div>
+                                            )}
+
+                                            {hasInsurance && (
+                                              <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '0.1rem 0.45rem', borderRadius: '6px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                                <Shield style={{ width: 11, height: 11 }} /> تأمين: {Number(config.insurance_price).toLocaleString()} ج.م
+                                              </span>
+                                            )}
+
+                                            {isNoInsurance && (
+                                              <span style={{ fontSize: '0.72rem', background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', padding: '0.1rem 0.45rem', borderRadius: '6px', fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}>
+                                                بدون تأمين
+                                              </span>
+                                            )}
                                           </div>
                                         );
                                       })()}
@@ -3453,18 +3470,97 @@ export default function App() {
                                   <ShieldCheck style={{ width: 12, height: 12 }} /> موثق من سكن
                                 </span>
                               )}
-
-                              {/* Insurance Chip */}
-                              {hasPositiveIns ? (
-                                <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                                  <Shield style={{ width: 12, height: 12 }} /> تأمين: {Number(sampleInsAmt).toLocaleString()} ج.م
-                                </span>
-                              ) : allExplicitNoIns ? (
-                                <span style={{ fontSize: '0.72rem', background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                                  لا يوجد تأمين
-                                </span>
-                              ) : null}
                             </div>
+
+                            {/* Action Tier: Direct Contact Buttons */}
+                            {(() => {
+                              const targetPhone = item.contact_phone || item.whatsapp_phone || '';
+                              if (!targetPhone) return null;
+
+                              const waDigits = formatPhoneWaDigits(targetPhone);
+                              const advGreeting = item.advertiser_name ? ` أستاذ ${item.advertiser_name}` : '';
+                              const waText = encodeURIComponent(
+                                `سلام عليكم${advGreeting}، شفت إعلان السكن "${item.title || ''}" في ${item.governorate || ''}، ${item.city || ''} على منصة سكن ومحتاج أستفسر عن التفاصيل.\nhttps://sakan-egy.com/listings/${item.id}`
+                              );
+                              const waUrl = `https://wa.me/${waDigits}?text=${waText}`;
+                              const telUrl = `tel:${formatPhoneInternational(targetPhone)}`;
+
+                              return (
+                                <div 
+                                  style={{ 
+                                    display: 'grid', 
+                                    gridTemplateColumns: '1fr 1fr', 
+                                    gap: '0.45rem', 
+                                    marginTop: '0.2rem', 
+                                    paddingTop: '0.55rem', 
+                                    borderTop: '1px solid #f1f5f9' 
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <a
+                                    href={waUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      trackEvent('contact_click', {
+                                        listing_id: item.id,
+                                        advertiser_type: item.advertiser_type || '',
+                                        governorate: item.governorate || '',
+                                        is_signed_in: Boolean(user)
+                                      });
+                                    }}
+                                    style={{
+                                      background: '#22c55e',
+                                      color: '#ffffff',
+                                      textDecoration: 'none',
+                                      borderRadius: '8px',
+                                      padding: '0.45rem 0.5rem',
+                                      fontWeight: 700,
+                                      fontSize: '0.82rem',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: '0.35rem',
+                                      boxShadow: '0 1px 2px rgba(34, 197, 94, 0.15)'
+                                    }}
+                                  >
+                                    <MessageSquare style={{ width: 14, height: 14 }} />
+                                    <span>واتساب</span>
+                                  </a>
+
+                                  <a
+                                    href={telUrl}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      trackEvent('contact_click', {
+                                        listing_id: item.id,
+                                        advertiser_type: item.advertiser_type || '',
+                                        governorate: item.governorate || '',
+                                        is_signed_in: Boolean(user)
+                                      });
+                                    }}
+                                    style={{
+                                      background: '#f8fafc',
+                                      color: '#334155',
+                                      border: '1px solid #cbd5e1',
+                                      textDecoration: 'none',
+                                      borderRadius: '8px',
+                                      padding: '0.45rem 0.5rem',
+                                      fontWeight: 700,
+                                      fontSize: '0.82rem',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: '0.35rem'
+                                    }}
+                                  >
+                                    <Phone style={{ width: 14, height: 14 }} />
+                                    <span>اتصال</span>
+                                  </a>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </article>
                       );
